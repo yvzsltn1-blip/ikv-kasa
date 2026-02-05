@@ -1,22 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { Account, Character, ItemData, Container, SlotData, UserRole } from './types';
+import { Account, Container, ItemData, UserRole } from './types';
 import { createAccount, CLASS_COLORS } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Settings, Shield, Search, Book, LogOut } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut } from 'lucide-react';
 
-const STORAGE_KEY = 'rpg_inventory_data_v1';
+// --- FIREBASE IMPORTLARI ---
+import { auth, db } from './firebase'; 
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 // View sequence
 const VIEW_ORDER = ['bank1', 'bank2', 'bag'] as const;
 type ViewType = typeof VIEW_ORDER[number];
 
 export default function App() {
-  // --- Auth State ---
+  // --- Auth & Loading State ---
   const [userRole, setUserRole] = useState<UserRole>(null);
+  const [loading, setLoading] = useState(true); // Yükleniyor ekranı için
 
   // Global State
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -39,63 +43,95 @@ export default function App() {
   // Tooltip State
   const [tooltip, setTooltip] = useState<{ item: ItemData; x: number; y: number } | null>(null);
 
-  // Initialize & Migration Logic
+  // --- BAŞLANGIÇ: VERİLERİ BULUTTAN ÇEKME ---
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Kullanıcı giriş yapmış, verileri çekelim
+        setLoading(true);
+        const userDocRef = doc(db, "users", user.uid);
         
-        // Migration Check
-        if (!Array.isArray(parsed)) {
-          const migratedAccount: Account = {
-             ...parsed,
-             id: 'default_migrated',
-          };
-          setAccounts([migratedAccount]);
-          setSelectedAccountId(migratedAccount.id);
-        } else {
-          // Check for missing data fields (Migration for v2 features)
-          const updatedAccounts = parsed.map((acc: Account) => ({
-            ...acc,
-            characters: acc.characters.map((char: Character) => ({
-              ...char,
-              bag: char.bag.rows === 6 ? char.bag : { ...char.bag, rows: 6, cols: 4 }, // Fix bag size
-              learnedRecipes: char.learnedRecipes || [] // Initialize recipe array if missing
-            }))
-          }));
-          
-          if (updatedAccounts.length > 0) {
-            setAccounts(updatedAccounts);
-            setSelectedAccountId(updatedAccounts[0].id);
+        try {
+          const docSnap = await getDoc(userDocRef);
+
+          if (docSnap.exists()) {
+            // Kayıtlı veri var
+            const data = docSnap.data();
+            const loadedAccounts = data.accounts || [];
+            
+            // Eğer hesap dizisi boş gelirse (örn: hata ile kaydedilmişse) varsayılan oluştur
+            if (loadedAccounts.length > 0) {
+              setAccounts(loadedAccounts);
+              setSelectedAccountId(loadedAccounts[0].id);
+            } else {
+              initializeDefault(userDocRef);
+            }
           } else {
-            initializeDefault();
+            // Hiç veri yok (Yeni Kullanıcı), varsayılan oluştur
+            await initializeDefault(userDocRef);
           }
+          
+          // Rol Belirleme (Admin misin?)
+          // BURAYA KENDİ E-POSTA ADRESİNİ YAZMAYI UNUTMA
+          if (user.email === 'seninmailin@gmail.com') { 
+             setUserRole('admin');
+          } else {
+             setUserRole('user');
+          }
+
+        } catch (error) {
+          console.error("Veri çekme hatası:", error);
+          alert("Veriler yüklenirken bir hata oluştu. İnternet bağlantınızı kontrol edin.");
+        } finally {
+          setLoading(false);
         }
-      } catch (e) {
-        console.error("Failed to load data", e);
-        initializeDefault();
+
+      } else {
+        // Çıkış yapılmış
+        setUserRole(null);
+        setAccounts([]);
+        setLoading(false);
       }
-    } else {
-      initializeDefault();
-    }
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  const initializeDefault = () => {
+  // Varsayılan hesap oluşturucu (Yardımcı Fonksiyon)
+  const initializeDefault = async (docRef: any) => {
     const newId = Math.random().toString(36).substr(2, 9);
     const defaultAccount = createAccount(newId, 'Oyuncu 1');
-    setAccounts([defaultAccount]);
+    const initialAccounts = [defaultAccount];
+    
+    // Veritabanına kaydet
+    await setDoc(docRef, { accounts: initialAccounts });
+    
+    setAccounts(initialAccounts);
     setSelectedAccountId(newId);
   };
 
-  const saveData = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
+  // --- VERİLERİ BULUTA KAYDETME ---
+  const saveData = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+        alert("Oturum süresi dolmuş, lütfen sayfayı yenileyip tekrar giriş yapın.");
+        return;
+    }
+
+    try {
+        const userDocRef = doc(db, "users", user.uid);
+        await setDoc(userDocRef, { accounts: accounts }, { merge: true });
+        alert("✅ Tüm veriler başarıyla buluta kaydedildi!");
+    } catch (error) {
+        console.error("Kayıt hatası:", error);
+        alert("❌ Kayıt sırasında bir hata oluştu!");
+    }
   };
 
-  // Helper to force save specific accounts state (used by name buttons)
-  const persistAccounts = (newAccounts: Account[]) => {
+  // Helper to force save specific accounts state locally (for seamless UX)
+  // Note: This only updates REACT STATE. Real save happens when user clicks "Save" button.
+  const updateAccountsState = (newAccounts: Account[]) => {
     setAccounts(newAccounts);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newAccounts));
   };
 
   // --- Sync Temp States when Active Data Changes ---
@@ -106,7 +142,7 @@ export default function App() {
     if (activeAccount) {
         setTempAccountName(activeAccount.name);
     }
-  }, [selectedAccountId, accounts]); // Update when account changes or data loads
+  }, [selectedAccountId, accounts]);
 
   useEffect(() => {
     if (activeChar) {
@@ -118,7 +154,7 @@ export default function App() {
   // --- Account Management ---
 
   const handleAddAccount = () => {
-    if (userRole !== 'admin') return; // Restriction
+    if (userRole !== 'admin') return;
     const newId = Math.random().toString(36).substr(2, 9);
     const name = `Oyuncu ${accounts.length + 1}`;
     const newAccount = createAccount(newId, name);
@@ -129,32 +165,38 @@ export default function App() {
   };
 
   const handleDeleteAccount = () => {
-    if (userRole !== 'admin') return; // Restriction
+    if (userRole !== 'admin') return;
     if (accounts.length <= 1) {
       alert("En az bir hesap kalmalıdır.");
       return;
     }
-    const confirmDelete = window.confirm("Bu hesabı ve içindeki tüm eşyaları silmek istediğinize emin misiniz?");
+    const confirmDelete = window.confirm("Bu hesabı silmek istediğinize emin misiniz?");
     if (confirmDelete) {
       const newAccounts = accounts.filter(a => a.id !== selectedAccountId);
       setAccounts(newAccounts);
       setSelectedAccountId(newAccounts[0].id);
       setActiveCharIndex(0);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newAccounts));
+      // Not: Otomatik save yapmıyoruz, kullanıcı kaydet butonuna basmalı veya buraya saveData() eklenebilir.
     }
   };
 
   // --- Auth Handlers ---
+  // LoginScreen zaten Firebase ile giriş yapıyor, bu sadece state'i anlık günceller
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
   };
 
-  const handleLogout = () => {
-    setUserRole(null);
-    setTooltip(null);
-    setIsSearchOpen(false);
-    setIsRecipeBookOpen(false);
-    setModalOpen(false);
+  const handleLogout = async () => {
+    try {
+        await signOut(auth); // Firebase'den çıkış
+        setUserRole(null);
+        setTooltip(null);
+        setIsSearchOpen(false);
+        setIsRecipeBookOpen(false);
+        setModalOpen(false);
+    } catch (error) {
+        console.error("Çıkış hatası:", error);
+    }
   };
 
   // --- Name Update Handlers (Commit) ---
@@ -163,7 +205,7 @@ export default function App() {
     const newAccounts = accounts.map(acc => 
       acc.id === selectedAccountId ? { ...acc, name: tempAccountName } : acc
     );
-    persistAccounts(newAccounts);
+    updateAccountsState(newAccounts);
   };
 
   const commitCharacterName = () => {
@@ -173,7 +215,7 @@ export default function App() {
     const newAccounts = accounts.map(acc => 
         acc.id === selectedAccountId ? { ...acc, characters: newChars } : acc
     );
-    persistAccounts(newAccounts);
+    updateAccountsState(newAccounts);
   };
 
 
@@ -181,13 +223,11 @@ export default function App() {
   const handleExportExcel = () => {
     if (!activeAccount) return;
 
-    // Headers
     const rows = [
       ["Hesap", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
     activeAccount.characters.forEach(char => {
-      // 1. Inventory Items
       [char.bank1, char.bank2, char.bag].forEach(container => {
         container.slots.forEach(slot => {
           if (slot.item) {
@@ -205,7 +245,6 @@ export default function App() {
         });
       });
 
-      // 2. Learned Recipes
       char.learnedRecipes.forEach(item => {
         rows.push([
             activeAccount.name, char.name, "Reçete Kitabı", "-", "-",
@@ -244,7 +283,6 @@ export default function App() {
 
   // --- Item Management ---
 
-  // Handle Drag and Drop Item Swap/Move
   const handleMoveItem = (containerId: string, fromSlotId: number, toSlotId: number) => {
     if (fromSlotId === toSlotId) return;
     if (!activeAccount) return;
@@ -258,26 +296,19 @@ export default function App() {
       let targetContainer: Container | null = null;
       let containerKey: 'bank1' | 'bank2' | 'bag' | null = null;
 
-      // Identify the container
       if (targetChar.bank1.id === containerId) { targetContainer = targetChar.bank1; containerKey = 'bank1'; }
       else if (targetChar.bank2.id === containerId) { targetContainer = targetChar.bank2; containerKey = 'bank2'; }
       else if (targetChar.bag.id === containerId) { targetContainer = targetChar.bag; containerKey = 'bag'; }
 
       if (targetContainer && containerKey) {
         const newSlots = [...targetContainer.slots];
-        
-        // Get items
         const itemFrom = newSlots[fromSlotId].item;
         const itemTo = newSlots[toSlotId].item;
 
-        // Swap Logic
         newSlots[toSlotId] = { ...newSlots[toSlotId], item: itemFrom };
-        newSlots[fromSlotId] = { ...newSlots[fromSlotId], item: itemTo }; // If itemTo is null, it moves into empty. If not null, it swaps.
+        newSlots[fromSlotId] = { ...newSlots[fromSlotId], item: itemTo }; 
         
-        targetChar[containerKey] = {
-          ...targetContainer,
-          slots: newSlots
-        };
+        targetChar[containerKey] = { ...targetContainer, slots: newSlots };
         newChars[activeCharIndex] = targetChar;
       }
 
@@ -285,7 +316,6 @@ export default function App() {
     }));
   };
 
-  // Helper to update a specific slot
   const updateSlot = (containerId: string, slotId: number, item: ItemData | null) => {
     if (!activeAccount) return;
 
@@ -305,11 +335,7 @@ export default function App() {
       if (targetContainer && containerKey) {
         const newSlots = [...targetContainer.slots];
         newSlots[slotId] = { ...newSlots[slotId], item };
-        
-        targetChar[containerKey] = {
-          ...targetContainer,
-          slots: newSlots
-        };
+        targetChar[containerKey] = { ...targetContainer, slots: newSlots };
         newChars[activeCharIndex] = targetChar;
       }
 
@@ -317,7 +343,6 @@ export default function App() {
     }));
   };
 
-  // Move item from slot to Learned Recipes list
   const handleReadRecipe = (item: ItemData) => {
       if (!activeAccount || !activeSlot) return;
 
@@ -327,10 +352,8 @@ export default function App() {
         const newChars = [...acc.characters];
         const targetChar = { ...newChars[activeCharIndex] };
         
-        // 1. Add to learned recipes
         targetChar.learnedRecipes = [...targetChar.learnedRecipes, item];
 
-        // 2. Remove from container slot
         let targetContainer: Container | null = null;
         let containerKey: 'bank1' | 'bank2' | 'bag' | null = null;
 
@@ -363,16 +386,12 @@ export default function App() {
   const handleSlotClick = (containerId: string, slotId: number) => {
     setActiveSlot({ containerId, slotId });
     setModalOpen(true);
-    setTooltip(null); // Close tooltip on click
+    setTooltip(null);
   };
 
   const handleSlotHover = (item: ItemData | null, e: React.MouseEvent) => {
     if (item) {
-      setTooltip({
-        item,
-        x: e.clientX,
-        y: e.clientY
-      });
+      setTooltip({ item, x: e.clientX, y: e.clientY });
     } else {
       setTooltip(null);
     }
@@ -381,7 +400,6 @@ export default function App() {
   const handleSaveItem = (item: ItemData) => {
     if (!activeAccount || !activeSlot) return;
 
-    // Special Case: If it's a "Read" recipe being created/saved
     if (item.type === 'Recipe' && item.isRead) {
         setAccounts(prevAccounts => prevAccounts.map(acc => {
             if (acc.id !== selectedAccountId) return acc;
@@ -389,17 +407,13 @@ export default function App() {
             const newChars = [...acc.characters];
             const targetChar = { ...newChars[activeCharIndex] };
             
-            // Add to learned recipes (Prevent duplicate IDs if editing?)
             const existingIdx = targetChar.learnedRecipes.findIndex(r => r.id === item.id);
             if (existingIdx !== -1) {
-                // Update existing
                 targetChar.learnedRecipes[existingIdx] = item;
             } else {
-                // Add new
                 targetChar.learnedRecipes = [...targetChar.learnedRecipes, item];
             }
     
-            // Ensure the slot is empty (because it's now in the book)
             let targetContainer: Container | null = null;
             let containerKey: 'bank1' | 'bank2' | 'bag' | null = null;
     
@@ -409,9 +423,6 @@ export default function App() {
     
             if (targetContainer && containerKey) {
                 const newSlots = [...targetContainer.slots];
-                // Only clear the slot if we were Editing an existing unread item and turned it into Read,
-                // OR if we are creating a New item (which shouldn't occupy the slot if read).
-                // Essentially, saving a "Read" recipe ALWAYS clears the slot.
                 newSlots[activeSlot.slotId] = { ...newSlots[activeSlot.slotId], item: null };
                 targetChar[containerKey] = { ...targetContainer, slots: newSlots };
             }
@@ -420,7 +431,6 @@ export default function App() {
             return { ...acc, characters: newChars };
         }));
     } else {
-        // Normal Save (Unread Recipe or Normal Item) -> Save to Slot
         updateSlot(activeSlot.containerId, activeSlot.slotId, item);
     }
   };
@@ -432,7 +442,6 @@ export default function App() {
     }
   };
 
-  // Get current Item for modal
   const getCurrentItem = (): ItemData | null => {
     if (!activeSlot || !activeChar) return null;
     
@@ -448,34 +457,40 @@ export default function App() {
     setCurrentViewIndex((prev) => (prev + 1) % VIEW_ORDER.length);
   };
 
-  // --- Auth Guard ---
+  // --- RENDER MANTIĞI ---
+
+  // 1. Veri Yükleniyorsa
+  if (loading) {
+    return (
+      <div className="h-screen w-screen bg-slate-950 flex flex-col items-center justify-center text-yellow-500 font-bold gap-4">
+        <Shield size={64} className="animate-bounce" />
+        <div className="text-2xl animate-pulse">SUNUCUYA BAĞLANILIYOR...</div>
+        <div className="text-xs text-slate-500 mt-2">Bulut Veritabanı Senkronizasyonu</div>
+      </div>
+    );
+  }
+
+  // 2. Giriş Yapılmamışsa
   if (!userRole) {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  if (!activeAccount || !activeChar) return <div className="text-white p-10">Yükleniyor...</div>;
+  // 3. Veri Gelmemişse (Koruma)
+  if (!activeAccount || !activeChar) return <div className="text-white p-10">Hesap verisi yüklenemedi. Lütfen sayfayı yenileyin.</div>;
 
   const currentView = VIEW_ORDER[currentViewIndex];
   const activeContainer = activeChar[currentView];
 
   return (
-    // Outer container: fills screen, centers content
     <div className="h-screen w-screen bg-[url('https://picsum.photos/1920/1080?grayscale&blur=2')] bg-cover bg-center flex items-center justify-center overflow-hidden">
       
-      {/* 
-        Main UI Frame: 
-        - w-[98vw] h-[98vh]: Takes up 98% of viewport width and height.
-        - No max-width restriction.
-        - Flex column to stack Header + Grid + Footer
-      */}
       <div className="w-[97vw] h-[97vh] md:w-[98vw] md:h-[98vh] bg-slate-900/95 border border-slate-700/60 md:border-2 md:border-slate-700 rounded-2xl md:rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative">
         
         {/* === HEADER === */}
         <div className="flex flex-col border-b-2 border-slate-700 shrink-0">
           
-          {/* ===== MOBILE TOP BAR ===== */}
+          {/* MOBILE TOP BAR */}
           <div className="md:hidden bg-gradient-to-b from-slate-800 to-slate-800/95">
-            {/* Account Row */}
             <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2.5">
               <div className="bg-gradient-to-br from-yellow-500/15 to-yellow-700/10 p-2 rounded-xl border border-yellow-500/20 shadow-lg shadow-yellow-900/10">
                 <Shield size={16} className="text-yellow-500" />
@@ -492,7 +507,6 @@ export default function App() {
               {userRole === 'user' && <span className="text-[9px] text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded-full px-2.5 py-0.5 shrink-0 tracking-wide">Gözlemci</span>}
             </div>
 
-            {/* Actions Row */}
             <div className="px-3 pb-2 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <div className="relative">
@@ -522,50 +536,23 @@ export default function App() {
               </div>
 
               <div className="flex items-center bg-slate-900/40 rounded-xl p-1 border border-slate-700/30 gap-0.5">
-                <button
-                  onClick={() => setIsSearchOpen(true)}
-                  className="p-2 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"
-                  title="Ara"
-                >
-                  <Search size={16} />
-                </button>
-                <button
-                  onClick={handleExportExcel}
-                  className="p-2 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"
-                  title="Excel"
-                >
-                  <FileSpreadsheet size={16} />
-                </button>
-                <button
-                  onClick={saveData}
-                  className="p-2 text-blue-400 active:bg-blue-600/20 rounded-lg transition-colors"
-                  title="Kaydet"
-                >
-                  <Save size={16} />
-                </button>
+                <button onClick={() => setIsSearchOpen(true)} className="p-2 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={16} /></button>
+                <button onClick={handleExportExcel} className="p-2 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={16} /></button>
+                <button onClick={saveData} className="p-2 text-blue-400 active:bg-blue-600/20 rounded-lg transition-colors"><Save size={16} /></button>
                 <div className="w-px h-5 bg-slate-600/40 mx-0.5"></div>
-                <button
-                  onClick={handleLogout}
-                  className="p-2 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"
-                  title="Çıkış Yap"
-                >
-                  <LogOut size={16} />
-                </button>
+                <button onClick={handleLogout} className="p-2 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={16} /></button>
               </div>
             </div>
           </div>
 
-          {/* ===== DESKTOP TOP BAR ===== */}
+          {/* DESKTOP TOP BAR */}
           <div className="hidden md:flex bg-slate-800 p-1 justify-between items-center gap-2">
-
-            {/* Left */}
             <div className="flex items-center gap-2">
                <div className="bg-slate-700 p-1 rounded border border-slate-600 shadow-inner">
                  <Shield size={16} className="text-yellow-600" />
                </div>
 
                <div className="flex flex-col">
-                  {/* Account Name with Save Button */}
                   <div className="relative group flex items-center gap-1 mb-1">
                     <input
                       value={tempAccountName}
@@ -573,17 +560,10 @@ export default function App() {
                       className="bg-transparent text-yellow-500 font-bold text-lg outline-none w-40 placeholder-slate-600 focus:border-b focus:border-yellow-600 transition-all"
                       placeholder="Hesap İsmi"
                     />
-                    <button
-                      onClick={commitAccountName}
-                      className="p-1 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"
-                      title="Hesap Adını Kaydet"
-                    >
-                      <Save size={12} />
-                    </button>
+                    <button onClick={commitAccountName} className="p-1 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"><Save size={12} /></button>
                     {userRole === 'user' && <span className="text-[10px] text-slate-500 ml-2 border border-slate-600 rounded px-1">Gözlemci Modu</span>}
                   </div>
 
-                  {/* Switcher */}
                   <div className="flex items-center gap-2">
                      <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">HESAP:</span>
                      <div className="relative">
@@ -603,12 +583,11 @@ export default function App() {
                         <ChevronDown size={8} className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
                      </div>
 
-                     {/* Admin Only Controls */}
                      {userRole === 'admin' && (
                         <>
-                           <button onClick={handleAddAccount} className="text-green-500 hover:text-green-400" title="Hesap Ekle"><Plus size={12} /></button>
+                           <button onClick={handleAddAccount} className="text-green-500 hover:text-green-400"><Plus size={12} /></button>
                            {accounts.length > 1 && (
-                            <button onClick={handleDeleteAccount} className="text-red-800 hover:text-red-500" title="Hesap Sil"><Trash2 size={12} /></button>
+                            <button onClick={handleDeleteAccount} className="text-red-800 hover:text-red-500"><Trash2 size={12} /></button>
                            )}
                         </>
                      )}
@@ -616,40 +595,11 @@ export default function App() {
                </div>
             </div>
 
-            {/* Right: Actions */}
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setIsSearchOpen(true)}
-                className="flex items-center gap-1 px-3 py-1 bg-slate-700 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[10px] font-bold rounded border border-yellow-500/30 transition-colors"
-              >
-                <Search size={12} />
-                <span>Ara</span>
-              </button>
-
-              <button
-                onClick={handleExportExcel}
-                className="flex items-center gap-1 px-2 py-1 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-[10px] font-bold rounded border border-emerald-800/50"
-              >
-                <FileSpreadsheet size={12} />
-                <span>Excel</span>
-              </button>
-
-              <button
-                onClick={saveData}
-                className="flex items-center gap-1 px-3 py-1 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 text-[10px] font-bold rounded border border-blue-800/50"
-              >
-                <Save size={12} />
-                <span>Kaydet</span>
-              </button>
-
-              {/* Logout Button */}
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-1 px-2 py-1 bg-red-900/20 hover:bg-red-900/60 text-red-300 text-[10px] font-bold rounded border border-red-900/50 ml-2"
-                title="Çıkış Yap"
-              >
-                <LogOut size={12} />
-              </button>
+              <button onClick={() => setIsSearchOpen(true)} className="flex items-center gap-1 px-3 py-1 bg-slate-700 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[10px] font-bold rounded border border-yellow-500/30 transition-colors"><Search size={12} /><span>Ara</span></button>
+              <button onClick={handleExportExcel} className="flex items-center gap-1 px-2 py-1 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-[10px] font-bold rounded border border-emerald-800/50"><FileSpreadsheet size={12} /><span>Excel</span></button>
+              <button onClick={saveData} className="flex items-center gap-1 px-3 py-1 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 text-[10px] font-bold rounded border border-blue-800/50"><Save size={12} /><span>Kaydet</span></button>
+              <button onClick={handleLogout} className="flex items-center gap-1 px-2 py-1 bg-red-900/20 hover:bg-red-900/60 text-red-300 text-[10px] font-bold rounded border border-red-900/50 ml-2"><LogOut size={12} /></button>
             </div>
           </div>
 
@@ -675,7 +625,6 @@ export default function App() {
              </div>
 
              <div className="hidden md:flex items-center gap-2 bg-black/20 px-2 py-1 rounded-t-md border-t border-x border-slate-700/50">
-                {/* Book Button */}
                 <button 
                   onClick={() => setIsRecipeBookOpen(true)}
                   className="p-1 mr-1 text-purple-400 hover:text-purple-200 hover:bg-purple-900/30 rounded transition-colors relative group"
@@ -698,23 +647,15 @@ export default function App() {
                    className="bg-transparent text-blue-300 font-bold text-xs outline-none w-20 border-b border-transparent focus:border-blue-500 placeholder-slate-600"
                    placeholder="Karakter İsmi"
                 />
-                 <button
-                  onClick={commitCharacterName}
-                  className="p-0.5 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"
-                  title="Karakter Adını Kaydet"
-                >
-                  <Save size={10} />
-                </button>
+                 <button onClick={commitCharacterName} className="p-0.5 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"><Save size={10} /></button>
              </div>
           </div>
 
-          {/* Mobile Toolbar */}
           <div className="md:hidden bg-gradient-to-r from-slate-800/80 via-slate-800/90 to-slate-900/80 px-3 py-2 border-t border-slate-700/20">
             <div className="flex items-center gap-2.5">
               <button
                 onClick={() => setIsRecipeBookOpen(true)}
                 className="bg-purple-900/25 p-2 rounded-xl border border-purple-500/20 text-purple-400 active:text-purple-200 active:bg-purple-900/40 transition-colors relative shadow-sm"
-                title="Reçete Kitabı"
               >
                 <Book size={16} />
                 {activeChar.learnedRecipes?.length > 0 && (
@@ -738,12 +679,11 @@ export default function App() {
           </div>
         </div>
 
-        {/* Content Area - Fills remaining height */}
+        {/* Content Area */}
         <div className="p-1 bg-slate-800/50 flex-1 overflow-hidden flex flex-col">
            <div className="flex-1 w-full h-full">
               {currentView === 'bag' ? (
                  <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                    {/* Bag view is smaller by nature, but we let it scale up a bit more */}
                     <div className="w-full h-full max-w-[90%] max-h-[80%] bg-[#1a1510] p-1 rounded-xl border-4 border-[#3e3428] shadow-2xl relative flex flex-col">
                         <ContainerGrid 
                             container={activeContainer} 
@@ -772,7 +712,7 @@ export default function App() {
 
         {/* Footer */}
         <div className="bg-slate-900 p-0.5 flex justify-between items-center text-[8px] md:text-[9px] text-slate-600 border-t border-slate-700 shrink-0">
-           <span className="w-full text-center">RPG Inventory System v2.1 • {activeChar.name} • {userRole?.toUpperCase()} MODU</span>
+           <span className="w-full text-center">IKV KASA YÖNETİM SİSTEMİ v3.0 • {activeChar.name} • {userRole?.toUpperCase()} MODU • {userRole === 'admin' ? 'Yönetici' : 'İzleyici'}</span>
         </div>
       </div>
 
