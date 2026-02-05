@@ -468,30 +468,112 @@ export default function App() {
         - No max-width restriction.
         - Flex column to stack Header + Grid + Footer
       */}
-      <div className="w-[98vw] h-[98vh] bg-slate-900/95 border-2 border-slate-700 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative">
+      <div className="w-[97vw] h-[97vh] md:w-[98vw] md:h-[98vh] bg-slate-900/95 border border-slate-700/60 md:border-2 md:border-slate-700 rounded-2xl md:rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative">
         
         {/* === HEADER === */}
         <div className="flex flex-col border-b-2 border-slate-700 shrink-0">
           
-          {/* Top Bar */}
-          <div className="bg-slate-800 p-1 flex justify-between items-center gap-2">
-            
+          {/* ===== MOBILE TOP BAR ===== */}
+          <div className="md:hidden bg-gradient-to-b from-slate-800 to-slate-800/95">
+            {/* Account Row */}
+            <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2.5">
+              <div className="bg-gradient-to-br from-yellow-500/15 to-yellow-700/10 p-2 rounded-xl border border-yellow-500/20 shadow-lg shadow-yellow-900/10">
+                <Shield size={16} className="text-yellow-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <input
+                  value={tempAccountName}
+                  onChange={(e) => setTempAccountName(e.target.value)}
+                  onBlur={commitAccountName}
+                  className="bg-transparent text-yellow-500 font-bold text-[15px] outline-none w-full placeholder-slate-600"
+                  placeholder="Hesap İsmi"
+                />
+              </div>
+              {userRole === 'user' && <span className="text-[9px] text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded-full px-2.5 py-0.5 shrink-0 tracking-wide">Gözlemci</span>}
+            </div>
+
+            {/* Actions Row */}
+            <div className="px-3 pb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <div className="relative">
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => {
+                      setSelectedAccountId(e.target.value);
+                      setActiveCharIndex(0);
+                      setCurrentViewIndex(0);
+                    }}
+                    className="appearance-none bg-slate-900/50 text-slate-300 text-[11px] py-1.5 pl-2.5 pr-6 rounded-lg border border-slate-600/40 focus:outline-none cursor-pointer"
+                  >
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>{acc.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
+                </div>
+                {userRole === 'admin' && (
+                  <>
+                    <button onClick={handleAddAccount} className="p-1.5 text-green-500 active:text-green-400 rounded-lg active:bg-green-900/30" title="Hesap Ekle"><Plus size={16} /></button>
+                    {accounts.length > 1 && (
+                      <button onClick={handleDeleteAccount} className="p-1.5 text-red-800 active:text-red-500 rounded-lg active:bg-red-900/30" title="Hesap Sil"><Trash2 size={16} /></button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center bg-slate-900/40 rounded-xl p-1 border border-slate-700/30 gap-0.5">
+                <button
+                  onClick={() => setIsSearchOpen(true)}
+                  className="p-2 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"
+                  title="Ara"
+                >
+                  <Search size={16} />
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  className="p-2 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"
+                  title="Excel"
+                >
+                  <FileSpreadsheet size={16} />
+                </button>
+                <button
+                  onClick={saveData}
+                  className="p-2 text-blue-400 active:bg-blue-600/20 rounded-lg transition-colors"
+                  title="Kaydet"
+                >
+                  <Save size={16} />
+                </button>
+                <div className="w-px h-5 bg-slate-600/40 mx-0.5"></div>
+                <button
+                  onClick={handleLogout}
+                  className="p-2 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"
+                  title="Çıkış Yap"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* ===== DESKTOP TOP BAR ===== */}
+          <div className="hidden md:flex bg-slate-800 p-1 justify-between items-center gap-2">
+
             {/* Left */}
             <div className="flex items-center gap-2">
-               <div className="bg-slate-700 p-1 rounded border border-slate-600 shadow-inner hidden md:block">
+               <div className="bg-slate-700 p-1 rounded border border-slate-600 shadow-inner">
                  <Shield size={16} className="text-yellow-600" />
                </div>
-               
+
                <div className="flex flex-col">
                   {/* Account Name with Save Button */}
                   <div className="relative group flex items-center gap-1 mb-1">
-                    <input 
+                    <input
                       value={tempAccountName}
                       onChange={(e) => setTempAccountName(e.target.value)}
-                      className="bg-transparent text-yellow-500 font-bold text-sm md:text-lg outline-none w-28 md:w-40 placeholder-slate-600 focus:border-b focus:border-yellow-600 transition-all"
+                      className="bg-transparent text-yellow-500 font-bold text-lg outline-none w-40 placeholder-slate-600 focus:border-b focus:border-yellow-600 transition-all"
                       placeholder="Hesap İsmi"
                     />
-                    <button 
+                    <button
                       onClick={commitAccountName}
                       className="p-1 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"
                       title="Hesap Adını Kaydet"
@@ -500,19 +582,19 @@ export default function App() {
                     </button>
                     {userRole === 'user' && <span className="text-[10px] text-slate-500 ml-2 border border-slate-600 rounded px-1">Gözlemci Modu</span>}
                   </div>
-                  
+
                   {/* Switcher */}
-                  <div className="flex items-center gap-1 md:gap-2">
-                     <span className="hidden md:inline text-[9px] text-slate-400 uppercase font-bold tracking-wider">HESAP:</span>
+                  <div className="flex items-center gap-2">
+                     <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">HESAP:</span>
                      <div className="relative">
-                        <select 
-                          value={selectedAccountId} 
+                        <select
+                          value={selectedAccountId}
                           onChange={(e) => {
                             setSelectedAccountId(e.target.value);
                             setActiveCharIndex(0);
                             setCurrentViewIndex(0);
                           }}
-                          className="appearance-none bg-slate-900/50 hover:bg-slate-700 text-slate-300 text-[9px] md:text-[10px] py-0.5 pl-1 pr-3 rounded border border-slate-600 focus:outline-none cursor-pointer"
+                          className="appearance-none bg-slate-900/50 hover:bg-slate-700 text-slate-300 text-[10px] py-0.5 pl-1 pr-3 rounded border border-slate-600 focus:outline-none cursor-pointer"
                         >
                           {accounts.map(acc => (
                             <option key={acc.id} value={acc.id}>{acc.name}</option>
@@ -536,28 +618,28 @@ export default function App() {
 
             {/* Right: Actions */}
             <div className="flex items-center gap-1">
-              <button 
+              <button
                 onClick={() => setIsSearchOpen(true)}
                 className="flex items-center gap-1 px-3 py-1 bg-slate-700 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[10px] font-bold rounded border border-yellow-500/30 transition-colors"
               >
                 <Search size={12} />
-                <span className="hidden md:inline">Ara</span>
+                <span>Ara</span>
               </button>
 
-              <button 
+              <button
                 onClick={handleExportExcel}
                 className="flex items-center gap-1 px-2 py-1 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-[10px] font-bold rounded border border-emerald-800/50"
               >
                 <FileSpreadsheet size={12} />
-                <span className="hidden md:inline">Excel</span>
+                <span>Excel</span>
               </button>
-              
-              <button 
+
+              <button
                 onClick={saveData}
                 className="flex items-center gap-1 px-3 py-1 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 text-[10px] font-bold rounded border border-blue-800/50"
               >
                 <Save size={12} />
-                <span className="hidden md:inline">Kaydet</span>
+                <span>Kaydet</span>
               </button>
 
               {/* Logout Button */}
@@ -579,7 +661,7 @@ export default function App() {
                     key={char.id}
                     onClick={() => { setActiveCharIndex(idx); setCurrentViewIndex(0); }}
                     className={`
-                      px-2 md:px-3 py-1 rounded-t-lg font-bold text-[10px] md:text-xs tracking-wide transition-all border-t border-x whitespace-nowrap flex items-center gap-1 flex-1 justify-center
+                      px-3 md:px-3 py-2 md:py-1 rounded-t-lg font-bold text-[11px] md:text-xs tracking-wide transition-all border-t border-x whitespace-nowrap flex items-center gap-1 flex-1 justify-center
                       ${activeCharIndex === idx 
                         ? 'bg-slate-900/50 border-slate-600 text-white translate-y-[1px] border-b-0' 
                         : 'bg-slate-900/20 border-transparent text-slate-500 hover:bg-slate-700 hover:text-slate-300'
@@ -616,7 +698,7 @@ export default function App() {
                    className="bg-transparent text-blue-300 font-bold text-xs outline-none w-20 border-b border-transparent focus:border-blue-500 placeholder-slate-600"
                    placeholder="Karakter İsmi"
                 />
-                 <button 
+                 <button
                   onClick={commitCharacterName}
                   className="p-0.5 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"
                   title="Karakter Adını Kaydet"
@@ -624,6 +706,35 @@ export default function App() {
                   <Save size={10} />
                 </button>
              </div>
+          </div>
+
+          {/* Mobile Toolbar */}
+          <div className="md:hidden bg-gradient-to-r from-slate-800/80 via-slate-800/90 to-slate-900/80 px-3 py-2 border-t border-slate-700/20">
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => setIsRecipeBookOpen(true)}
+                className="bg-purple-900/25 p-2 rounded-xl border border-purple-500/20 text-purple-400 active:text-purple-200 active:bg-purple-900/40 transition-colors relative shadow-sm"
+                title="Reçete Kitabı"
+              >
+                <Book size={16} />
+                {activeChar.learnedRecipes?.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-purple-500 text-white text-[8px] rounded-full w-4 h-4 flex items-center justify-center font-bold shadow-md">
+                    {activeChar.learnedRecipes.length}
+                  </span>
+                )}
+              </button>
+              <div className="h-6 w-px bg-gradient-to-b from-transparent via-slate-600/60 to-transparent"></div>
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 bg-slate-900/30 rounded-xl px-3 py-1.5 border border-slate-700/25">
+                <Edit3 size={12} className="text-slate-500 shrink-0" />
+                <input
+                  value={tempCharName}
+                  onChange={(e) => setTempCharName(e.target.value)}
+                  onBlur={commitCharacterName}
+                  className="bg-transparent text-blue-300 font-bold text-[13px] outline-none flex-1 min-w-0 placeholder-slate-600"
+                  placeholder="Karakter İsmi"
+                />
+              </div>
+            </div>
           </div>
         </div>
 

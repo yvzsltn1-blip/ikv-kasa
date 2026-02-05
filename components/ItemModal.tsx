@@ -80,7 +80,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-slate-800 border-4 border-slate-600 rounded-lg shadow-2xl w-96 max-w-full text-slate-200 relative overflow-hidden">
+      <div className="bg-slate-800 border-2 md:border-4 border-slate-600 rounded-xl shadow-2xl w-[93vw] md:w-96 max-h-[92vh] text-slate-200 relative overflow-y-auto">
         
         {/* Header */}
         <div className="bg-slate-900 p-3 border-b border-slate-700 flex justify-between items-center">

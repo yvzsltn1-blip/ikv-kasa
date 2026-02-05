@@ -217,18 +217,18 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-10 md:pt-20 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-slate-900 border-2 border-slate-600 rounded-lg shadow-2xl flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center pt-2 md:pt-20 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="w-[97vw] md:w-full max-w-2xl bg-slate-900 border-2 border-slate-600 rounded-xl shadow-2xl flex flex-col max-h-[96vh] md:max-h-[85vh]">
         
         {/* Header / Input */}
         <div className="bg-slate-800 rounded-t-lg flex flex-col border-b border-slate-700">
             <div className="p-4 flex items-center gap-3">
-                <Search className="text-yellow-500" size={24} />
-                <input 
+                <Search className="text-yellow-500 shrink-0" size={20} />
+                <input
                     autoFocus
                     type="text"
                     placeholder="İsim veya Efsun ile ara..."
-                    className="flex-1 bg-transparent text-xl text-white placeholder-slate-500 outline-none"
+                    className="flex-1 bg-transparent text-base md:text-xl text-white placeholder-slate-500 outline-none min-w-0"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                 />
@@ -411,14 +411,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 </div>
 
                 {/* Path / Location */}
-                <div className="flex items-center gap-1 mt-2 text-[10px] text-slate-400 font-mono bg-black/20 p-1 rounded w-fit">
-                    <MapPin size={10} className="text-blue-400" />
+                <div className="flex items-center gap-1 mt-2 text-[9px] md:text-[10px] text-slate-400 font-mono bg-black/20 p-1 rounded w-fit flex-wrap">
+                    <MapPin size={10} className="text-blue-400 shrink-0" />
                     <span className="text-blue-200">{res.accountName}</span>
-                    <ArrowRight size={8} />
+                    <ArrowRight size={8} className="shrink-0" />
                     <span className="text-green-200">{res.charName}</span>
-                    <ArrowRight size={8} />
+                    <ArrowRight size={8} className="shrink-0" />
                     <span className={`${res.containerKey === 'learned' ? 'text-purple-300' : 'text-yellow-200'} uppercase`}>{res.containerName}</span>
-                    {res.slotId !== -1 && <span className="ml-1 text-slate-500">| Satır: {res.row}, Sütun: {res.col}</span>}
+                    {res.slotId !== -1 && <span className="ml-1 text-slate-500">| S:{res.row} Sü:{res.col}</span>}
                 </div>
               </div>
             </button>

@@ -24,7 +24,7 @@ export const RecipeBookModal: React.FC<RecipeBookModalProps> = ({ isOpen, onClos
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-[#1a1614] border-4 border-[#4a3e32] rounded-lg shadow-2xl w-[600px] max-w-[95vw] h-[80vh] flex flex-col relative overflow-hidden">
+      <div className="bg-[#1a1614] border-2 md:border-4 border-[#4a3e32] rounded-xl shadow-2xl w-[95vw] md:w-[600px] h-[88vh] md:h-[80vh] flex flex-col relative overflow-hidden">
         
         {/* Book Header */}
         <div className="bg-[#2c241f] p-4 border-b border-[#4a3e32] flex justify-between items-center shadow-md">

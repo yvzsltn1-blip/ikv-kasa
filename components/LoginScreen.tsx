@@ -34,8 +34,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     <div className="h-screen w-screen bg-[url('https://picsum.photos/1920/1080?grayscale&blur=4')] bg-cover bg-center flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
       
-      <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in duration-500">
-        
+      <div className="relative z-10 w-[92vw] md:w-full max-w-md animate-in fade-in zoom-in duration-500">
+
         {/* Card Container */}
         <div className="bg-slate-900/90 border-2 border-slate-600 rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden">
           
