@@ -8,6 +8,7 @@ import {
   signInWithPopup, 
   GoogleAuthProvider,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signOut // Çıkış yapma fonksiyonunu ekledik
 } from 'firebase/auth';
 
@@ -78,6 +79,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       setError(msg);
       setLoading(false);
     }
+  };
+
+  // Şifremi Unuttum
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setError("Lütfen önce e-posta adresinizi yazın, ardından 'Şifremi Unuttum' butonuna tıklayın.");
+      return;
+    }
+    setError('');
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert("Şifre sıfırlama bağlantısı e-posta adresinize gönderildi. (Spam/Gereksiz klasörünü de kontrol edin)");
+    } catch (err: any) {
+      let msg = "Şifre sıfırlama sırasında bir hata oluştu.";
+      if (err.code === 'auth/user-not-found') msg = "Bu e-posta ile kayıtlı kullanıcı bulunamadı.";
+      else if (err.code === 'auth/invalid-email') msg = "Geçersiz e-posta adresi formatı.";
+      setError(msg);
+    }
+    setLoading(false);
   };
 
   // Google ile Giriş
@@ -164,6 +185,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                   />
                 </div>
               </div>
+
+              {!isRegistering && (
+                <div className="flex justify-end -mt-1 md:-mt-2">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={loading}
+                    className="text-slate-500 hover:text-yellow-500/80 text-[10px] transition-colors duration-300 disabled:opacity-50"
+                  >
+                    Şifremi Unuttum
+                  </button>
+                </div>
+              )}
 
               {error && (
                 <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-2 flex items-start gap-2 text-red-300/90 text-xs animate-in slide-in-from-left-2">
