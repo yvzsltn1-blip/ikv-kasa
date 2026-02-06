@@ -8,7 +8,7 @@ import { getFirestore } from "firebase/firestore";
 // Örnek (Sen kendi kodunu yapıştıracaksın):
 const firebaseConfig = {
   apiKey: "AIzaSyDfXopA2ww46osAqoYK2VS-7Xajm3DHvXg",
-  authDomain: "ikv-kasa-yonetimi.firebaseapp.com",
+  authDomain: "ikv-kasa-yonetimi.web.app",
   projectId: "ikv-kasa-yonetimi",
   storageBucket: "ikv-kasa-yonetimi.firebasestorage.app",
   messagingSenderId: "1026667249911",

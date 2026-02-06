@@ -91,7 +91,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       // Google hesapları doğrulandı sayılır, ekstra kontrole gerek yok
       checkUserRole(result.user);
     } catch (err: any) {
-      const msg = err.code === 'auth/popup-closed-by-user' ? "Giriş penceresi kapatıldı." : "Google ile giriş sırasında bir hata oluştu.";
+      const msg = err.code === 'auth/popup-closed-by-user' ? "Giriş penceresi kapatıldı." : `Google ile giriş sırasında bir hata oluştu. (${err.code})`;
       setError(msg);
       setLoading(false);
     }
