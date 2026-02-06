@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CATEGORY_OPTIONS, ItemData } from '../types';
-import { HERO_CLASSES, GENDER_OPTIONS } from '../constants';
+import { CATEGORY_OPTIONS, ItemData, SetItemLocation, GlobalSetInfo } from '../types';
+import { HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { X, BookOpen, CheckCircle, Circle, Layers, Sword, Globe, Lock } from 'lucide-react';
+import { SetDetailModal } from './SetDetailModal';
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -11,9 +12,11 @@ interface ItemModalProps {
   onRead?: (item: ItemData) => void;
   existingItem: ItemData | null;
   enchantmentSuggestions?: string[];
+  globalSetLookup?: Map<string, GlobalSetInfo>;
+  globalSetMap?: Map<string, SetItemLocation[]>;
 }
 
-export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [] }) => {
+export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], globalSetLookup, globalSetMap }) => {
   const [step, setStep] = useState(1);
   const [activeField, setActiveField] = useState<'enchantment1' | 'enchantment2' | null>(null);
   const [formData, setFormData] = useState<Partial<ItemData>>({
@@ -69,6 +72,21 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
 
   const blurTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Set detail modal state
+  const [showSetDetail, setShowSetDetail] = useState(false);
+  const [setDetailKey, setSetDetailKey] = useState<string | null>(null);
+
+  // Current set info based on formData
+  const currentSetInfo = useMemo(() => {
+    if (!globalSetLookup || !formData.category || !SET_CATEGORIES.includes(formData.category)) return null;
+    if (!formData.enchantment1 || formData.enchantment1.trim() === '') return null;
+
+    const enchKey = `${(formData.enchantment1 || '').toLocaleLowerCase('tr')}|${(formData.enchantment2 || '').toLocaleLowerCase('tr')}`;
+    const globalKey = `${enchKey}|${formData.gender || 'Tüm Cinsiyetler'}|${formData.heroClass || 'Savaşçı'}`;
+    const info = globalSetLookup.get(globalKey);
+    return info ? { info, globalKey } : null;
+  }, [globalSetLookup, formData.category, formData.enchantment1, formData.enchantment2, formData.gender, formData.heroClass]);
+
   if (!isOpen) return null;
 
   const handleNext = () => setStep((prev) => prev + 1);
@@ -109,6 +127,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="bg-slate-800 border-2 md:border-4 border-slate-600 rounded-xl shadow-2xl w-[93vw] md:w-96 max-h-[92vh] text-slate-200 relative overflow-y-auto">
         
@@ -221,6 +240,31 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                     <span className="text-xs font-bold text-yellow-400">{formData.category}</span>
                  </div>
               </div>
+
+              {/* Set Durumu Barı */}
+              {currentSetInfo && (
+                <div
+                  className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer hover:brightness-125 transition-all ${
+                    currentSetInfo.info.count >= 8
+                      ? 'bg-emerald-950/60 border-emerald-700'
+                      : currentSetInfo.info.count >= 4
+                        ? 'bg-amber-950/60 border-amber-700'
+                        : 'bg-slate-900/60 border-slate-700'
+                  }`}
+                  onClick={() => { setSetDetailKey(currentSetInfo.globalKey); setShowSetDetail(true); }}
+                >
+                  <span className="text-[10px] font-bold text-slate-400 shrink-0">SET</span>
+                  <div className="flex-1 bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${currentSetInfo.info.count >= 8 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                      style={{ width: `${(currentSetInfo.info.count / 8) * 100}%` }}
+                    />
+                  </div>
+                  <span className={`text-[11px] font-bold shrink-0 ${currentSetInfo.info.count >= 8 ? 'text-emerald-400' : currentSetInfo.info.count >= 4 ? 'text-amber-400' : 'text-slate-400'}`}>
+                    {currentSetInfo.info.count}/8
+                  </span>
+                </div>
+              )}
 
               {/* Gender - hidden for Yüzük, Kolye, Tılsım, İksir, Maden */}
               {!isGenderless && (
@@ -507,5 +551,14 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
         </div>
       </div>
     </div>
+    {globalSetMap && (
+      <SetDetailModal
+        isOpen={showSetDetail}
+        onClose={() => { setShowSetDetail(false); setSetDetailKey(null); }}
+        setKey={setDetailKey}
+        setMap={globalSetMap}
+      />
+    )}
+    </>
   );
 };

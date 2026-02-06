@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, ItemData, CATEGORY_OPTIONS } from '../types';
+import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo } from '../types';
 import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
+import { SetDetailModal } from './SetDetailModal';
 import { db } from '../firebase';
 import { collection, getDocs, query as fsQuery, where, limit, QueryConstraint } from 'firebase/firestore';
 
@@ -38,14 +39,11 @@ interface GlobalSearchModalProps {
   onClose: () => void;
   accounts: Account[];
   onNavigate: (accountId: string, serverIndex: number, charIndex: number, viewIndex: number, openBook?: boolean) => void;
+  globalSetLookup: Map<string, GlobalSetInfo>;
+  globalSetMap: Map<string, SetItemLocation[]>;
 }
 
-interface SetInfo {
-  count: number;
-  categories: Set<string>;
-}
-
-export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate }) => {
+export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap }) => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchMode, setSearchMode] = useState<'local' | 'global'>('local');
@@ -105,6 +103,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       setGlobalCacheKey('');
       setGlobalCacheTime(0);
       setGlobalItems([]);
+      setShowSetDetail(false);
+      setSetDetailKey(null);
       resetFilters();
     }
   }, [isOpen]);
@@ -290,81 +290,20 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     return found;
   }, [debouncedQuery, accounts, hasActiveFilters, filterCategory, filterClass, filterGender, filterMinLevel, filterMaxLevel, filterType, filterRecipeStatus]);
 
-  // Set lookup: karakter başına efsun çifti → hangi kategoriler mevcut
-  const setLookup = useMemo(() => {
-    const lookup = new Map<string, SetInfo>();
+  // Set detail modal states
+  const [showSetDetail, setShowSetDetail] = useState(false);
+  const [setDetailKey, setSetDetailKey] = useState<string | null>(null);
 
-    accounts.forEach(acc => {
-      acc.servers.forEach((server, serverIdx) => {
-        server.characters.forEach(char => {
-          // Tüm itemleri topla (bank1, bank2, bag, learnedRecipes)
-          const allItems: ItemData[] = [];
-          [char.bank1, char.bank2, char.bag].forEach(container => {
-            container.slots.forEach(slot => {
-              if (slot.item) allItems.push(slot.item);
-            });
-          });
-          (char.learnedRecipes || []).forEach(recipe => allItems.push(recipe));
-
-          // Sadece set kategorilerinde ve enchantment1'i olan itemleri filtrele
-          const setItems = allItems.filter(
-            item => SET_CATEGORIES.includes(item.category) && item.enchantment1 && item.enchantment1.trim() !== ''
-          );
-
-          // Efsun çiftine göre grupla
-          const enchGroups = new Map<string, ItemData[]>();
-          setItems.forEach(item => {
-            const enchKey = `${item.enchantment1.toLocaleLowerCase('tr')}|${item.enchantment2.toLocaleLowerCase('tr')}`;
-            const group = enchGroups.get(enchKey) || [];
-            group.push(item);
-            enchGroups.set(enchKey, group);
-          });
-
-          // Her grup için mevcut cinsiyet ve sınıf kombinasyonlarını bul
-          enchGroups.forEach((items, enchKey) => {
-            // Mevcut spesifik cinsiyet ve sınıf değerlerini topla
-            const genders = new Set<string>();
-            const classes = new Set<string>();
-            items.forEach(item => {
-              genders.add(item.gender);
-              classes.add(item.heroClass);
-            });
-
-            // Her (gender, class) kombinasyonu için set sayısını hesapla
-            genders.forEach(targetGender => {
-              classes.forEach(targetClass => {
-                const coveredCategories = new Set<string>();
-                items.forEach(item => {
-                  const genderMatch = item.gender === targetGender || item.gender === 'Tüm Cinsiyetler' || targetGender === 'Tüm Cinsiyetler';
-                  const classMatch = item.heroClass === targetClass || item.heroClass === 'Tüm Sınıflar' || targetClass === 'Tüm Sınıflar';
-                  if (genderMatch && classMatch) {
-                    coveredCategories.add(item.category);
-                  }
-                });
-
-                if (coveredCategories.size > 0) {
-                  const key = `${acc.id}|${serverIdx}|${char.id}|${enchKey}|${targetGender}|${targetClass}`;
-                  lookup.set(key, { count: coveredCategories.size, categories: coveredCategories });
-                }
-              });
-            });
-          });
-        });
-      });
-    });
-
-    return lookup;
-  }, [accounts]);
-
-  // Bir SearchResult için en iyi set bilgisini bul
-  const getSetInfoForResult = (res: SearchResult): SetInfo | null => {
+  // Bir SearchResult için en iyi set bilgisini bul (global lookup kullanır)
+  const getSetInfoForResult = (res: SearchResult): { info: GlobalSetInfo; globalKey: string } | null => {
     const item = res.item;
     if (!SET_CATEGORIES.includes(item.category)) return null;
     if (!item.enchantment1 || item.enchantment1.trim() === '') return null;
 
     const enchKey = `${item.enchantment1.toLocaleLowerCase('tr')}|${item.enchantment2.toLocaleLowerCase('tr')}`;
-    const key = `${res.accountId}|${res.serverIndex}|${res.charId}|${enchKey}|${item.gender}|${item.heroClass}`;
-    return setLookup.get(key) || null;
+    const globalKey = `${enchKey}|${item.gender}|${item.heroClass}`;
+    const info = globalSetLookup.get(globalKey);
+    return info ? { info, globalKey } : null;
   };
 
   // Global search results
@@ -697,8 +636,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         </h4>
                         <div className="flex items-center gap-1 shrink-0">
                           {(() => {
-                            const setInfo = getSetInfoForResult(res);
-                            if (!setInfo) return null;
+                            const result = getSetInfoForResult(res);
+                            if (!result) return null;
+                            const { info: setInfo, globalKey } = result;
                             const full = setInfo.count === 8;
                             const mid = setInfo.count >= 4;
                             const colorClass = full
@@ -708,10 +648,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                                 : 'bg-slate-800 text-slate-400 border-slate-600';
                             const missingCats = SET_CATEGORIES.filter(c => !setInfo.categories.has(c));
                             const tooltip = full
-                              ? 'Tam set! Tüm parçalar mevcut.'
-                              : `Mevcut: ${[...setInfo.categories].join(', ')}\nEksik: ${missingCats.join(', ')}`;
+                              ? 'Tam set! Tüm parçalar mevcut. (Tıkla: detay)'
+                              : `Mevcut: ${[...setInfo.categories].join(', ')}\nEksik: ${missingCats.join(', ')}\n(Tıkla: detay)`;
                             return (
-                              <span title={tooltip} className={`text-[9px] px-1.5 py-0.5 rounded border font-bold cursor-help ${colorClass}`}>
+                              <span
+                                title={tooltip}
+                                className={`text-[9px] px-1.5 py-0.5 rounded border font-bold cursor-pointer hover:brightness-125 transition-all ${colorClass}`}
+                                onClick={(e) => { e.stopPropagation(); setSetDetailKey(globalKey); setShowSetDetail(true); }}
+                              >
                                 {setInfo.count}/8
                               </span>
                             );
@@ -857,6 +801,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
            {searchMode === 'global' && <span className="text-emerald-500">Maks. 20 sonuç | Kategori filtresi önerilir</span>}
         </div>
       </div>
+
+      <SetDetailModal
+        isOpen={showSetDetail}
+        onClose={() => { setShowSetDetail(false); setSetDetailKey(null); }}
+        setKey={setDetailKey}
+        setMap={globalSetMap}
+      />
     </div>
   );
 };

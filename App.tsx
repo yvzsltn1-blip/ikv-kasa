@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole } from './types';
-import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES } from './constants';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo } from './types';
+import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
@@ -302,6 +302,109 @@ export default function App() {
       });
     });
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+  }, [accounts]);
+
+  // Global set lookup: tüm hesaplar/sunucular/karakterler genelinde efsun çiftine göre set durumu
+  const { globalSetLookup, globalSetMap } = useMemo(() => {
+    const lookup = new Map<string, GlobalSetInfo>();
+    const setMap = new Map<string, SetItemLocation[]>();
+
+    // Tüm itemleri topla (account/server/char bilgisiyle)
+    const allSetItems: { item: ItemData; accountName: string; serverName: string; charName: string; containerName: string; row: number; col: number }[] = [];
+
+    accounts.forEach(acc => {
+      acc.servers.forEach(server => {
+        server.characters.forEach(char => {
+          const containers = [
+            { data: char.bank1, name: 'Kasa 1' },
+            { data: char.bank2, name: 'Kasa 2' },
+            { data: char.bag, name: 'Çanta' },
+          ];
+          containers.forEach(({ data, name }) => {
+            data.slots.forEach(slot => {
+              if (slot.item && SET_CATEGORIES.includes(slot.item.category) && slot.item.enchantment1 && slot.item.enchantment1.trim() !== '') {
+                allSetItems.push({
+                  item: slot.item,
+                  accountName: acc.name,
+                  serverName: server.name,
+                  charName: char.name,
+                  containerName: name,
+                  row: Math.floor(slot.id / data.cols) + 1,
+                  col: (slot.id % data.cols) + 1,
+                });
+              }
+            });
+          });
+          // Okunmuş reçeteler
+          (char.learnedRecipes || []).forEach((recipe, idx) => {
+            if (SET_CATEGORIES.includes(recipe.category) && recipe.enchantment1 && recipe.enchantment1.trim() !== '') {
+              allSetItems.push({
+                item: recipe,
+                accountName: acc.name,
+                serverName: server.name,
+                charName: char.name,
+                containerName: 'Okunmuş Reçete',
+                row: idx + 1,
+                col: 1,
+              });
+            }
+          });
+        });
+      });
+    });
+
+    // Efsun çiftine göre grupla
+    const enchGroups = new Map<string, typeof allSetItems>();
+    allSetItems.forEach(entry => {
+      const enchKey = `${entry.item.enchantment1.toLocaleLowerCase('tr')}|${entry.item.enchantment2.toLocaleLowerCase('tr')}`;
+      const group = enchGroups.get(enchKey) || [];
+      group.push(entry);
+      enchGroups.set(enchKey, group);
+    });
+
+    // Her grup için gender/class kombinasyonlarıyla set sayısı hesapla
+    enchGroups.forEach((entries, enchKey) => {
+      const genders = new Set<string>();
+      const classes = new Set<string>();
+      entries.forEach(e => {
+        genders.add(e.item.gender);
+        classes.add(e.item.heroClass);
+      });
+
+      genders.forEach(targetGender => {
+        classes.forEach(targetClass => {
+          const coveredCategories = new Set<string>();
+          const locations: SetItemLocation[] = [];
+
+          entries.forEach(e => {
+            const genderMatch = e.item.gender === targetGender || e.item.gender === 'Tüm Cinsiyetler' || targetGender === 'Tüm Cinsiyetler';
+            const classMatch = e.item.heroClass === targetClass || e.item.heroClass === 'Tüm Sınıflar' || targetClass === 'Tüm Sınıflar';
+            if (genderMatch && classMatch) {
+              coveredCategories.add(e.item.category);
+              locations.push({
+                accountName: e.accountName,
+                serverName: e.serverName,
+                charName: e.charName,
+                containerName: e.containerName,
+                row: e.row,
+                col: e.col,
+                category: e.item.category,
+                item: e.item,
+              });
+            }
+          });
+
+          if (coveredCategories.size > 0) {
+            const globalKey = `${enchKey}|${targetGender}|${targetClass}`;
+            lookup.set(globalKey, { count: coveredCategories.size, categories: coveredCategories });
+            setMap.set(globalKey, locations);
+          }
+        });
+      });
+    });
+
+    console.log('[SET] Global set lookup hesaplandı:', lookup.size, 'kombinasyon,', allSetItems.length, 'set item');
+    return { globalSetLookup: lookup, globalSetMap: setMap };
   }, [accounts]);
 
   useEffect(() => {
@@ -1222,6 +1325,8 @@ export default function App() {
         onRead={handleReadRecipe}
         existingItem={getCurrentItem()}
         enchantmentSuggestions={enchantmentSuggestions}
+        globalSetLookup={globalSetLookup}
+        globalSetMap={globalSetMap}
       />
 
       <GlobalSearchModal
@@ -1229,6 +1334,8 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         accounts={accounts}
         onNavigate={handleSearchResultNavigate}
+        globalSetLookup={globalSetLookup}
+        globalSetMap={globalSetMap}
       />
 
       <RecipeBookModal

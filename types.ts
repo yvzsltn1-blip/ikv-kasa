@@ -85,3 +85,8 @@ export interface SetItemLocation {
   category: string;
   item: ItemData;
 }
+
+export interface GlobalSetInfo {
+  count: number;
+  categories: Set<string>;
+}
