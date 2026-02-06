@@ -181,15 +181,15 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                             className={`flex items-center justify-center gap-2 py-2 rounded text-xs font-bold border transition-colors ${!formData.isRead ? 'bg-yellow-600 text-black border-yellow-500' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}
                           >
                              {/* Icon for Unread */}
-                             {!formData.isRead ? <CheckCircle size={14}/> : <Circle size={14}/>}
-                             Okunmamış (Kasa)
+                             {!formData.isRead ? <CheckCircle size={12}/> : <Circle size={11}/>}
+                             Okunmamış
                           </button>
                           <button
                             onClick={() => setFormData({...formData, isRead: true})}
                             className={`flex items-center justify-center gap-2 py-2 rounded text-xs font-bold border transition-colors ${formData.isRead ? 'bg-purple-600 text-white border-purple-400' : 'bg-slate-800 text-slate-400 border-slate-600 hover:bg-slate-700'}`}
                           >
-                             {formData.isRead ? <CheckCircle size={14}/> : <Circle size={14}/>}
-                             Okunmuş (Kitap)
+                             {formData.isRead ? <CheckCircle size={10}/> : <Circle size={11}/>}
+                             Okunmuş (Üretim)
                           </button>
                       </div>
                   </div>
