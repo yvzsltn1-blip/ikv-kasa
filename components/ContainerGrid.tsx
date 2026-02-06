@@ -1,7 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Container, SlotData, ItemData } from '../types';
+import { Container, SlotData, ItemData, SetItemLocation } from '../types';
 import { SlotItem } from './SlotItem';
 import { ArrowRight } from 'lucide-react';
+import { SET_CATEGORIES } from '../constants';
 
 interface ContainerGridProps {
   container: Container;
@@ -11,9 +12,11 @@ interface ContainerGridProps {
   onMoveItem: (containerId: string, fromSlotId: number, toSlotId: number) => void;
   searchQuery: string;
   onNext?: () => void;
+  setMap?: Map<string, SetItemLocation[]>;
+  onSetClick?: (enchantment1: string, enchantment2: string) => void;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onSlotLongPress, onMoveItem, searchQuery, onNext }) => {
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onSlotLongPress, onMoveItem, searchQuery, onNext, setMap, onSetClick }) => {
   const gridStyle = {
     gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${container.rows}, minmax(56px, 1fr))`,
@@ -206,6 +209,23 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
+
+            // Compute set count for this slot
+            let slotSetCount = 0;
+            let slotSetClickHandler: (() => void) | undefined;
+            if (slot.item && setMap && SET_CATEGORIES.includes(slot.item.category) && slot.item.enchantment1?.trim()) {
+              const setKey = `${slot.item.enchantment1.trim()}|||${slot.item.enchantment2.trim()}`;
+              const setLocations = setMap.get(setKey);
+              if (setLocations) {
+                slotSetCount = new Set(setLocations.map(l => l.category)).size;
+              }
+              if (onSetClick) {
+                const e1 = slot.item.enchantment1;
+                const e2 = slot.item.enchantment2;
+                slotSetClickHandler = () => onSetClick(e1, e2);
+              }
+            }
+
             return (
               <div
                 key={slot.id}
@@ -225,7 +245,14 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                   ${isBeingDragged ? 'opacity-30 border-yellow-500 border-2' : ''}
                 `}
               >
-                {slot.item && <SlotItem item={slot.item} highlight={highlight} />}
+                {slot.item && (
+                  <SlotItem
+                    item={slot.item}
+                    highlight={highlight}
+                    setCount={slotSetCount}
+                    onSetClick={slotSetClickHandler}
+                  />
+                )}
               </div>
             );
           })}

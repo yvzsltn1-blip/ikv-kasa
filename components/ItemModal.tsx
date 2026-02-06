@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { CATEGORY_OPTIONS, ItemData } from '../types';
-import { HERO_CLASSES, GENDER_OPTIONS } from '../constants';
-import { X, BookOpen, CheckCircle, Circle, Layers, Sword } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { CATEGORY_OPTIONS, ItemData, SetItemLocation } from '../types';
+import { HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
+import { X, BookOpen, CheckCircle, Circle, Layers, Sword, Globe, Lock } from 'lucide-react';
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -10,10 +10,14 @@ interface ItemModalProps {
   onDelete: () => void;
   onRead?: (item: ItemData) => void;
   existingItem: ItemData | null;
+  enchantmentSuggestions?: string[];
+  setMap?: Map<string, SetItemLocation[]>;
+  onSetClick?: (enchantment1: string, enchantment2: string) => void;
 }
 
-export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem }) => {
+export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], setMap, onSetClick }) => {
   const [step, setStep] = useState(1);
+  const [activeField, setActiveField] = useState<'enchantment1' | 'enchantment2' | null>(null);
   const [formData, setFormData] = useState<Partial<ItemData>>({
     type: 'Item',
     category: '',
@@ -25,10 +29,12 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     isRead: false,
     count: 1,
     weaponType: '',
+    isGlobal: false,
   });
 
   useEffect(() => {
     if (isOpen) {
+      setActiveField(null);
       if (existingItem) {
         setFormData(existingItem);
         setStep(3); // Jump to details if editing
@@ -44,6 +50,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
             isRead: false,
             count: 1,
             weaponType: '',
+            isGlobal: false,
         });
         setStep(1);
       }
@@ -77,6 +84,30 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   const isStackable = formData.category === 'Maden' || formData.category === 'İksir';
   // Determine if item is a Weapon
   const isWeapon = formData.category === 'Silah';
+  // Categories that don't have gender selection
+  const isGenderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden'].includes(formData.category || '');
+
+  const filteredSuggestions = useMemo(() => {
+    if (!activeField) return [];
+    const text = (formData[activeField] || '').trim().toLocaleLowerCase('tr');
+    if (!text) return [];
+    return enchantmentSuggestions
+      .filter(s => {
+        const lower = s.toLocaleLowerCase('tr');
+        return lower !== text && lower.includes(text);
+      })
+      .slice(0, 5);
+  }, [activeField, formData.enchantment1, formData.enchantment2, enchantmentSuggestions]);
+
+  const blurTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleFieldBlur = () => {
+    blurTimeout.current = setTimeout(() => setActiveField(null), 150);
+  };
+  const handleSuggestionClick = (field: 'enchantment1' | 'enchantment2', value: string) => {
+    if (blurTimeout.current) clearTimeout(blurTimeout.current);
+    setFormData({ ...formData, [field]: value });
+    setActiveField(null);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
@@ -151,7 +182,18 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                  {CATEGORY_OPTIONS.map((cat) => (
                    <button
                     key={cat}
-                    onClick={() => { setFormData({ ...formData, category: cat }); handleNext(); }}
+                    onClick={() => {
+                      const genderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden'].includes(cat);
+                      setFormData({
+                        ...formData,
+                        category: cat,
+                        gender: genderless ? 'Tüm Cinsiyetler' : formData.gender,
+                        // Reset enchantments when switching category
+                        enchantment1: '',
+                        enchantment2: '',
+                      });
+                      handleNext();
+                    }}
                     className="p-2 text-xs font-bold bg-slate-700 hover:bg-yellow-600 hover:text-black border border-slate-600 rounded transition-colors"
                    >
                      {cat}
@@ -181,7 +223,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                  </div>
               </div>
 
-              {/* Gender */}
+              {/* Gender - hidden for Yüzük, Kolye, Tılsım, İksir, Maden */}
+              {!isGenderless && (
               <div>
                 <label className="block text-xs font-bold mb-1 text-slate-400">Cinsiyet</label>
                 <div className="flex bg-slate-900 rounded p-1 gap-1">
@@ -197,6 +240,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Hero Class */}
               <div>
@@ -264,26 +308,183 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   </div>
               )}
 
-              {/* Enchantments */}
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-400">Efsunlar (Max 2)</label>
-                <input 
-                  type="text" 
-                  placeholder="1. Efsun (Örn: Alman Modeli)"
-                  value={formData.enchantment1}
-                  maxLength={100}
-                  onChange={(e) => setFormData({...formData, enchantment1: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
-                />
-                <input 
-                  type="text" 
-                  placeholder="2. Efsun (Örn: Dış Şehir Modeli)"
-                  value={formData.enchantment2}
-                  maxLength={100}
-                  onChange={(e) => setFormData({...formData, enchantment2: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
-                />
+              {/* Global Visibility Toggle */}
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-400">Görünürlük</label>
+                <div className="flex bg-slate-900 rounded p-1 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, isGlobal: false})}
+                    className={`flex-1 text-xs py-1.5 rounded transition-colors flex items-center justify-center gap-1.5 ${!formData.isGlobal ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    <Lock size={12} />
+                    Sadece Kendim
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, isGlobal: true})}
+                    className={`flex-1 text-xs py-1.5 rounded transition-colors flex items-center justify-center gap-1.5 ${formData.isGlobal ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                  >
+                    <Globe size={12} />
+                    Globalde Göster
+                  </button>
+                </div>
               </div>
+
+              {/* Enchantments / Name - varies by category */}
+              {formData.category === 'Maden' ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-orange-400">Maden İsmi</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Örn: Demir, Bakır, Gümüş..."
+                      value={formData.enchantment1}
+                      maxLength={100}
+                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value, enchantment2: ''})}
+                      onFocus={() => setActiveField('enchantment1')}
+                      onBlur={handleFieldBlur}
+                      className="w-full bg-slate-900 border border-orange-900/60 rounded px-2 py-1 text-sm focus:border-orange-500 focus:outline-none placeholder-slate-600 text-orange-100"
+                    />
+                    {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-32 overflow-y-auto">
+                        {filteredSuggestions.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleSuggestionClick('enchantment1', s)}
+                            className="w-full text-left px-2 py-1.5 text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : formData.category === 'Tılsım' ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-purple-400">Tılsım İsmi</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Örn: Meteorit, Direnç Kırma Alanı (Mavi)"
+                      value={formData.enchantment1}
+                      maxLength={100}
+                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value})}
+                      onFocus={() => setActiveField('enchantment1')}
+                      onBlur={handleFieldBlur}
+                      className="w-full bg-slate-900 border border-purple-900/60 rounded px-2 py-1 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600 text-purple-100"
+                    />
+                    {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-32 overflow-y-auto">
+                        {filteredSuggestions.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleSuggestionClick('enchantment1', s)}
+                            className="w-full text-left px-2 py-1.5 text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <label className="block text-xs font-bold text-purple-400 mt-2">Kademe</label>
+                  <div className="flex bg-slate-900 rounded p-1 gap-1">
+                    {['I', 'II', 'III'].map(tier => (
+                      <button
+                        key={tier}
+                        type="button"
+                        onClick={() => setFormData({...formData, enchantment2: tier})}
+                        className={`flex-1 text-sm py-1.5 rounded font-bold transition-colors ${formData.enchantment2 === tier ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                      >
+                        {tier}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-400">Efsunlar (Max 2)</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="1. Efsun (Örn: Alman Modeli)"
+                      value={formData.enchantment1}
+                      maxLength={100}
+                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value})}
+                      onFocus={() => setActiveField('enchantment1')}
+                      onBlur={handleFieldBlur}
+                      className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
+                    />
+                    {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-32 overflow-y-auto">
+                        {filteredSuggestions.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleSuggestionClick('enchantment1', s)}
+                            className="w-full text-left px-2 py-1.5 text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="2. Efsun (Örn: Dış Şehir Modeli)"
+                      value={formData.enchantment2}
+                      maxLength={100}
+                      onChange={(e) => setFormData({...formData, enchantment2: e.target.value})}
+                      onFocus={() => setActiveField('enchantment2')}
+                      onBlur={handleFieldBlur}
+                      className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
+                    />
+                    {activeField === 'enchantment2' && filteredSuggestions.length > 0 && (
+                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-32 overflow-y-auto">
+                        {filteredSuggestions.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleSuggestionClick('enchantment2', s)}
+                            className="w-full text-left px-2 py-1.5 text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Set Completion Info */}
+              {setMap && formData.enchantment1?.trim() && SET_CATEGORIES.includes(formData.category || '') && (() => {
+                const key = `${formData.enchantment1!.trim()}|||${(formData.enchantment2 || '').trim()}`;
+                const locations = setMap.get(key);
+                const setCount = locations ? new Set(locations.map(l => l.category)).size : 0;
+                if (setCount === 0) return null;
+                return (
+                  <div
+                    onClick={() => onSetClick?.(formData.enchantment1!, formData.enchantment2 || '')}
+                    className="cursor-pointer bg-slate-900/50 p-2 rounded border border-slate-700 flex items-center justify-between hover:bg-slate-800 transition-colors"
+                  >
+                    <span className="text-xs text-slate-300">Set Tamamlama</span>
+                    <span className={`text-sm font-bold ${setCount >= 8 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {setCount} / 8
+                    </span>
+                  </div>
+                );
+              })()}
 
               <div className="flex gap-2 mt-6 pt-4 border-t border-slate-700 flex-wrap">
                 {existingItem && (

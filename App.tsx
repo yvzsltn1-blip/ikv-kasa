@@ -1,17 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Account, Container, ItemData, UserRole } from './types';
-import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES } from './constants';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Account, Container, ItemData, UserRole, SetItemLocation } from './types';
+import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
+import { SetDetailModal } from './components/SetDetailModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2 } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 
 // View sequence
 const VIEW_ORDER = ['bank1', 'bank2', 'bag'] as const;
@@ -49,6 +50,12 @@ export default function App() {
   const [usernameError, setUsernameError] = useState('');
   const [usernameLoading, setUsernameLoading] = useState(false);
 
+  // Social Link State
+  const [socialLink, setSocialLink] = useState<string>('');
+  const [showSocialLinkModal, setShowSocialLinkModal] = useState(false);
+  const [socialLinkInput, setSocialLinkInput] = useState('');
+  const [socialLinkSaving, setSocialLinkSaving] = useState(false);
+
   // UI State
   const [activeCharIndex, setActiveCharIndex] = useState(0);
   const [currentViewIndex, setCurrentViewIndex] = useState(0);
@@ -62,9 +69,12 @@ export default function App() {
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [activeSlot, setActiveSlot] = useState<{ containerId: string; slotId: number } | null>(null);
-
   // Tooltip State
   const [tooltip, setTooltip] = useState<{ item: ItemData; x: number; y: number } | null>(null);
+
+  // Set Detail Modal State
+  const [showSetDetail, setShowSetDetail] = useState(false);
+  const [activeSetKey, setActiveSetKey] = useState<string | null>(null);
 
   // Toast & Unsaved Changes State
   const [toast, setToast] = useState<string | null>(null);
@@ -107,6 +117,13 @@ export default function App() {
               setUsername(null);
             }
 
+            // Load social link
+            if (data.socialLink) {
+              setSocialLink(data.socialLink);
+            } else {
+              setSocialLink('');
+            }
+
             if (loadedAccounts.length > 0) {
               // Check if migration happened and auto-save
               const needsMigration = rawAccounts.some((acc: any) => !acc.servers || acc.servers.length === 0);
@@ -141,6 +158,7 @@ export default function App() {
         setUserRole(null);
         setAccounts([]);
         setUsername(null);
+        setSocialLink('');
         setLoading(false);
       }
     });
@@ -204,6 +222,34 @@ export default function App() {
     }
   };
 
+  // --- SOCIAL LINK SET ---
+  const handleSaveSocialLink = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const trimmed = socialLinkInput.trim();
+
+    setSocialLinkSaving(true);
+    try {
+      // 1. Save to user doc
+      const userDocRef = doc(db, "users", user.uid);
+      await setDoc(userDocRef, { socialLink: trimmed }, { merge: true });
+
+      // 2. Update all existing globalItems belonging to this user
+      const q = query(collection(db, "globalItems"), where("uid", "==", user.uid));
+      const snapshot = await getDocs(q);
+      const updatePromises = snapshot.docs.map(d => updateDoc(d.ref, { socialLink: trimmed }));
+      await Promise.all(updatePromises);
+
+      setSocialLink(trimmed);
+      setShowSocialLinkModal(false);
+    } catch (error) {
+      console.error("Social link save error:", error);
+    } finally {
+      setSocialLinkSaving(false);
+    }
+  };
+
   // --- VERİLERİ BULUTA KAYDETME ---
   const [isSaving, setIsSaving] = useState(false);
   const [saveNotification, setSaveNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -239,6 +285,87 @@ export default function App() {
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
   const activeServer = activeAccount?.servers[selectedServerIndex];
   const activeChar = activeServer?.characters[activeCharIndex];
+
+  const enchantmentSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    accounts.forEach(acc => {
+      acc.servers.forEach(server => {
+        server.characters.forEach(char => {
+          [char.bank1, char.bank2, char.bag].forEach(container => {
+            container.slots.forEach(slot => {
+              if (slot.item) {
+                if (slot.item.enchantment1?.trim()) set.add(slot.item.enchantment1.trim());
+                if (slot.item.enchantment2?.trim()) set.add(slot.item.enchantment2.trim());
+              }
+            });
+          });
+          (char.learnedRecipes || []).forEach(recipe => {
+            if (recipe.enchantment1?.trim()) set.add(recipe.enchantment1.trim());
+            if (recipe.enchantment2?.trim()) set.add(recipe.enchantment2.trim());
+          });
+        });
+      });
+    });
+    return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+  }, [accounts]);
+
+  const setMap = useMemo(() => {
+    const map = new Map<string, SetItemLocation[]>();
+    accounts.forEach(acc => {
+      acc.servers.forEach(server => {
+        server.characters.forEach(char => {
+          const containers = [
+            { container: char.bank1, name: 'Kasa 1' },
+            { container: char.bank2, name: 'Kasa 2' },
+            { container: char.bag, name: 'Çanta' },
+          ];
+          containers.forEach(({ container, name }) => {
+            container.slots.forEach(slot => {
+              if (!slot.item) return;
+              if (!slot.item.enchantment1?.trim()) return;
+              if (!SET_CATEGORIES.includes(slot.item.category)) return;
+              const key = `${slot.item.enchantment1.trim()}|||${slot.item.enchantment2.trim()}`;
+              const loc: SetItemLocation = {
+                accountName: acc.name,
+                serverName: server.name,
+                charName: char.name,
+                containerName: name,
+                row: Math.floor(slot.id / container.cols) + 1,
+                col: (slot.id % container.cols) + 1,
+                category: slot.item.category,
+                item: slot.item,
+              };
+              if (!map.has(key)) map.set(key, []);
+              map.get(key)!.push(loc);
+            });
+          });
+          (char.learnedRecipes || []).forEach(recipe => {
+            if (!recipe.enchantment1?.trim()) return;
+            if (!SET_CATEGORIES.includes(recipe.category)) return;
+            const key = `${recipe.enchantment1.trim()}|||${recipe.enchantment2.trim()}`;
+            const loc: SetItemLocation = {
+              accountName: acc.name,
+              serverName: server.name,
+              charName: char.name,
+              containerName: 'Reçete Kitabı',
+              row: -1,
+              col: -1,
+              category: recipe.category,
+              item: recipe,
+            };
+            if (!map.has(key)) map.set(key, []);
+            map.get(key)!.push(loc);
+          });
+        });
+      });
+    });
+    return map;
+  }, [accounts]);
+
+  const handleSetClick = (enchantment1: string, enchantment2: string) => {
+    setActiveSetKey(`${enchantment1.trim()}|||${enchantment2.trim()}`);
+    setShowSetDetail(true);
+  };
 
   useEffect(() => {
     if (activeAccount) {
@@ -537,6 +664,37 @@ export default function App() {
     }
   };
 
+  const syncGlobalItem = async (item: ItemData) => {
+    const user = auth.currentUser;
+    if (!user || !activeAccount || !activeServer || !activeChar) return;
+
+    const globalDocRef = doc(db, "globalItems", item.id);
+
+    try {
+      if (item.isGlobal) {
+        const containerName = VIEW_ORDER[currentViewIndex] === 'bank1' ? 'Kasa 1'
+          : VIEW_ORDER[currentViewIndex] === 'bank2' ? 'Kasa 2' : 'Çanta';
+
+        await setDoc(globalDocRef, {
+          uid: user.uid,
+          username: username || user.email || '',
+          accountName: activeAccount.name,
+          serverName: activeServer.name,
+          charName: activeChar.name,
+          containerName,
+          item,
+          socialLink: socialLink || '',
+          updatedAt: Date.now(),
+        });
+      } else {
+        // If not global, try to delete from globalItems (may not exist)
+        await deleteDoc(globalDocRef).catch(() => {});
+      }
+    } catch (error) {
+      console.error("Global item sync error:", error);
+    }
+  };
+
   const handleSaveItem = (item: ItemData) => {
     if (!activeAccount || !activeSlot) return;
 
@@ -577,14 +735,25 @@ export default function App() {
     } else {
         updateSlot(activeSlot.containerId, activeSlot.slotId, item);
     }
+
+    // Sync global item
+    syncGlobalItem(item);
+
     showToast('Kaydetmek için disket butonuna basmayı unutmayın!');
   };
 
   const handleDeleteItem = () => {
     if (activeSlot) {
+      const currentItem = getCurrentItem();
       updateSlot(activeSlot.containerId, activeSlot.slotId, null);
       setModalOpen(false);
       setHasUnsavedChanges(true);
+
+      // Delete from globalItems if it was global
+      if (currentItem) {
+        const globalDocRef = doc(db, "globalItems", currentItem.id);
+        deleteDoc(globalDocRef).catch(() => {});
+      }
     }
   };
 
@@ -654,6 +823,13 @@ export default function App() {
               ) : (
                 <button onClick={() => setShowUsernameModal(true)} className="text-[9px] text-amber-400 bg-amber-900/30 border border-amber-700/40 rounded-full px-2 py-0.5 shrink-0 animate-pulse">Ad Belirle</button>
               )}
+              <button
+                onClick={() => { setSocialLinkInput(socialLink); setShowSocialLinkModal(true); }}
+                className={`p-1 rounded-lg shrink-0 transition-colors ${socialLink ? 'text-blue-400 bg-blue-900/30 border border-blue-700/30' : 'text-slate-500 bg-slate-800/40 border border-slate-700/30'}`}
+                title="Sosyal Medya Linki"
+              >
+                <Link2 size={12} />
+              </button>
             </div>
 
             <div className="px-2 pb-1.5 flex items-center justify-between gap-1.5">
@@ -742,6 +918,13 @@ export default function App() {
                     ) : (
                       <button onClick={() => setShowUsernameModal(true)} className="text-[9px] text-amber-400 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider hover:bg-amber-900/40 transition-colors animate-pulse">Kullanıcı Adı Belirle</button>
                     )}
+                    <button
+                      onClick={() => { setSocialLinkInput(socialLink); setShowSocialLinkModal(true); }}
+                      className={`p-1 rounded-md transition-colors ${socialLink ? 'text-blue-400 bg-blue-900/20 border border-blue-700/25 hover:bg-blue-900/40' : 'text-slate-500 bg-slate-800/30 border border-slate-700/25 hover:text-blue-400 hover:bg-blue-900/20'}`}
+                      title="Sosyal Medya Linki"
+                    >
+                      <Link2 size={12} />
+                    </button>
                     {userRole === 'user' && <span className="text-[9px] text-amber-400/70 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider uppercase">Kullanıcı</span>}
                   </div>
 
@@ -894,6 +1077,8 @@ export default function App() {
                             onMoveItem={handleMoveItem}
                             searchQuery={""}
                             onNext={handleNextView}
+                            setMap={setMap}
+                            onSetClick={handleSetClick}
                         />
                     </div>
                  </div>
@@ -907,6 +1092,8 @@ export default function App() {
                         onMoveItem={handleMoveItem}
                         searchQuery={""}
                         onNext={handleNextView}
+                        setMap={setMap}
+                        onSetClick={handleSetClick}
                     />
                   </div>
               )}
@@ -1034,6 +1221,66 @@ export default function App() {
         </div>
       )}
 
+      {/* Social Link Modal */}
+      {showSocialLinkModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowSocialLinkModal(false)}>
+          <div
+            className="relative mx-4 w-full max-w-sm bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-600/50 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-blue-900/40 to-indigo-900/40 px-6 py-4 border-b border-slate-700/50">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-500/15 p-2 rounded-xl border border-blue-500/25">
+                  <Link2 size={20} className="text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-sm">Sosyal Medya Linki</h3>
+                  <p className="text-slate-400 text-[10px] mt-0.5">Global aramada profilinizde gosterilir</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 mb-1.5 block tracking-wider">PROFIL LINKI</label>
+                <input
+                  type="url"
+                  value={socialLinkInput}
+                  onChange={(e) => setSocialLinkInput(e.target.value)}
+                  className="w-full bg-slate-950/80 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-200 outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all placeholder-slate-600"
+                  placeholder="https://instagram.com/kullanici"
+                  maxLength={200}
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Facebook, Instagram, Twitter vb. profil linkinizi girin.</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowSocialLinkModal(false)}
+                  className="flex-1 py-2 px-4 bg-slate-800 text-slate-400 text-xs font-bold rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
+                >
+                  Vazgec
+                </button>
+                <button
+                  onClick={handleSaveSocialLink}
+                  disabled={socialLinkSaving}
+                  className="flex-1 py-2 px-4 bg-gradient-to-r from-blue-700 to-indigo-600 text-white text-xs font-bold rounded-lg hover:from-blue-600 hover:to-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                >
+                  {socialLinkSaving ? (
+                    <span className="animate-pulse">Kaydediliyor...</span>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      Kaydet
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ItemModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -1041,6 +1288,9 @@ export default function App() {
         onDelete={handleDeleteItem}
         onRead={handleReadRecipe}
         existingItem={getCurrentItem()}
+        enchantmentSuggestions={enchantmentSuggestions}
+        setMap={setMap}
+        onSetClick={handleSetClick}
       />
 
       <GlobalSearchModal
@@ -1056,6 +1306,13 @@ export default function App() {
         characterName={activeChar.name}
         recipes={activeChar.learnedRecipes || []}
         onUnlearn={handleUnlearnRecipe}
+      />
+
+      <SetDetailModal
+        isOpen={showSetDetail}
+        onClose={() => setShowSetDetail(false)}
+        setKey={activeSetKey}
+        setMap={setMap}
       />
 
       {/* Desktop Tooltip (mouse hover) */}

@@ -6,9 +6,11 @@ import { Shield, Sword, Gem, Component, Scroll, Hand, Footprints, Shirt, Glasses
 interface SlotItemProps {
   item: ItemData;
   highlight?: boolean;
+  setCount?: number;
+  onSetClick?: () => void;
 }
 
-export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight }) => {
+export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, setCount, onSetClick }) => {
   const colorClass = CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
   const classStripColor = CLASS_STRIP_COLORS[item.heroClass] || 'bg-gray-400';
 
@@ -104,6 +106,17 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight }) => {
       <div className={`absolute top-0 left-[3px] ${getGenderBadgeStyle()} text-[7px] px-1 rounded-br-sm font-bold z-10`}>
         {getGenderCode()}
       </div>
+
+      {/* Set Count Badge (Top Center) */}
+      {setCount != null && setCount > 0 && (
+        <div
+          className={`absolute top-0 left-1/2 -translate-x-1/2 text-[6px] px-1 font-bold z-30 rounded-b-sm cursor-pointer
+            ${setCount >= 8 ? 'bg-emerald-600 text-white' : 'bg-amber-700 text-amber-100'}`}
+          onClick={(e) => { e.stopPropagation(); onSetClick?.(); }}
+        >
+          {setCount}/8
+        </div>
+      )}
 
       {/* Stack Count Badge */}
       {item.count && item.count > 1 && (

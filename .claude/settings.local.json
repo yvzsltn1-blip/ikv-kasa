@@ -9,7 +9,11 @@
       "Bash(npm run build:*)",
       "Bash(npx tsc:*)",
       "Bash(npx vite build)",
-      "Bash(npx firebase deploy:*)"
+      "Bash(npx firebase deploy:*)",
+      "Bash(npx vite:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }

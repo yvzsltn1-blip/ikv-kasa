@@ -54,6 +54,8 @@ export const createCharacter = (id: number): any => ({
 
 export const SERVER_NAMES = ['Eminönü', 'Galata', 'Bab-ı Ali', 'Beyaz Köşk', 'Meran', 'Karaköy'];
 
+export const SET_CATEGORIES = ['Silah', 'Ceket', 'Pantolon', 'Eldiven', 'Ayakkabı', 'Zırh', 'Yüzük', 'Kolye'];
+
 export const createServer = (id: string, name: string): Server => ({
   id,
   name,

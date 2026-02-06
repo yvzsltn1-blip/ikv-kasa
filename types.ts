@@ -38,6 +38,7 @@ export interface ItemData {
   isRead?: boolean; // New property to track read status during creation
   count?: number; // New property for item quantity (stack size)
   weaponType?: string; // New property specifically for Weapon category
+  isGlobal?: boolean; // Whether this item is visible in global search
 }
 
 export interface SlotData {
@@ -72,4 +73,15 @@ export interface Account {
   id: string;
   name: string;
   servers: Server[];
+}
+
+export interface SetItemLocation {
+  accountName: string;
+  serverName: string;
+  charName: string;
+  containerName: string;
+  row: number;
+  col: number;
+  category: string;
+  item: ItemData;
 }

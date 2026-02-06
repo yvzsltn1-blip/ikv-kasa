@@ -13,6 +13,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Global eşya paylaşımı
+    match /globalItems/{itemId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
+
     // Diğer tüm yolları kapat
     match /{document=**} {
       allow read, write: if false;

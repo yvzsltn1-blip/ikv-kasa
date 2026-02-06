@@ -15,16 +15,16 @@ App.tsx              → Ana bileşen (~1150 satır). Tüm state, CRUD, auth, UI
 types.ts             → TypeScript arayüzleri (ItemData, SlotData, Container, Character, Server, Account)
 constants.ts         → Sabitler, renk map'leri, createCharacter/createServer/createAccount fonksiyonları
 firebase.ts          → Firebase config ve export (auth, db)
-firestore.rules      → Güvenlik kuralları (users/{uid}, usernames/{username})
+firestore.rules      → Güvenlik kuralları (users/{uid}, usernames/{username}, globalItems/{itemId})
 index.tsx            → React root renderer
 src/index.css        → Tailwind import + custom scrollbar stilleri
 
 components/
   LoginScreen.tsx    → Email/şifre + Google OAuth giriş/kayıt (email doğrulama zorunlu)
   ContainerGrid.tsx  → Sürükle-bırak grid (desktop drag&drop, mobil long-press)
-  ItemModal.tsx      → Eşya/reçete ekleme-düzenleme (3 adımlı form)
+  ItemModal.tsx      → Eşya/reçete ekleme-düzenleme (3 adımlı form, global görünürlük toggle)
   SlotItem.tsx       → Tek slot görünümü (ikon, seviye, cinsiyet, sınıf rozeti)
-  GlobalSearchModal.tsx → Tüm hesap/sunucu/karakter üzerinde gelişmiş arama + filtre
+  GlobalSearchModal.tsx → Tüm hesap/sunucu/karakter üzerinde gelişmiş arama + filtre + global arama (diğer kullanıcılar)
   RecipeBookModal.tsx   → Öğrenilmiş reçete kitabı
 ```
 
@@ -32,6 +32,7 @@ components/
 ```
 users/{uid}
   username: string (1 kerelik, opsiyonel)
+  socialLink: string (sosyal medya profil linki)
   accounts: [
     {
       id, name,
@@ -45,6 +46,17 @@ users/{uid}
 
 usernames/{lowercase_username}
   uid: string, displayName: string
+
+globalItems/{item.id}
+  uid: string
+  username: string
+  accountName: string
+  serverName: string
+  charName: string
+  containerName: string
+  item: ItemData
+  socialLink: string
+  updatedAt: number
 ```
 
 ## Önemli Kavramlar
@@ -55,6 +67,12 @@ usernames/{lowercase_username}
 - **Sınıf renkleri**: constants.ts → CLASS_COLORS, CLASS_STRIP_COLORS
 - **Admin email**: yvzsltn61@gmail.com (hardcoded kontrol)
 - **Migration**: Eski format (account.characters) → yeni format (account.servers) otomatik migration var (App.tsx migrateAccount)
+- **Global görünürlük**: ItemData.isGlobal alanı, eşya eklerken "Globalde Göster" / "Sadece Kendim" toggle, globalItems Firestore koleksiyonu
+- **Global arama**: GlobalSearchModal'da "Hesaplarım" / "Globalde Ara" sekmeleri, diğer kullanıcıların paylaştığı eşyaları görme
+- **Sosyal medya linki**: Kullanıcılar profil linki (Facebook/Instagram/Twitter) kaydedebilir, global aramada diğer kullanıcılara gösterilir
+- **Arama detayları**: Sonuçlarda silah cinsi (weaponType) ve maden/iksir adedi gösterilir, weaponType ile aranabilir
+- **Kelime bazlı arama**: Arama metni boşlukla ayrılır, her kelime ayrı ayrı aranır (AND mantığı). Örn: "Alman Dış" → enchantment1'de "alman", enchantment2'de "dış" bulunur → eşleşir
+- **Global arama optimizasyonu**: Sorgu bazlı fetch (kategori filtresine göre `where`), `limit(20)`, 5 dakika client-side cache, Firebase ücretsiz kota içinde kalır
 
 ## Deployment
 - `npx vite build` → dist/ klasörüne build
@@ -64,14 +82,14 @@ usernames/{lowercase_username}
 
 ## Son Güncelleme
 - **Tarih**: 2026-02-06
-- **Versiyon**: v4.0
-- **Son yapılanlar**: Sunucu sistemi (6 sunucu/hesap), kullanıcı adı özelliği (1 kerelik, unique), mobil logout butonu düzeltmesi, eski veri formatı migration
+- **Versiyon**: v4.3
+- **Son yapılanlar**: Kelime bazlı AND arama (çoklu efsun araması düzeltmesi), global arama limiti 50→20, sorgu bazlı fetch optimizasyonu (limit+where+cache)
 
 > **NOT**: Büyük değişiklikler yapıldığında oturum sonunda "CLAUDE.md'yi güncelle" deyin.
 
 ## Sık Değiştirilen Yerler
 - **UI düzenlemeleri**: App.tsx (header bölümü ~satır 630-880)
-- **Item yönetimi**: App.tsx (handleMoveItem, updateSlot, handleSaveItem, handleReadRecipe)
+- **Item yönetimi**: App.tsx (handleMoveItem, updateSlot, handleSaveItem, handleReadRecipe, syncGlobalItem)
 - **Arama**: components/GlobalSearchModal.tsx
 - **Yeni özellik tipi**: types.ts → interface güncelle, constants.ts → create fonksiyonlarını güncelle
 - **Mobil responsive**: Tailwind class'ları, `md:` prefix desktop, base mobile-first
