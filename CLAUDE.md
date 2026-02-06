@@ -21,12 +21,12 @@ src/index.css        → Tailwind import + custom scrollbar stilleri
 
 components/
   LoginScreen.tsx    → Email/şifre + Google OAuth giriş/kayıt (email doğrulama zorunlu)
-  ContainerGrid.tsx  → Sürükle-bırak grid (desktop drag&drop, mobil long-press)
+  ContainerGrid.tsx  → Sürükle-bırak grid (desktop drag&drop, mobil long-press + 15px drag threshold)
   ItemModal.tsx      → Eşya/reçete ekleme-düzenleme (3 adımlı form, global görünürlük toggle, set durumu barı)
   SlotItem.tsx       → Tek slot görünümü (ikon, seviye, cinsiyet, sınıf rozeti)
   GlobalSearchModal.tsx → Tüm hesap/sunucu/karakter üzerinde gelişmiş arama + filtre + global arama (diğer kullanıcılar)
   RecipeBookModal.tsx   → Öğrenilmiş reçete kitabı
-  SetDetailModal.tsx    → Set detay popup (2x4 grid, kategori bazlı konum + seviye bilgisi)
+  SetDetailModal.tsx    → Set detay popup (2x4 grid, kategori bazlı konum + seviye bilgisi, reçete/okunmuş badge'leri)
 ```
 
 ## Firestore Veri Yapısı

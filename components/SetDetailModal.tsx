@@ -1,7 +1,7 @@
 import React from 'react';
 import { SetItemLocation } from '../types';
 import { SET_CATEGORIES, CATEGORY_COLORS } from '../constants';
-import { X, CheckCircle, Circle, MapPin, Sparkles, Shield } from 'lucide-react';
+import { X, CheckCircle, Circle, MapPin, Sparkles, Shield, Scroll, BookOpen, BookX } from 'lucide-react';
 
 interface SetDetailModalProps {
   isOpen: boolean;
@@ -129,25 +129,50 @@ export const SetDetailModal: React.FC<SetDetailModalProps> = ({ isOpen, onClose,
                 {/* Location rows */}
                 {hasItem && (
                   <div className="px-2 py-1 space-y-1">
-                    {items.map((loc, i) => (
-                      <div key={i} className="flex items-center gap-1.5 bg-black/20 rounded-md px-2 py-1.5">
-                        <MapPin size={10} className="text-slate-500 shrink-0" />
-                        <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px]">
-                          <span className="text-slate-100 font-semibold">{loc.accountName}</span>
-                          <span className="text-slate-600">&rsaquo;</span>
-                          <span className="text-emerald-300/90">{loc.serverName}</span>
-                          <span className="text-slate-600">&rsaquo;</span>
-                          <span className="text-blue-300/90">{loc.charName}</span>
-                          <span className="text-slate-600">&rsaquo;</span>
-                          <span className="text-yellow-300/90">{loc.containerName}</span>
+                    {items.map((loc, i) => {
+                      const isRecipe = loc.item?.type === 'Recipe';
+                      const isRead = loc.item?.isRead;
+                      return (
+                        <div key={i} className="flex items-center gap-1.5 bg-black/20 rounded-md px-2 py-1.5">
+                          <MapPin size={10} className="text-slate-500 shrink-0" />
+                          <div className="flex-1 min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px]">
+                            <span className="text-slate-100 font-semibold">{loc.accountName}</span>
+                            <span className="text-slate-600">&rsaquo;</span>
+                            <span className="text-emerald-300/90">{loc.serverName}</span>
+                            <span className="text-slate-600">&rsaquo;</span>
+                            <span className="text-blue-300/90">{loc.charName}</span>
+                            <span className="text-slate-600">&rsaquo;</span>
+                            <span className="text-yellow-300/90">{loc.containerName}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isRecipe && (
+                              <span className="flex items-center gap-0.5 text-[8px] px-1 py-0.5 rounded bg-amber-900/60 border border-amber-700/50 text-amber-300 font-bold">
+                                <Scroll size={8} />
+                                Reçete
+                              </span>
+                            )}
+                            {isRecipe && (
+                              isRead ? (
+                                <span className="flex items-center gap-0.5 text-[8px] px-1 py-0.5 rounded bg-emerald-900/50 border border-emerald-700/40 text-emerald-300 font-medium">
+                                  <BookOpen size={8} />
+                                  Okunmuş
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-0.5 text-[8px] px-1 py-0.5 rounded bg-red-900/50 border border-red-700/40 text-red-300 font-medium">
+                                  <BookX size={8} />
+                                  Okunmamış
+                                </span>
+                              )
+                            )}
+                            {loc.item && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/50 text-cyan-300 font-bold">
+                                Lv.{loc.item.level}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        {loc.item && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900/80 border border-slate-700/50 text-cyan-300 font-bold shrink-0">
-                            Lv.{loc.item.level}
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
