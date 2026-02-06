@@ -11,7 +11,7 @@ import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, 
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, where, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
 
 // View sequence
 const VIEW_ORDER = ['bank1', 'bank2', 'bag'] as const;
@@ -54,6 +54,9 @@ export default function App() {
   const [showSocialLinkModal, setShowSocialLinkModal] = useState(false);
   const [socialLinkInput, setSocialLinkInput] = useState('');
   const [socialLinkSaving, setSocialLinkSaving] = useState(false);
+
+  // Global Enchantment Suggestions
+  const [globalEnchantments, setGlobalEnchantments] = useState<string[]>([]);
 
   // UI State
   const [activeCharIndex, setActiveCharIndex] = useState(0);
@@ -143,6 +146,16 @@ export default function App() {
              setUserRole('user');
           }
 
+          // Global efsun önerilerini yükle
+          try {
+            const enchDoc = await getDoc(doc(db, "metadata", "enchantments"));
+            if (enchDoc.exists()) {
+              setGlobalEnchantments(enchDoc.data().names || []);
+            }
+          } catch (e) {
+            console.warn("Global enchantments yüklenemedi:", e);
+          }
+
         } catch (error) {
           alert("Veriler yüklenirken bir hata oluştu. İnternet bağlantınızı kontrol edin.");
         } finally {
@@ -154,6 +167,7 @@ export default function App() {
         setAccounts([]);
         setUsername(null);
         setSocialLink('');
+        setGlobalEnchantments([]);
         setLoading(false);
       }
     });
@@ -283,6 +297,7 @@ export default function App() {
 
   const enchantmentSuggestions = useMemo(() => {
     const set = new Set<string>();
+    // Lokal: kullanıcının kendi itemlerinden
     accounts.forEach(acc => {
       acc.servers.forEach(server => {
         server.characters.forEach(char => {
@@ -301,8 +316,10 @@ export default function App() {
         });
       });
     });
+    // Global: tüm kullanıcılardan
+    globalEnchantments.forEach(e => { if (e?.trim()) set.add(e.trim()); });
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
-  }, [accounts]);
+  }, [accounts, globalEnchantments]);
 
   // Global set lookup: tüm hesaplar/sunucular/karakterler genelinde efsun çiftine göre set durumu
   const { globalSetLookup, globalSetMap } = useMemo(() => {
@@ -778,6 +795,20 @@ export default function App() {
 
     // Sync global item
     syncGlobalItem(item);
+
+    // Efsun isimlerini global metadata'ya kaydet
+    const newEnchantments: string[] = [];
+    if (item.enchantment1?.trim()) newEnchantments.push(item.enchantment1.trim());
+    if (item.enchantment2?.trim()) newEnchantments.push(item.enchantment2.trim());
+    if (newEnchantments.length > 0) {
+      setDoc(doc(db, "metadata", "enchantments"), { names: arrayUnion(...newEnchantments) }, { merge: true }).catch(() => {});
+      // Lokal state'i de anında güncelle
+      setGlobalEnchantments(prev => {
+        const set = new Set(prev);
+        newEnchantments.forEach(e => set.add(e));
+        return set.size !== prev.length ? [...set] : prev;
+      });
+    }
 
     showToast('Kaydetmek için disket butonuna basmayı unutmayın!');
   };

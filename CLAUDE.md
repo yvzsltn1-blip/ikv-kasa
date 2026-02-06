@@ -11,21 +11,22 @@ Firebase (Auth + Firestore) tabanlı RPG envanter yönetim sistemi. React 19 + T
 
 ## Dosya Yapısı
 ```
-App.tsx              → Ana bileşen (~1150 satır). Tüm state, CRUD, auth, UI
-types.ts             → TypeScript arayüzleri (ItemData, SlotData, Container, Character, Server, Account)
+App.tsx              → Ana bileşen (~1250 satır). Tüm state, CRUD, auth, UI, global set hesaplama
+types.ts             → TypeScript arayüzleri (ItemData, SlotData, Container, Character, Server, Account, SetItemLocation, GlobalSetInfo)
 constants.ts         → Sabitler, renk map'leri, createCharacter/createServer/createAccount fonksiyonları
 firebase.ts          → Firebase config ve export (auth, db)
-firestore.rules      → Güvenlik kuralları (users/{uid}, usernames/{username}, globalItems/{itemId})
+firestore.rules      → Güvenlik kuralları (users/{uid}, usernames/{username}, globalItems/{itemId}, metadata/enchantments)
 index.tsx            → React root renderer
 src/index.css        → Tailwind import + custom scrollbar stilleri
 
 components/
   LoginScreen.tsx    → Email/şifre + Google OAuth giriş/kayıt (email doğrulama zorunlu)
   ContainerGrid.tsx  → Sürükle-bırak grid (desktop drag&drop, mobil long-press)
-  ItemModal.tsx      → Eşya/reçete ekleme-düzenleme (3 adımlı form, global görünürlük toggle)
+  ItemModal.tsx      → Eşya/reçete ekleme-düzenleme (3 adımlı form, global görünürlük toggle, set durumu barı)
   SlotItem.tsx       → Tek slot görünümü (ikon, seviye, cinsiyet, sınıf rozeti)
   GlobalSearchModal.tsx → Tüm hesap/sunucu/karakter üzerinde gelişmiş arama + filtre + global arama (diğer kullanıcılar)
   RecipeBookModal.tsx   → Öğrenilmiş reçete kitabı
+  SetDetailModal.tsx    → Set detay popup (2x4 grid, kategori bazlı konum + seviye bilgisi)
 ```
 
 ## Firestore Veri Yapısı
@@ -57,6 +58,9 @@ globalItems/{item.id}
   item: ItemData
   socialLink: string
   updatedAt: number
+
+metadata/enchantments
+  names: string[] (tüm kullanıcıların girdiği efsun isimleri, arrayUnion ile eklenir)
 ```
 
 ## Önemli Kavramlar
@@ -73,23 +77,27 @@ globalItems/{item.id}
 - **Arama detayları**: Sonuçlarda silah cinsi (weaponType) ve maden/iksir adedi gösterilir, weaponType ile aranabilir
 - **Kelime bazlı arama**: Arama metni boşlukla ayrılır, her kelime ayrı ayrı aranır (AND mantığı). Örn: "Alman Dış" → enchantment1'de "alman", enchantment2'de "dış" bulunur → eşleşir
 - **Global arama optimizasyonu**: Sorgu bazlı fetch (kategori filtresine göre `where`), `limit(20)`, 5 dakika client-side cache, Firebase ücretsiz kota içinde kalır
+- **Global set takip**: Tüm hesaplar/sunucular/karakterler genelinde set tamamlanma durumu. App.tsx'te `globalSetLookup` (Map) ve `globalSetMap` (Map) useMemo ile hesaplanır. Key format: `ench1|ench2|gender|heroClass`. GlobalSearchModal ve ItemModal'a prop olarak geçilir. Set rozeti tıklanınca SetDetailModal açılır (2x4 kompakt grid, kategori renkleri, seviye + konum bilgisi)
+- **Global efsun önerileri**: `metadata/enchantments` Firestore dokümanında tüm kullanıcıların girdiği efsun isimleri saklanır (arrayUnion). Login'de fetch edilir, `enchantmentSuggestions`'a merge edilir. ItemModal'da 2+ harf yazınca öneriler görünür. handleSaveItem'da yeni efsunlar otomatik eklenir
 
 ## Deployment
 - `npx vite build` → dist/ klasörüne build
 - `npx firebase deploy --only hosting` → Firebase Hosting'e deploy
-- `npx firebase deploy --only firestore:rules` → Güvenlik kurallarını deploy
+- `npx firebase deploy --only firestore:rules` → Güvenlik kurallarını deploy (metadata/enchantments kuralı dahil)
 - Batch scriptler: `firebase-guncelle.bat`, `github-guncelle.bat`
 
 ## Son Güncelleme
 - **Tarih**: 2026-02-06
-- **Versiyon**: v4.3
-- **Son yapılanlar**: Kelime bazlı AND arama (çoklu efsun araması düzeltmesi), global arama limiti 50→20, sorgu bazlı fetch optimizasyonu (limit+where+cache)
+- **Versiyon**: v4.4
+- **Son yapılanlar**: Global set takip (cross-account set tamamlanma + SetDetailModal), global efsun önerileri (metadata/enchantments koleksiyonu, tüm kullanıcılar arası paylaşım), SetDetailModal kompakt 2x4 grid tasarım
 
 > **NOT**: Büyük değişiklikler yapıldığında oturum sonunda "CLAUDE.md'yi güncelle" deyin.
 
 ## Sık Değiştirilen Yerler
 - **UI düzenlemeleri**: App.tsx (header bölümü ~satır 630-880)
 - **Item yönetimi**: App.tsx (handleMoveItem, updateSlot, handleSaveItem, handleReadRecipe, syncGlobalItem)
+- **Set takip**: App.tsx (globalSetLookup/globalSetMap useMemo), components/SetDetailModal.tsx
+- **Efsun önerileri**: App.tsx (enchantmentSuggestions useMemo, globalEnchantments state, handleSaveItem içinde arrayUnion)
 - **Arama**: components/GlobalSearchModal.tsx
 - **Yeni özellik tipi**: types.ts → interface güncelle, constants.ts → create fonksiyonlarını güncelle
 - **Mobil responsive**: Tailwind class'ları, `md:` prefix desktop, base mobile-first

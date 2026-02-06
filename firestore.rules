@@ -20,6 +20,12 @@ service cloud.firestore {
       allow delete: if request.auth != null && resource.data.uid == request.auth.uid;
     }
 
+    // Global efsun önerileri (tüm kullanıcılar okur/yazar)
+    match /metadata/enchantments {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
     // Diğer tüm yolları kapat
     match /{document=**} {
       allow read, write: if false;
