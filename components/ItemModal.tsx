@@ -385,7 +385,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       value={formData.enchantment1}
                       maxLength={100}
                       onChange={(e) => setFormData({...formData, enchantment1: e.target.value, enchantment2: ''})}
-                      onFocus={() => setActiveField('enchantment1')}
+                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
                       onBlur={handleFieldBlur}
                       className="w-full bg-slate-900 border border-orange-900/60 rounded px-2 py-1 text-sm focus:border-orange-500 focus:outline-none placeholder-slate-600 text-orange-100"
                     />
@@ -416,7 +416,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       value={formData.enchantment1}
                       maxLength={100}
                       onChange={(e) => setFormData({...formData, enchantment1: e.target.value})}
-                      onFocus={() => setActiveField('enchantment1')}
+                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
                       onBlur={handleFieldBlur}
                       className="w-full bg-slate-900 border border-purple-900/60 rounded px-2 py-1 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600 text-purple-100"
                     />
@@ -460,7 +460,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       value={formData.enchantment1}
                       maxLength={100}
                       onChange={(e) => setFormData({...formData, enchantment1: e.target.value})}
-                      onFocus={() => setActiveField('enchantment1')}
+                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
                       onBlur={handleFieldBlur}
                       className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
                     />
@@ -487,7 +487,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       value={formData.enchantment2}
                       maxLength={100}
                       onChange={(e) => setFormData({...formData, enchantment2: e.target.value})}
-                      onFocus={() => setActiveField('enchantment2')}
+                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment2'); }}
                       onBlur={handleFieldBlur}
                       className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
                     />
