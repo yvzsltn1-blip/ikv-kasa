@@ -1,4 +1,4 @@
-import { HeroClass, Account } from './types';
+import { HeroClass, Account, Server } from './types';
 
 export const HERO_CLASSES: HeroClass[] = ['Savaşçı', 'Şifacı', 'Büyücü', 'Tüm Sınıflar'];
 
@@ -52,8 +52,16 @@ export const createCharacter = (id: number): any => ({
   learnedRecipes: [], // Start with empty recipe book
 });
 
-export const createAccount = (id: string, name: string): Account => ({
+export const SERVER_NAMES = ['Eminönü', 'Galata', 'Bab-ı Ali', 'Beyaz Köşk', 'Meran', 'Karaköy'];
+
+export const createServer = (id: string, name: string): Server => ({
   id,
   name,
   characters: Array.from({ length: 4 }, (_, i) => createCharacter(i)),
+});
+
+export const createAccount = (id: string, name: string): Account => ({
+  id,
+  name,
+  servers: SERVER_NAMES.map((serverName, idx) => createServer(`${id}_server_${idx}`, serverName)),
 });

@@ -62,8 +62,14 @@ export interface Character {
   learnedRecipes: ItemData[]; // New field for read recipes
 }
 
-export interface Account {
+export interface Server {
   id: string;
   name: string;
   characters: Character[];
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  servers: Server[];
 }

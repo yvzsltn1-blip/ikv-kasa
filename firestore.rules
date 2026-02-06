@@ -6,6 +6,13 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // Kullanıcı adı kontrolü ve oluşturma
+    match /usernames/{username} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // Diğer tüm yolları kapat
     match /{document=**} {
       allow read, write: if false;

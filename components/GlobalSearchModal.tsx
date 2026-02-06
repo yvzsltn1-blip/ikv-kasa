@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Account, ItemData, CATEGORY_OPTIONS } from '../types';
-import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet } from 'lucide-react';
+import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS } from '../constants';
 
 interface SearchResult {
   accountId: string;
   accountName: string;
+  serverIndex: number;
+  serverName: string;
   charId: number;
   charName: string;
   containerId: string;
@@ -21,13 +23,13 @@ interface GlobalSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   accounts: Account[];
-  onNavigate: (accountId: string, charIndex: number, viewIndex: number, openBook?: boolean) => void;
+  onNavigate: (accountId: string, serverIndex: number, charIndex: number, viewIndex: number, openBook?: boolean) => void;
 }
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate }) => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  
+
   // Filter States
   const [showFilters, setShowFilters] = useState(false);
   const [filterCategory, setFilterCategory] = useState('');
@@ -85,116 +87,122 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     const found: SearchResult[] = [];
 
     accounts.forEach(acc => {
-      acc.characters.forEach((char) => {
-        // 1. Search in Containers (Slots) -> These are technically "Unread" if they are recipes
-        const containers = [
-            { key: 'bank1' as const, data: char.bank1 }, 
-            { key: 'bank2' as const, data: char.bank2 }, 
-            { key: 'bag' as const, data: char.bag }
-        ];
+      acc.servers.forEach((server, serverIdx) => {
+        server.characters.forEach((char) => {
+          // 1. Search in Containers (Slots) -> These are technically "Unread" if they are recipes
+          const containers = [
+              { key: 'bank1' as const, data: char.bank1 },
+              { key: 'bank2' as const, data: char.bank2 },
+              { key: 'bag' as const, data: char.bag }
+          ];
 
-        containers.forEach(({ key, data }) => {
-          data.slots.forEach(slot => {
-            if (!slot.item) return;
+          containers.forEach(({ key, data }) => {
+            data.slots.forEach(slot => {
+              if (!slot.item) return;
 
-            const item = slot.item;
-            
-            // Skip logic based on Recipe Status filter (If looking for Read, skip slots)
-            if (filterType === 'Recipe' && filterRecipeStatus === 'Read') return;
+              const item = slot.item;
 
-            // ... proceed with matching
-            let match = true;
+              // Skip logic based on Recipe Status filter (If looking for Read, skip slots)
+              if (filterType === 'Recipe' && filterRecipeStatus === 'Read') return;
 
-            // 1. Text Search
-            if (debouncedQuery.length >= 2) {
-                const textToSearch = `
-                  ${item.category} 
-                  ${item.enchantment1} 
-                  ${item.enchantment2} 
-                  ${item.heroClass} 
-                  ${item.type === 'Recipe' ? 'reçete recipe' : ''}
-                  lv${item.level}
-                `.toLocaleLowerCase('tr');
-                if (!textToSearch.includes(lowerQuery)) match = false;
-            }
+              // ... proceed with matching
+              let match = true;
 
-            // 2. Filters
-            if (match && hasActiveFilters) {
-                if (filterCategory && item.category !== filterCategory) match = false;
-                if (filterClass && filterClass !== 'Tüm Sınıflar' && item.heroClass !== filterClass) match = false;
-                if (filterGender && filterGender !== 'Tüm Cinsiyetler' && item.gender !== filterGender) match = false;
-                if (filterMinLevel && item.level < parseInt(filterMinLevel)) match = false;
-                if (filterMaxLevel && item.level > parseInt(filterMaxLevel)) match = false;
-                if (filterType === 'Recipe' && item.type !== 'Recipe') match = false;
-                if (filterType === 'Item' && item.type !== 'Item') match = false;
-            }
+              // 1. Text Search
+              if (debouncedQuery.length >= 2) {
+                  const textToSearch = `
+                    ${item.category}
+                    ${item.enchantment1}
+                    ${item.enchantment2}
+                    ${item.heroClass}
+                    ${item.type === 'Recipe' ? 'reçete recipe' : ''}
+                    lv${item.level}
+                  `.toLocaleLowerCase('tr');
+                  if (!textToSearch.includes(lowerQuery)) match = false;
+              }
 
-            if (match) {
-              const row = Math.floor(slot.id / data.cols) + 1;
-              const col = (slot.id % data.cols) + 1;
-              found.push({
-                accountId: acc.id,
-                accountName: acc.name,
-                charId: char.id,
-                charName: char.name,
-                containerId: data.id,
-                containerName: data.name,
-                containerKey: key,
-                slotId: slot.id,
-                row,
-                col,
-                item
-              });
-            }
+              // 2. Filters
+              if (match && hasActiveFilters) {
+                  if (filterCategory && item.category !== filterCategory) match = false;
+                  if (filterClass && filterClass !== 'Tüm Sınıflar' && item.heroClass !== filterClass) match = false;
+                  if (filterGender && filterGender !== 'Tüm Cinsiyetler' && item.gender !== filterGender) match = false;
+                  if (filterMinLevel && item.level < parseInt(filterMinLevel)) match = false;
+                  if (filterMaxLevel && item.level > parseInt(filterMaxLevel)) match = false;
+                  if (filterType === 'Recipe' && item.type !== 'Recipe') match = false;
+                  if (filterType === 'Item' && item.type !== 'Item') match = false;
+              }
+
+              if (match) {
+                const row = Math.floor(slot.id / data.cols) + 1;
+                const col = (slot.id % data.cols) + 1;
+                found.push({
+                  accountId: acc.id,
+                  accountName: acc.name,
+                  serverIndex: serverIdx,
+                  serverName: server.name,
+                  charId: char.id,
+                  charName: char.name,
+                  containerId: data.id,
+                  containerName: data.name,
+                  containerKey: key,
+                  slotId: slot.id,
+                  row,
+                  col,
+                  item
+                });
+              }
+            });
           });
+
+          // 2. Search in Learned Recipes (Read Recipes)
+          if (filterType !== 'Item' && filterRecipeStatus !== 'Unread') {
+               char.learnedRecipes.forEach((item, idx) => {
+                   let match = true;
+
+                   // 1. Text Search
+                   if (debouncedQuery.length >= 2) {
+                      const textToSearch = `
+                        ${item.category}
+                        ${item.enchantment1}
+                        ${item.enchantment2}
+                        ${item.heroClass}
+                        reçete recipe okunmuş read
+                        lv${item.level}
+                      `.toLocaleLowerCase('tr');
+                      if (!textToSearch.includes(lowerQuery)) match = false;
+                  }
+
+                  // 2. Filters
+                  if (match && hasActiveFilters) {
+                      if (filterCategory && item.category !== filterCategory) match = false;
+                      if (filterClass && filterClass !== 'Tüm Sınıflar' && item.heroClass !== filterClass) match = false;
+                      if (filterGender && filterGender !== 'Tüm Cinsiyetler' && item.gender !== filterGender) match = false;
+                      if (filterMinLevel && item.level < parseInt(filterMinLevel)) match = false;
+                      if (filterMaxLevel && item.level > parseInt(filterMaxLevel)) match = false;
+                      // Type is implicitly Recipe for learned items, but we double check logic
+                      if (filterType === 'Item') match = false;
+                  }
+
+                  if (match) {
+                      found.push({
+                          accountId: acc.id,
+                          accountName: acc.name,
+                          serverIndex: serverIdx,
+                          serverName: server.name,
+                          charId: char.id,
+                          charName: char.name,
+                          containerId: 'learned',
+                          containerName: 'Okunmuş Reçete',
+                          containerKey: 'learned',
+                          slotId: -1,
+                          row: idx + 1, // Visual index
+                          col: 1,
+                          item: { ...item, type: 'Recipe' } // Ensure type is set
+                      });
+                  }
+               });
+          }
         });
-
-        // 2. Search in Learned Recipes (Read Recipes)
-        if (filterType !== 'Item' && filterRecipeStatus !== 'Unread') {
-             char.learnedRecipes.forEach((item, idx) => {
-                 let match = true;
-
-                 // 1. Text Search
-                 if (debouncedQuery.length >= 2) {
-                    const textToSearch = `
-                      ${item.category} 
-                      ${item.enchantment1} 
-                      ${item.enchantment2} 
-                      ${item.heroClass} 
-                      reçete recipe okunmuş read
-                      lv${item.level}
-                    `.toLocaleLowerCase('tr');
-                    if (!textToSearch.includes(lowerQuery)) match = false;
-                }
-
-                // 2. Filters
-                if (match && hasActiveFilters) {
-                    if (filterCategory && item.category !== filterCategory) match = false;
-                    if (filterClass && filterClass !== 'Tüm Sınıflar' && item.heroClass !== filterClass) match = false;
-                    if (filterGender && filterGender !== 'Tüm Cinsiyetler' && item.gender !== filterGender) match = false;
-                    if (filterMinLevel && item.level < parseInt(filterMinLevel)) match = false;
-                    if (filterMaxLevel && item.level > parseInt(filterMaxLevel)) match = false;
-                    // Type is implicitly Recipe for learned items, but we double check logic
-                    if (filterType === 'Item') match = false; 
-                }
-
-                if (match) {
-                    found.push({
-                        accountId: acc.id,
-                        accountName: acc.name,
-                        charId: char.id,
-                        charName: char.name,
-                        containerId: 'learned',
-                        containerName: 'Okunmuş Reçete',
-                        containerKey: 'learned',
-                        slotId: -1,
-                        row: idx + 1, // Visual index
-                        col: 1,
-                        item: { ...item, type: 'Recipe' } // Ensure type is set
-                    });
-                }
-             });
-        }
       });
     });
 
@@ -208,35 +216,32 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         return;
     }
 
-    // 1. Başlık Satırı (Ana ekrandaki formatla birebir aynı)
     const rows = [
-      ["Hesap", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
-    // 2. Verileri Satırlara Ekle
     results.forEach(res => {
-      // Okunmuş durumu: Eğer reçete kitabından geliyorsa (learned) veya eşya okunmuşsa "Evet"
       const isRead = res.containerKey === 'learned' || (res.item.type === 'Recipe' && res.item.isRead) ? "Evet" : "Hayır";
-      
+
       rows.push([
-        res.accountName,                                // Hesap
-        res.charName,                                   // Karakter
-        res.containerName,                              // Kasa/Çanta (Örn: Kasa 1, Çanta)
-        res.row.toString(),                             // Satır
-        res.col.toString(),                             // Sütun
-        res.item.enchantment1 || "-",                   // Efsun 1
-        res.item.enchantment2 || "-",                   // Efsun 2
-        res.item.category,                              // Kategori
-        res.item.weaponType || "-",                     // Silah Cinsi
-        res.item.level.toString(),                      // Seviye
-        res.item.gender || "-",                         // Cinsiyet
-        res.item.heroClass,                             // Sınıf
-        isRead,                                         // Okunmuş
-        res.item.count ? res.item.count.toString() : "1" // Adet
+        res.accountName,
+        res.serverName,
+        res.charName,
+        res.containerName,
+        res.row.toString(),
+        res.col.toString(),
+        res.item.enchantment1 || "-",
+        res.item.enchantment2 || "-",
+        res.item.category,
+        res.item.weaponType || "-",
+        res.item.level.toString(),
+        res.item.gender || "-",
+        res.item.heroClass,
+        isRead,
+        res.item.count ? res.item.count.toString() : "1"
       ]);
     });
 
-    // 3. Dosyayı Oluştur ve İndir
     const sanitizeCell = (val: string) => {
       let s = val.replace(/"/g, '""');
       if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
@@ -244,7 +249,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     };
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
       + rows.map(e => e.map(c => sanitizeCell(c)).join(",")).join("\n");
-      
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -261,11 +266,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     const viewIndex = res.containerKey === 'bank1' ? 0 : res.containerKey === 'bank2' ? 1 : 2; // Default to 2 for bag or learned
     const account = accounts.find(a => a.id === res.accountId);
     if (account) {
-        const charIndex = account.characters.findIndex(c => c.id === res.charId);
-        if (charIndex !== -1) {
-            // Pass 'true' for openBook if it is a learned recipe
-            onNavigate(res.accountId, charIndex, viewIndex, res.containerKey === 'learned');
-            onClose();
+        const server = account.servers[res.serverIndex];
+        if (server) {
+            const charIndex = server.characters.findIndex(c => c.id === res.charId);
+            if (charIndex !== -1) {
+                // Pass 'true' for openBook if it is a learned recipe
+                onNavigate(res.accountId, res.serverIndex, charIndex, viewIndex, res.containerKey === 'learned');
+                onClose();
+            }
         }
     }
   };
@@ -273,7 +281,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-2 md:pt-20 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="w-[97vw] md:w-full max-w-2xl bg-slate-900 border-2 border-slate-600 rounded-xl shadow-2xl flex flex-col max-h-[96vh] md:max-h-[85vh]">
-        
+
         {/* Header / Input */}
         <div className="bg-slate-800 rounded-t-lg flex flex-col border-b border-slate-700">
             <div className="p-4 flex items-center gap-3">
@@ -286,8 +294,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                 />
-                
-                <button 
+
+                <button
                     onClick={() => setShowFilters(!showFilters)}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm font-bold border transition-colors ${showFilters ? 'bg-yellow-600 text-black border-yellow-500' : 'bg-slate-700 text-slate-300 border-slate-600 hover:border-slate-400'}`}
                 >
@@ -308,8 +316,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         {/* Category */}
                         <div>
                             <label className="text-[10px] text-slate-400 font-bold block mb-1">KATEGORİ</label>
-                            <select 
-                                value={filterCategory} 
+                            <select
+                                value={filterCategory}
                                 onChange={(e) => setFilterCategory(e.target.value)}
                                 className="w-full bg-slate-800 border border-slate-600 rounded text-xs p-1.5 text-slate-200 focus:border-yellow-500 outline-none"
                             >
@@ -321,8 +329,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         {/* Class */}
                         <div>
                             <label className="text-[10px] text-slate-400 font-bold block mb-1">SINIF</label>
-                            <select 
-                                value={filterClass} 
+                            <select
+                                value={filterClass}
                                 onChange={(e) => setFilterClass(e.target.value)}
                                 className="w-full bg-slate-800 border border-slate-600 rounded text-xs p-1.5 text-slate-200 focus:border-yellow-500 outline-none"
                             >
@@ -334,8 +342,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                          {/* Gender */}
                          <div>
                             <label className="text-[10px] text-slate-400 font-bold block mb-1">CİNSİYET</label>
-                            <select 
-                                value={filterGender} 
+                            <select
+                                value={filterGender}
                                 onChange={(e) => setFilterGender(e.target.value)}
                                 className="w-full bg-slate-800 border border-slate-600 rounded text-xs p-1.5 text-slate-200 focus:border-yellow-500 outline-none"
                             >
@@ -347,8 +355,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         {/* Type */}
                         <div>
                             <label className="text-[10px] text-slate-400 font-bold block mb-1">TÜR</label>
-                            <select 
-                                value={filterType} 
+                            <select
+                                value={filterType}
                                 onChange={(e) => {
                                     setFilterType(e.target.value as any);
                                     if(e.target.value !== 'Recipe') setFilterRecipeStatus('All');
@@ -385,17 +393,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         <div className="flex-1">
                             <label className="text-[10px] text-slate-400 font-bold block mb-1">SEVİYE ARALIĞI</label>
                             <div className="flex items-center gap-2">
-                                <input 
-                                    type="number" 
-                                    placeholder="Min" 
+                                <input
+                                    type="number"
+                                    placeholder="Min"
                                     value={filterMinLevel}
                                     onChange={(e) => setFilterMinLevel(e.target.value)}
                                     className="w-full bg-slate-800 border border-slate-600 rounded text-xs p-1.5 text-slate-200 focus:border-yellow-500 outline-none"
                                 />
                                 <span className="text-slate-500">-</span>
-                                <input 
-                                    type="number" 
-                                    placeholder="Max" 
+                                <input
+                                    type="number"
+                                    placeholder="Max"
                                     value={filterMaxLevel}
                                     onChange={(e) => setFilterMaxLevel(e.target.value)}
                                     className="w-full bg-slate-800 border border-slate-600 rounded text-xs p-1.5 text-slate-200 focus:border-yellow-500 outline-none"
@@ -403,7 +411,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                             </div>
                         </div>
                         {/* Excel Export Button */}
-                        <button 
+                        <button
                             onClick={handleExportSearchResults}
                             className="px-3 py-1.5 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 border border-emerald-800/50 rounded text-xs font-bold transition-colors flex items-center gap-1 h-[30px] mr-2"
                             title="Sonuçları İndir"
@@ -411,7 +419,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                             <FileSpreadsheet size={12} /> Excel
                         </button>
                         {/* Reset Button */}
-                        <button 
+                        <button
                             onClick={resetFilters}
                             className="px-3 py-1.5 bg-slate-800 hover:bg-red-900/50 text-slate-400 hover:text-red-300 border border-slate-700 rounded text-xs font-bold transition-colors flex items-center gap-1 h-[30px]"
                         >
@@ -438,7 +446,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           )}
 
           {results.map((res, idx) => (
-            <button 
+            <button
               key={`${res.containerId}-${res.slotId}-${idx}`}
               onClick={() => handleResultClick(res)}
               className="w-full text-left bg-slate-800/50 hover:bg-slate-700 border border-slate-700 hover:border-yellow-500/50 p-3 rounded flex items-center gap-4 transition-all group"
@@ -457,14 +465,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
               <div className="flex-1 min-w-0">
                 <div className="flex justify-between items-start">
                     <h4 className={`font-bold text-sm truncate ${res.item.type === 'Recipe' ? 'text-yellow-300' : 'text-white'}`}>
-                        {res.item.category} {res.item.type === 'Recipe' ? '(Reçete)' : ''} 
+                        {res.item.category} {res.item.type === 'Recipe' ? '(Reçete)' : ''}
                         <span className="text-xs font-normal text-slate-400 ml-2">Lv.{res.item.level}</span>
                     </h4>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 ${CLASS_COLORS[res.item.heroClass]}`}>
                         {res.item.heroClass}
                     </span>
                 </div>
-                
+
                 {/* Enchantments */}
                 <div className="text-xs text-slate-300 truncate mt-0.5">
                     {res.item.enchantment1 && <span className="text-yellow-100/80 mr-2">• {res.item.enchantment1}</span>}
@@ -476,6 +484,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                     <MapPin size={10} className="text-blue-400 shrink-0" />
                     <span className="text-blue-200">{res.accountName}</span>
                     <ArrowRight size={8} className="shrink-0" />
+                    <Globe size={8} className="text-emerald-400 shrink-0" />
+                    <span className="text-emerald-200">{res.serverName}</span>
+                    <ArrowRight size={8} className="shrink-0" />
                     <span className="text-green-200">{res.charName}</span>
                     <ArrowRight size={8} className="shrink-0" />
                     <span className={`${res.containerKey === 'learned' ? 'text-purple-300' : 'text-yellow-200'} uppercase`}>{res.containerName}</span>
@@ -485,7 +496,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
             </button>
           ))}
         </div>
-        
+
         {/* Footer info */}
         <div className="p-2 bg-slate-900 border-t border-slate-700 text-center text-[10px] text-slate-500 flex justify-between px-4">
            <span>{results.length} sonuç</span>

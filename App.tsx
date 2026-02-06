@@ -1,37 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { Account, Container, ItemData, UserRole } from './types';
-import { createAccount, CLASS_COLORS } from './constants';
+import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
-import { auth, db } from './firebase'; 
+import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, runTransaction } from 'firebase/firestore';
 
 // View sequence
 const VIEW_ORDER = ['bank1', 'bank2', 'bag'] as const;
 type ViewType = typeof VIEW_ORDER[number];
 
+// Migration helper for old account format (characters → servers)
+const migrateAccount = (acc: any): Account => {
+  if (acc.servers && acc.servers.length > 0) return acc as Account;
+  const oldChars = acc.characters || Array.from({ length: 4 }, (_, i) => createCharacter(i));
+  return {
+    id: acc.id,
+    name: acc.name,
+    servers: SERVER_NAMES.map((serverName, idx) => ({
+      id: `${acc.id}_server_${idx}`,
+      name: serverName,
+      characters: idx === 0 ? oldChars : Array.from({ length: 4 }, (_, i) => createCharacter(i)),
+    })),
+  };
+};
+
 export default function App() {
   // --- Auth & Loading State ---
   const [userRole, setUserRole] = useState<UserRole>(null);
-  const [loading, setLoading] = useState(true); // Yükleniyor ekranı için
+  const [loading, setLoading] = useState(true);
 
   // Global State
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
-  
+  const [selectedServerIndex, setSelectedServerIndex] = useState(0);
+
+  // Username State
+  const [username, setUsername] = useState<string | null>(null);
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+  const [usernameLoading, setUsernameLoading] = useState(false);
+
   // UI State
   const [activeCharIndex, setActiveCharIndex] = useState(0);
   const [currentViewIndex, setCurrentViewIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
-  
+
   // Input State (Temporary states for name editing)
   const [tempAccountName, setTempAccountName] = useState('');
   const [tempCharName, setTempCharName] = useState('');
@@ -59,40 +82,48 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // --- YENİ EKLENEN KISIM: E-POSTA DOĞRULAMA KONTROLÜ ---
         if (!user.emailVerified) {
             alert("Giriş yapabilmek için lütfen e-posta adresinizi doğrulayın. (Spam kutusunu kontrol etmeyi unutmayın)");
-            await signOut(auth); // Kullanıcıyı sistemden at
-            setLoading(false); // Yükleniyor ekranını kapat
-            return; // İşlemi durdur, veri çekmeye çalışma
+            await signOut(auth);
+            setLoading(false);
+            return;
         }
-        // -------------------------------------------------------
 
-        // Kullanıcı giriş yapmış ve onaylı, verileri çekelim
         setLoading(true);
         const userDocRef = doc(db, "users", user.uid);
-        
+
         try {
           const docSnap = await getDoc(userDocRef);
 
           if (docSnap.exists()) {
-            // Kayıtlı veri var
             const data = docSnap.data();
-            const loadedAccounts = data.accounts || [];
-            
-            // Eğer hesap dizisi boş gelirse (örn: hata ile kaydedilmişse) varsayılan oluştur
+            const rawAccounts = data.accounts || [];
+            const loadedAccounts = rawAccounts.map(migrateAccount);
+
+            // Load username
+            if (data.username) {
+              setUsername(data.username);
+            } else {
+              setUsername(null);
+            }
+
             if (loadedAccounts.length > 0) {
+              // Check if migration happened and auto-save
+              const needsMigration = rawAccounts.some((acc: any) => !acc.servers || acc.servers.length === 0);
+
               setAccounts(loadedAccounts);
               setSelectedAccountId(loadedAccounts[0].id);
+
+              if (needsMigration) {
+                await setDoc(userDocRef, { accounts: loadedAccounts }, { merge: true });
+              }
             } else {
               initializeDefault(userDocRef);
             }
           } else {
-            // Hiç veri yok (Yeni Kullanıcı), varsayılan oluştur
             await initializeDefault(userDocRef);
           }
-          
-          // Rol Belirleme (Admin misin?)
+
           const adminEmail = "yvzsltn61@gmail.com";
           if (user.email === adminEmail) {
              setUserRole('admin');
@@ -107,9 +138,9 @@ export default function App() {
         }
 
       } else {
-        // Çıkış yapılmış
         setUserRole(null);
         setAccounts([]);
+        setUsername(null);
         setLoading(false);
       }
     });
@@ -117,17 +148,60 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Varsayılan hesap oluşturucu (Yardımcı Fonksiyon)
   const initializeDefault = async (docRef: any) => {
     const newId = crypto.randomUUID();
     const defaultAccount = createAccount(newId, 'Hesap 1');
     const initialAccounts = [defaultAccount];
-    
-    // Veritabanına kaydet
+
     await setDoc(docRef, { accounts: initialAccounts });
-    
+
     setAccounts(initialAccounts);
     setSelectedAccountId(newId);
+  };
+
+  // --- USERNAME SET ---
+  const handleSetUsername = async () => {
+    const user = auth.currentUser;
+    if (!user || !usernameInput.trim()) return;
+
+    const trimmed = usernameInput.trim();
+
+    if (trimmed.length < 3 || trimmed.length > 20) {
+      setUsernameError('Kullanıcı adı 3 ile 20 karakter arasında olmalıdır.');
+      return;
+    }
+
+    setUsernameLoading(true);
+    setUsernameError('');
+
+    try {
+      const usernameLower = trimmed.toLowerCase();
+
+      await runTransaction(db, async (transaction) => {
+        const usernameDocRef = doc(db, "usernames", usernameLower);
+        const usernameSnap = await transaction.get(usernameDocRef);
+
+        if (usernameSnap.exists()) {
+          throw new Error("USERNAME_TAKEN");
+        }
+
+        transaction.set(usernameDocRef, { uid: user.uid, displayName: trimmed });
+        transaction.set(doc(db, "users", user.uid), { username: trimmed }, { merge: true });
+      });
+
+      setUsername(trimmed);
+      setShowUsernameModal(false);
+      setUsernameInput('');
+    } catch (error: any) {
+      console.error("Username set error:", error);
+      if (error.message === 'USERNAME_TAKEN') {
+        setUsernameError('Bu kullanıcı adı zaten alınmış. Lütfen başka bir isim deneyin.');
+      } else {
+        setUsernameError('Bir hata oluştu. Lütfen tekrar deneyin.');
+      }
+    } finally {
+      setUsernameLoading(false);
+    }
   };
 
   // --- VERİLERİ BULUTA KAYDETME ---
@@ -157,15 +231,14 @@ export default function App() {
     }
   };
 
-  // Helper to force save specific accounts state locally (for seamless UX)
-  // Note: This only updates REACT STATE. Real save happens when user clicks "Save" button.
   const updateAccountsState = (newAccounts: Account[]) => {
     setAccounts(newAccounts);
   };
 
   // --- Sync Temp States when Active Data Changes ---
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
-  const activeChar = activeAccount?.characters[activeCharIndex];
+  const activeServer = activeAccount?.servers[selectedServerIndex];
+  const activeChar = activeServer?.characters[activeCharIndex];
 
   useEffect(() => {
     if (activeAccount) {
@@ -177,7 +250,7 @@ export default function App() {
     if (activeChar) {
         setTempCharName(activeChar.name);
     }
-  }, [activeCharIndex, selectedAccountId, accounts]);
+  }, [activeCharIndex, selectedServerIndex, selectedAccountId, accounts]);
 
 
   // --- Account Management ---
@@ -189,6 +262,7 @@ export default function App() {
     const newAccounts = [...accounts, newAccount];
     setAccounts(newAccounts);
     setSelectedAccountId(newId);
+    setSelectedServerIndex(0);
     setActiveCharIndex(0);
     setHasUnsavedChanges(true);
   };
@@ -203,20 +277,20 @@ export default function App() {
       const newAccounts = accounts.filter(a => a.id !== selectedAccountId);
       setAccounts(newAccounts);
       setSelectedAccountId(newAccounts[0].id);
+      setSelectedServerIndex(0);
       setActiveCharIndex(0);
       setHasUnsavedChanges(true);
     }
   };
 
   // --- Auth Handlers ---
-  // LoginScreen zaten Firebase ile giriş yapıyor, bu sadece state'i anlık günceller
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
   };
 
   const handleLogout = async () => {
     try {
-        await signOut(auth); // Firebase'den çıkış
+        await signOut(auth);
         setUserRole(null);
         setTooltip(null);
         setIsSearchOpen(false);
@@ -238,12 +312,15 @@ export default function App() {
   };
 
   const commitCharacterName = () => {
-    if (!activeAccount) return;
-    const newChars = [...activeAccount.characters];
+    if (!activeAccount || !activeServer) return;
+    const newChars = [...activeServer.characters];
     newChars[activeCharIndex] = { ...newChars[activeCharIndex], name: tempCharName };
-    const newAccounts = accounts.map(acc =>
-        acc.id === selectedAccountId ? { ...acc, characters: newChars } : acc
-    );
+    const newAccounts = accounts.map(acc => {
+        if (acc.id !== selectedAccountId) return acc;
+        const newServers = [...acc.servers];
+        newServers[selectedServerIndex] = { ...newServers[selectedServerIndex], characters: newChars };
+        return { ...acc, servers: newServers };
+    });
     updateAccountsState(newAccounts);
     setHasUnsavedChanges(true);
   };
@@ -254,36 +331,38 @@ export default function App() {
     if (!activeAccount) return;
 
     const rows = [
-      ["Hesap", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
-    activeAccount.characters.forEach(char => {
-      [char.bank1, char.bank2, char.bag].forEach(container => {
-        container.slots.forEach(slot => {
-          if (slot.item) {
-            const row = Math.floor(slot.id / container.cols) + 1;
-            const col = (slot.id % container.cols) + 1;
-            rows.push([
-              activeAccount.name, char.name, container.name, row.toString(), col.toString(),
-              slot.item.enchantment1 || "-", slot.item.enchantment2 || "-",
-              slot.item.category,
-              slot.item.weaponType || "-",
-              slot.item.level.toString(), slot.item.gender || "-", slot.item.heroClass, "Hayır",
-              slot.item.count ? slot.item.count.toString() : "1"
-            ]);
-          }
+    activeAccount.servers.forEach(server => {
+      server.characters.forEach(char => {
+        [char.bank1, char.bank2, char.bag].forEach(container => {
+          container.slots.forEach(slot => {
+            if (slot.item) {
+              const row = Math.floor(slot.id / container.cols) + 1;
+              const col = (slot.id % container.cols) + 1;
+              rows.push([
+                activeAccount.name, server.name, char.name, container.name, row.toString(), col.toString(),
+                slot.item.enchantment1 || "-", slot.item.enchantment2 || "-",
+                slot.item.category,
+                slot.item.weaponType || "-",
+                slot.item.level.toString(), slot.item.gender || "-", slot.item.heroClass, "Hayır",
+                slot.item.count ? slot.item.count.toString() : "1"
+              ]);
+            }
+          });
         });
-      });
 
-      char.learnedRecipes.forEach(item => {
-        rows.push([
-            activeAccount.name, char.name, "Reçete Kitabı", "-", "-",
-            item.enchantment1 || "-", item.enchantment2 || "-",
-            item.category, 
-            item.weaponType || "-",
-            item.level.toString(), item.gender || "-", item.heroClass, "Evet",
-            item.count ? item.count.toString() : "1"
-        ]);
+        char.learnedRecipes.forEach(item => {
+          rows.push([
+              activeAccount.name, server.name, char.name, "Reçete Kitabı", "-", "-",
+              item.enchantment1 || "-", item.enchantment2 || "-",
+              item.category,
+              item.weaponType || "-",
+              item.level.toString(), item.gender || "-", item.heroClass, "Evet",
+              item.count ? item.count.toString() : "1"
+          ]);
+        });
       });
     });
 
@@ -294,7 +373,7 @@ export default function App() {
     };
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
       + rows.map(e => e.map(c => sanitizeCell(c)).join(",")).join("\n");
-      
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -305,8 +384,9 @@ export default function App() {
   };
 
   // --- Search Navigation ---
-  const handleSearchResultNavigate = (accountId: string, charIndex: number, viewIndex: number, openBook?: boolean) => {
+  const handleSearchResultNavigate = (accountId: string, serverIndex: number, charIndex: number, viewIndex: number, openBook?: boolean) => {
     setSelectedAccountId(accountId);
+    setSelectedServerIndex(serverIndex);
     setActiveCharIndex(charIndex);
     setCurrentViewIndex(viewIndex);
     if (openBook) {
@@ -325,9 +405,11 @@ export default function App() {
     setAccounts(prevAccounts => prevAccounts.map(acc => {
       if (acc.id !== selectedAccountId) return acc;
 
-      const newChars = [...acc.characters];
+      const newServers = [...acc.servers];
+      const newServer = { ...newServers[selectedServerIndex] };
+      const newChars = [...newServer.characters];
       const targetChar = { ...newChars[activeCharIndex] };
-      
+
       let targetContainer: Container | null = null;
       let containerKey: 'bank1' | 'bank2' | 'bag' | null = null;
 
@@ -341,13 +423,15 @@ export default function App() {
         const itemTo = newSlots[toSlotId].item;
 
         newSlots[toSlotId] = { ...newSlots[toSlotId], item: itemFrom };
-        newSlots[fromSlotId] = { ...newSlots[fromSlotId], item: itemTo }; 
-        
+        newSlots[fromSlotId] = { ...newSlots[fromSlotId], item: itemTo };
+
         targetChar[containerKey] = { ...targetContainer, slots: newSlots };
         newChars[activeCharIndex] = targetChar;
       }
 
-      return { ...acc, characters: newChars };
+      newServer.characters = newChars;
+      newServers[selectedServerIndex] = newServer;
+      return { ...acc, servers: newServers };
     }));
     setHasUnsavedChanges(true);
   };
@@ -358,9 +442,11 @@ export default function App() {
     setAccounts(prevAccounts => prevAccounts.map(acc => {
       if (acc.id !== selectedAccountId) return acc;
 
-      const newChars = [...acc.characters];
+      const newServers = [...acc.servers];
+      const newServer = { ...newServers[selectedServerIndex] };
+      const newChars = [...newServer.characters];
       const targetChar = { ...newChars[activeCharIndex] };
-      
+
       let targetContainer: Container | null = null;
       let containerKey: 'bank1' | 'bank2' | 'bag' | null = null;
 
@@ -375,7 +461,9 @@ export default function App() {
         newChars[activeCharIndex] = targetChar;
       }
 
-      return { ...acc, characters: newChars };
+      newServer.characters = newChars;
+      newServers[selectedServerIndex] = newServer;
+      return { ...acc, servers: newServers };
     }));
   };
 
@@ -384,10 +472,12 @@ export default function App() {
 
       setAccounts(prevAccounts => prevAccounts.map(acc => {
         if (acc.id !== selectedAccountId) return acc;
-  
-        const newChars = [...acc.characters];
+
+        const newServers = [...acc.servers];
+        const newServer = { ...newServers[selectedServerIndex] };
+        const newChars = [...newServer.characters];
         const targetChar = { ...newChars[activeCharIndex] };
-        
+
         targetChar.learnedRecipes = [...targetChar.learnedRecipes, item];
 
         let targetContainer: Container | null = null;
@@ -404,7 +494,9 @@ export default function App() {
         }
 
         newChars[activeCharIndex] = targetChar;
-        return { ...acc, characters: newChars };
+        newServer.characters = newChars;
+        newServers[selectedServerIndex] = newServer;
+        return { ...acc, servers: newServers };
       }));
       setHasUnsavedChanges(true);
   };
@@ -412,11 +504,15 @@ export default function App() {
   const handleUnlearnRecipe = (recipeId: string) => {
     setAccounts(prevAccounts => prevAccounts.map(acc => {
         if (acc.id !== selectedAccountId) return acc;
-        const newChars = [...acc.characters];
+        const newServers = [...acc.servers];
+        const newServer = { ...newServers[selectedServerIndex] };
+        const newChars = [...newServer.characters];
         const targetChar = { ...newChars[activeCharIndex] };
         targetChar.learnedRecipes = targetChar.learnedRecipes.filter(r => r.id !== recipeId);
         newChars[activeCharIndex] = targetChar;
-        return { ...acc, characters: newChars };
+        newServer.characters = newChars;
+        newServers[selectedServerIndex] = newServer;
+        return { ...acc, servers: newServers };
     }));
     setHasUnsavedChanges(true);
   };
@@ -447,32 +543,36 @@ export default function App() {
     if (item.type === 'Recipe' && item.isRead) {
         setAccounts(prevAccounts => prevAccounts.map(acc => {
             if (acc.id !== selectedAccountId) return acc;
-      
-            const newChars = [...acc.characters];
+
+            const newServers = [...acc.servers];
+            const newServer = { ...newServers[selectedServerIndex] };
+            const newChars = [...newServer.characters];
             const targetChar = { ...newChars[activeCharIndex] };
-            
+
             const existingIdx = targetChar.learnedRecipes.findIndex(r => r.id === item.id);
             if (existingIdx !== -1) {
                 targetChar.learnedRecipes[existingIdx] = item;
             } else {
                 targetChar.learnedRecipes = [...targetChar.learnedRecipes, item];
             }
-    
+
             let targetContainer: Container | null = null;
             let containerKey: 'bank1' | 'bank2' | 'bag' | null = null;
-    
+
             if (targetChar.bank1.id === activeSlot.containerId) { targetContainer = targetChar.bank1; containerKey = 'bank1'; }
             else if (targetChar.bank2.id === activeSlot.containerId) { targetContainer = targetChar.bank2; containerKey = 'bank2'; }
             else if (targetChar.bag.id === activeSlot.containerId) { targetContainer = targetChar.bag; containerKey = 'bag'; }
-    
+
             if (targetContainer && containerKey) {
                 const newSlots = [...targetContainer.slots];
                 newSlots[activeSlot.slotId] = { ...newSlots[activeSlot.slotId], item: null };
                 targetChar[containerKey] = { ...targetContainer, slots: newSlots };
             }
-    
+
             newChars[activeCharIndex] = targetChar;
-            return { ...acc, characters: newChars };
+            newServer.characters = newChars;
+            newServers[selectedServerIndex] = newServer;
+            return { ...acc, servers: newServers };
         }));
     } else {
         updateSlot(activeSlot.containerId, activeSlot.slotId, item);
@@ -490,7 +590,7 @@ export default function App() {
 
   const getCurrentItem = (): ItemData | null => {
     if (!activeSlot || !activeChar) return null;
-    
+
     let container: Container | undefined;
     if (activeChar.bank1.id === activeSlot.containerId) container = activeChar.bank1;
     else if (activeChar.bank2.id === activeSlot.containerId) container = activeChar.bank2;
@@ -505,7 +605,6 @@ export default function App() {
 
   // --- RENDER MANTIĞI ---
 
-  // 1. Veri Yükleniyorsa
   if (loading) {
     return (
       <div className="h-screen w-screen bg-slate-950 flex flex-col items-center justify-center text-yellow-500 font-bold gap-4">
@@ -516,57 +615,59 @@ export default function App() {
     );
   }
 
-  // 2. Giriş Yapılmamışsa
   if (!userRole) {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
-  // 3. Veri Gelmemişse (Koruma)
-  if (!activeAccount || !activeChar) return <div className="text-white p-10">Hesap verisi yüklenemedi. Lütfen sayfayı yenileyin.</div>;
+  if (!activeAccount || !activeServer || !activeChar) return <div className="text-white p-10">Hesap verisi yüklenemedi. Lütfen sayfayı yenileyin.</div>;
 
   const currentView = VIEW_ORDER[currentViewIndex];
   const activeContainer = activeChar[currentView];
 
   return (
     <div className="min-h-screen w-screen bg-slate-950 md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 flex md:items-center md:justify-center md:h-screen md:overflow-hidden">
-      
-      {/* Değişiklik: h-[97vh] yerine h-[95dvh] ve max-h-[100dvh] ekledik */}
+
 <div className="w-full md:w-[98vw] min-h-screen md:min-h-0 md:h-[98vh] bg-slate-900/95 border-0 md:border-2 md:border-slate-700 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(0,0,0,0.9)] md:overflow-hidden flex flex-col relative">
-        
+
         {/* === HEADER === */}
         <div className="flex flex-col border-b-2 border-slate-700 shrink-0">
-          
+
           {/* MOBILE TOP BAR */}
           <div className="md:hidden bg-gradient-to-b from-slate-800 to-slate-800/95">
-            <div className="px-3 pt-2.5 pb-1.5 flex items-center gap-2.5">
-              <div className="bg-gradient-to-br from-yellow-500/15 to-yellow-700/10 p-2 rounded-xl border border-yellow-500/20 shadow-lg shadow-yellow-900/10">
-                <Shield size={16} className="text-yellow-500" />
+            <div className="px-2 pt-2 pb-1 flex items-center gap-2">
+              <div className="bg-gradient-to-br from-yellow-500/15 to-yellow-700/10 p-1.5 rounded-lg border border-yellow-500/20 shadow-lg shadow-yellow-900/10 shrink-0">
+                <Shield size={14} className="text-yellow-500" />
               </div>
-              <div className="flex-1 min-w-0 flex items-center gap-1.5 group/acc">
+              <div className="flex-1 min-w-0 flex items-center gap-1 group/acc">
                 <input
                   value={tempAccountName}
                   onChange={(e) => setTempAccountName(e.target.value)}
                   onBlur={commitAccountName}
-                  className="bg-transparent text-yellow-500 font-bold text-[15px] outline-none flex-1 min-w-0 placeholder-slate-600"
+                  className="bg-transparent text-yellow-500 font-bold text-[14px] outline-none flex-1 min-w-0 placeholder-slate-600"
                   placeholder="Hesap İsmi"
                   maxLength={30}
                 />
-                <Edit3 size={11} className="text-yellow-400 shrink-0" />
+                <Edit3 size={10} className="text-yellow-400 shrink-0" />
               </div>
-              {userRole === 'user' && <span className="text-[9px] text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded-full px-2.5 py-0.5 shrink-0 tracking-wide">Kullanıcı</span>}
+              {username ? (
+                <span className="text-[9px] text-cyan-400 bg-cyan-900/30 border border-cyan-700/40 rounded-full px-2 py-0.5 shrink-0 truncate max-w-[80px]">@{username}</span>
+              ) : (
+                <button onClick={() => setShowUsernameModal(true)} className="text-[9px] text-amber-400 bg-amber-900/30 border border-amber-700/40 rounded-full px-2 py-0.5 shrink-0 animate-pulse">Ad Belirle</button>
+              )}
             </div>
 
-            <div className="px-3 pb-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
+            <div className="px-2 pb-1.5 flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1 min-w-0 flex-shrink">
                 <div className="relative">
                   <select
                     value={selectedAccountId}
                     onChange={(e) => {
                       setSelectedAccountId(e.target.value);
+                      setSelectedServerIndex(0);
                       setActiveCharIndex(0);
                       setCurrentViewIndex(0);
                     }}
-                    className="appearance-none bg-slate-900/50 text-slate-300 text-[11px] py-1.5 pl-2.5 pr-6 rounded-lg border border-slate-600/40 focus:outline-none cursor-pointer"
+                    className="appearance-none bg-slate-900/50 text-slate-300 text-[11px] py-1.5 pl-2 pr-5 rounded-lg border border-slate-600/40 focus:outline-none cursor-pointer"
                   >
                     {accounts.map(acc => (
                       <option key={acc.id} value={acc.id}>{acc.name}</option>
@@ -574,26 +675,44 @@ export default function App() {
                   </select>
                   <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
                 </div>
-                <button onClick={handleAddAccount} className="p-1.5 text-green-500 active:text-green-400 rounded-lg active:bg-green-900/30" title="Hesap Ekle"><Plus size={16} /></button>
+                <button onClick={handleAddAccount} className="p-1 text-green-500 active:text-green-400 rounded-lg active:bg-green-900/30 shrink-0" title="Hesap Ekle"><Plus size={15} /></button>
                 {accounts.length > 1 && (
-                  <button onClick={handleDeleteAccount} className="p-1.5 text-red-800 active:text-red-500 rounded-lg active:bg-red-900/30" title="Hesap Sil"><Trash2 size={16} /></button>
+                  <button onClick={handleDeleteAccount} className="p-1 text-red-800 active:text-red-500 rounded-lg active:bg-red-900/30 shrink-0" title="Hesap Sil"><Trash2 size={15} /></button>
                 )}
               </div>
 
-              <div className="flex items-center bg-slate-900/40 rounded-xl p-1 border border-slate-700/30 gap-0.5">
-                <button onClick={() => setIsSearchOpen(true)} className="p-2 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={16} /></button>
-                <button onClick={handleExportExcel} className="p-2 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={16} /></button>
+              <div className="flex items-center bg-slate-900/40 rounded-xl p-0.5 border border-slate-700/30 gap-0.5 shrink-0">
+                <button onClick={() => setIsSearchOpen(true)} className="p-1.5 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={15} /></button>
+                <button onClick={handleExportExcel} className="p-1.5 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={15} /></button>
                 <div className="relative">
-                  <button onClick={saveData} className={`p-2 rounded-lg transition-colors ${hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 animate-pulse ring-2 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20'}`}><Save size={16} /></button>
+                  <button onClick={saveData} className={`p-1.5 rounded-lg transition-colors ${hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 animate-pulse ring-2 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20'}`}><Save size={15} /></button>
                   {hasUnsavedChanges && (
-                    <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap shadow-lg animate-bounce">
+                    <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap shadow-lg animate-bounce">
                       Kaydet!
                     </div>
                   )}
                 </div>
-                <div className="w-px h-5 bg-slate-600/40 mx-0.5"></div>
-                <button onClick={handleLogout} className="p-2 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={16} /></button>
+                <div className="w-px h-4 bg-slate-600/40 mx-0.5"></div>
+                <button onClick={handleLogout} className="p-1.5 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={15} /></button>
               </div>
+            </div>
+
+            {/* Mobile Server Selector */}
+            <div className="px-2 pb-1.5 flex items-center gap-1 overflow-x-auto no-scrollbar">
+              {activeAccount.servers.map((server, idx) => (
+                <button
+                  key={server.id}
+                  onClick={() => { setSelectedServerIndex(idx); setActiveCharIndex(0); setCurrentViewIndex(0); }}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
+                    selectedServerIndex === idx
+                      ? 'bg-emerald-800/60 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                      : 'bg-slate-900/40 text-slate-500 border border-slate-700/30 active:bg-slate-800'
+                  }`}
+                >
+                  <Globe size={10} />
+                  {server.name}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -618,6 +737,11 @@ export default function App() {
                       />
                       <Edit3 size={11} className="text-yellow-400 shrink-0" />
                     </div>
+                    {username ? (
+                      <span className="text-[9px] text-cyan-400 bg-cyan-900/25 border border-cyan-700/30 rounded-full px-2 py-0.5 tracking-wider">@{username}</span>
+                    ) : (
+                      <button onClick={() => setShowUsernameModal(true)} className="text-[9px] text-amber-400 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider hover:bg-amber-900/40 transition-colors animate-pulse">Kullanıcı Adı Belirle</button>
+                    )}
                     {userRole === 'user' && <span className="text-[9px] text-amber-400/70 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider uppercase">Kullanıcı</span>}
                   </div>
 
@@ -627,6 +751,7 @@ export default function App() {
                           value={selectedAccountId}
                           onChange={(e) => {
                             setSelectedAccountId(e.target.value);
+                            setSelectedServerIndex(0);
                             setActiveCharIndex(0);
                             setCurrentViewIndex(0);
                           }}
@@ -656,10 +781,29 @@ export default function App() {
             </div>
           </div>
 
+          {/* Desktop Server Selector */}
+          <div className="hidden md:flex bg-gradient-to-r from-slate-800/60 to-slate-800/40 px-4 py-1 items-center gap-1.5 border-b border-slate-700/30">
+            <Globe size={13} className="text-emerald-500 shrink-0" />
+            <span className="text-[10px] text-slate-500 font-bold mr-1">SUNUCU:</span>
+            {activeAccount.servers.map((server, idx) => (
+              <button
+                key={server.id}
+                onClick={() => { setSelectedServerIndex(idx); setActiveCharIndex(0); setCurrentViewIndex(0); }}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold whitespace-nowrap transition-all ${
+                  selectedServerIndex === idx
+                    ? 'bg-emerald-800/50 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                    : 'bg-slate-900/30 text-slate-500 border border-transparent hover:bg-slate-800 hover:text-slate-300'
+                }`}
+              >
+                {server.name}
+              </button>
+            ))}
+          </div>
+
           {/* Bottom Bar: Characters */}
           <div className="bg-gradient-to-b from-slate-800/80 to-slate-800/40 px-2 flex justify-between items-end gap-2">
              <div className="flex gap-1 overflow-x-auto w-full no-scrollbar py-0.5">
-                {activeAccount.characters.map((char, idx) => (
+                {activeServer.characters.map((char, idx) => (
                   <button
                     key={char.id}
                     onClick={() => { setActiveCharIndex(idx); setCurrentViewIndex(0); }}
@@ -818,11 +962,79 @@ export default function App() {
 
         {/* Footer */}
         <div className="bg-slate-900 p-0.5 flex justify-between items-center text-[8px] md:text-[9px] text-slate-600 border-t border-slate-700 shrink-0">
-           <span className="w-full text-center">IKV KASA YÖNETİM SİSTEMİ v3.0 • {activeChar.name} • {userRole?.toUpperCase()} MODU • {userRole === 'admin' ? 'Yönetici' : 'Kullanıcı'}</span>
+           <span className="w-full text-center">IKV KASA YÖNETİM SİSTEMİ v4.0 • {activeServer.name} • {activeChar.name} • {username ? `@${username}` : auth.currentUser?.email} • {userRole === 'admin' ? 'Yönetici' : 'Kullanıcı'}</span>
         </div>
       </div>
 
-      <ItemModal 
+      {/* Username Modal */}
+      {showUsernameModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowUsernameModal(false)}>
+          <div
+            className="relative mx-4 w-full max-w-sm bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-600/50 rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-cyan-900/40 to-blue-900/40 px-6 py-4 border-b border-slate-700/50">
+              <div className="flex items-center gap-3">
+                <div className="bg-cyan-500/15 p-2 rounded-xl border border-cyan-500/25">
+                  <AtSign size={20} className="text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-sm">Kullanıcı Adı Belirle</h3>
+                  <p className="text-slate-400 text-[10px] mt-0.5">Bu işlem sadece 1 kez yapılabilir</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 mb-1.5 block tracking-wider">KULLANICI ADI</label>
+                <input
+                  type="text"
+                  value={usernameInput}
+                  onChange={(e) => { setUsernameInput(e.target.value); setUsernameError(''); }}
+                  className="w-full bg-slate-950/80 border border-slate-700 rounded-lg p-2.5 text-sm text-slate-200 outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all placeholder-slate-600"
+                  placeholder="kullanici_adi"
+                  maxLength={20}
+                  minLength={3}
+                />
+                <p className="text-[10px] text-slate-500 mt-1">En az 3, en çok 20 karakter.</p>
+              </div>
+
+              {usernameError && (
+                <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-2 flex items-start gap-2 text-red-300/90 text-xs">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span>{usernameError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowUsernameModal(false)}
+                  className="flex-1 py-2 px-4 bg-slate-800 text-slate-400 text-xs font-bold rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors"
+                >
+                  Daha Sonra
+                </button>
+                <button
+                  onClick={handleSetUsername}
+                  disabled={usernameLoading || usernameInput.trim().length < 3}
+                  className="flex-1 py-2 px-4 bg-gradient-to-r from-cyan-700 to-blue-600 text-white text-xs font-bold rounded-lg hover:from-cyan-600 hover:to-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                >
+                  {usernameLoading ? (
+                    <span className="animate-pulse">Kontrol ediliyor...</span>
+                  ) : (
+                    <>
+                      <Check size={14} />
+                      Kaydet
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ItemModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSave={handleSaveItem}
@@ -831,14 +1043,14 @@ export default function App() {
         existingItem={getCurrentItem()}
       />
 
-      <GlobalSearchModal 
+      <GlobalSearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
         accounts={accounts}
         onNavigate={handleSearchResultNavigate}
       />
-      
-      <RecipeBookModal 
+
+      <RecipeBookModal
         isOpen={isRecipeBookOpen}
         onClose={() => setIsRecipeBookOpen(false)}
         characterName={activeChar.name}

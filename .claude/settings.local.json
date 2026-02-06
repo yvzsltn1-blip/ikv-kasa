@@ -6,7 +6,10 @@
       "Bash(npm run dev:*)",
       "Bash(timeout:*)",
       "Bash(find:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite build)",
+      "Bash(npx firebase deploy:*)"
     ]
   }
 }
