@@ -7,13 +7,12 @@ interface ContainerGridProps {
   container: Container;
   onSlotClick: (containerId: string, slotId: number) => void;
   onSlotHover: (item: ItemData | null, e: React.MouseEvent) => void;
-  onSlotLongPress?: (item: ItemData | null, x: number, y: number) => void;
   onMoveItem: (containerId: string, fromSlotId: number, toSlotId: number) => void;
   searchQuery: string;
   onNext?: () => void;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onSlotLongPress, onMoveItem, searchQuery, onNext }) => {
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext }) => {
   const gridStyle = {
     gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${container.rows}, minmax(56px, 1fr))`,
@@ -28,17 +27,15 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   const gridRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
-  const DRAG_THRESHOLD = 15; // px movement needed after long press to enter drag mode
+  const SCROLL_DETECT_MS = 400; // hold time to activate drag mode
+  const DRAG_START_THRESHOLD = 5; // px — movement to start showing drag visual after long press
   const touchInfo = useRef({
     startX: 0, startY: 0, slotId: -1, item: null as ItemData | null,
-    longPressDetected: false, hasMoved: false, dragConfirmed: false,
+    longPressDetected: false, dragConfirmed: false,
   });
 
   const clearTimer = () => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
   };
 
   // Non-passive touchmove on grid to allow preventDefault during drag
@@ -48,7 +45,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
 
     const handleMove = (e: TouchEvent) => {
       if (!touchInfo.current.longPressDetected) {
-        // Not yet long pressed — check if finger moved too much (= scrolling)
+        // Phase 1 (scroll detection): if finger moved too much, it's a scroll
         const touch = e.touches[0];
         const dx = Math.abs(touch.clientX - touchInfo.current.startX);
         const dy = Math.abs(touch.clientY - touchInfo.current.startY);
@@ -58,7 +55,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
         return;
       }
 
-      // Long press active — prevent scroll
+      // Long press active — prevent scroll, handle drag
       e.preventDefault();
       const touch = e.touches[0];
 
@@ -66,12 +63,13 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
         // Already in drag mode — update floating item position
         setDragVisual(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
       } else {
-        // Check if movement exceeds threshold to enter drag mode
         const dx = Math.abs(touch.clientX - touchInfo.current.startX);
         const dy = Math.abs(touch.clientY - touchInfo.current.startY);
-        if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+        const dist = Math.max(dx, dy);
+
+        // Movement > threshold → confirm drag, show visual
+        if (dist > DRAG_START_THRESHOLD) {
           touchInfo.current.dragConfirmed = true;
-          touchInfo.current.hasMoved = true;
           setDragVisual({
             sourceSlotId: touchInfo.current.slotId,
             item: touchInfo.current.item!,
@@ -94,14 +92,14 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     touchInfo.current = {
       startX: touch.clientX, startY: touch.clientY,
       slotId: slot.id, item: slot.item,
-      longPressDetected: false, hasMoved: false, dragConfirmed: false,
+      longPressDetected: false, dragConfirmed: false,
     };
 
+    // After 400ms hold without scroll → activate drag mode
     longPressTimer.current = setTimeout(() => {
       touchInfo.current.longPressDetected = true;
       try { navigator.vibrate?.(30); } catch {}
-      // Don't show drag visual yet — wait for finger movement to exceed threshold
-    }, 400);
+    }, SCROLL_DETECT_MS);
   };
 
   const resetTouchState = () => {
@@ -109,7 +107,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     setDragVisual(null);
     touchInfo.current = {
       startX: 0, startY: 0, slotId: -1, item: null,
-      longPressDetected: false, hasMoved: false, dragConfirmed: false,
+      longPressDetected: false, dragConfirmed: false,
     };
   };
 
@@ -130,12 +128,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
             onMoveItem(container.id, touchInfo.current.slotId, targetId);
           }
         }
-      } else {
-        // Long press without significant movement → show detail
-        if (touchInfo.current.item && onSlotLongPress) {
-          onSlotLongPress(touchInfo.current.item, touchInfo.current.startX, touchInfo.current.startY);
-        }
       }
+      // If lifted after long press without moving: nothing happens (just vibration feedback was given)
     }
 
     resetTouchState();

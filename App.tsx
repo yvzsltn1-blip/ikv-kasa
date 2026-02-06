@@ -3,6 +3,7 @@ import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo 
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
+import { ItemDetailModal } from './components/ItemDetailModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
@@ -73,6 +74,9 @@ export default function App() {
   const [activeSlot, setActiveSlot] = useState<{ containerId: string; slotId: number } | null>(null);
   // Tooltip State
   const [tooltip, setTooltip] = useState<{ item: ItemData; x: number; y: number } | null>(null);
+  // Detail Modal State (tap on item → detail view)
+  const [detailItem, setDetailItem] = useState<ItemData | null>(null);
+  const [detailSlot, setDetailSlot] = useState<{ containerId: string; slotId: number } | null>(null);
 
   // Toast & Unsaved Changes State
   const [toast, setToast] = useState<string | null>(null);
@@ -702,9 +706,36 @@ export default function App() {
   };
 
   const handleSlotClick = (containerId: string, slotId: number) => {
-    setActiveSlot({ containerId, slotId });
-    setModalOpen(true);
     setTooltip(null);
+
+    if (!activeChar) return;
+
+    // Find the container and check if slot has an item
+    let container: Container | undefined;
+    if (activeChar.bank1.id === containerId) container = activeChar.bank1;
+    else if (activeChar.bank2.id === containerId) container = activeChar.bank2;
+    else if (activeChar.bag.id === containerId) container = activeChar.bag;
+
+    const item = container?.slots[slotId]?.item;
+
+    if (item) {
+      // Show detail modal for existing items
+      setDetailItem(item);
+      setDetailSlot({ containerId, slotId });
+    } else {
+      // Open ItemModal for creating new item in empty slot
+      setActiveSlot({ containerId, slotId });
+      setModalOpen(true);
+    }
+  };
+
+  const handleEditFromDetail = () => {
+    if (detailSlot) {
+      setActiveSlot(detailSlot);
+      setModalOpen(true);
+    }
+    setDetailItem(null);
+    setDetailSlot(null);
   };
 
   const handleSlotHover = (item: ItemData | null, e: React.MouseEvent) => {
@@ -712,12 +743,6 @@ export default function App() {
       setTooltip({ item, x: e.clientX, y: e.clientY });
     } else {
       setTooltip(null);
-    }
-  };
-
-  const handleSlotLongPress = (item: ItemData | null, x: number, y: number) => {
-    if (item) {
-      setTooltip({ item, x, y });
     }
   };
 
@@ -1144,7 +1169,6 @@ export default function App() {
                             container={activeContainer}
                             onSlotClick={handleSlotClick}
                             onSlotHover={handleSlotHover}
-                            onSlotLongPress={handleSlotLongPress}
                             onMoveItem={handleMoveItem}
                             searchQuery={""}
                             onNext={handleNextView}
@@ -1157,7 +1181,6 @@ export default function App() {
                         container={activeContainer}
                         onSlotClick={handleSlotClick}
                         onSlotHover={handleSlotHover}
-                        onSlotLongPress={handleSlotLongPress}
                         onMoveItem={handleMoveItem}
                         searchQuery={""}
                         onNext={handleNextView}
@@ -1348,6 +1371,12 @@ export default function App() {
         </div>
       )}
 
+      <ItemDetailModal
+        item={detailItem}
+        onClose={() => { setDetailItem(null); setDetailSlot(null); }}
+        onEdit={handleEditFromDetail}
+      />
+
       <ItemModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -1420,49 +1449,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Mobile Tooltip (long press) - centered overlay */}
-      {tooltip && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center md:hidden"
-          onClick={() => setTooltip(null)}
-          onTouchEnd={() => setTooltip(null)}
-        >
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="relative bg-slate-900 border-2 border-yellow-500/50 rounded-xl p-4 text-sm shadow-[0_0_30px_rgba(0,0,0,0.9)] text-left w-72 mx-4 animate-in fade-in zoom-in duration-200">
-            <div className={`font-bold border-b border-slate-700 pb-2 mb-2 text-base ${tooltip.item.type === 'Recipe' ? 'text-yellow-300' : 'text-white'}`}>
-              {tooltip.item.category} {tooltip.item.type === 'Recipe' ? '(Reçete)' : ''}
-              {tooltip.item.count && tooltip.item.count > 1 && (
-                  <span className="float-right text-emerald-400">x{tooltip.item.count}</span>
-              )}
-            </div>
-
-            <div className={`${CLASS_COLORS[tooltip.item.heroClass]} font-bold mb-2 text-base`}>
-              Sınıf: {tooltip.item.heroClass}
-            </div>
-
-            {tooltip.item.weaponType && (
-               <div className="text-red-400 font-bold mb-2 border-b border-slate-700/50 pb-1">
-                  {tooltip.item.weaponType}
-               </div>
-            )}
-
-            <div className="text-gray-300 mb-2">
-              Cinsiyet: <span className="text-white font-bold">{tooltip.item.gender || 'Belirtilmedi'}</span>
-            </div>
-
-            <div className="text-green-400 mb-2">Seviye: {tooltip.item.level}</div>
-
-            {(tooltip.item.enchantment1 || tooltip.item.enchantment2) && (
-              <div className="bg-slate-800 p-2 rounded mt-2 border border-slate-700 space-y-1.5">
-                  {tooltip.item.enchantment1 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment1}</div>}
-                  {tooltip.item.enchantment2 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment2}</div>}
-              </div>
-            )}
-
-            <div className="text-center text-slate-500 text-xs mt-3">Kapatmak için dokun</div>
-          </div>
-        </div>
-      )}
 
     </div>
   );

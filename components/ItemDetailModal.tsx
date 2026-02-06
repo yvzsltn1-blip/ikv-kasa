@@ -1,0 +1,154 @@
+import React from 'react';
+import { ItemData } from '../types';
+import { CATEGORY_COLORS, CLASS_COLORS } from '../constants';
+import { X, Pencil, Scroll, Shield, Sword, Gem, Component, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe, Globe } from 'lucide-react';
+
+interface ItemDetailModalProps {
+  item: ItemData | null;
+  onClose: () => void;
+  onEdit: () => void;
+}
+
+const getCategoryIcon = (category: string) => {
+  switch (category) {
+    case 'Silah': return Sword;
+    case 'Ceket': return Shirt;
+    case 'Pantolon': return Columns;
+    case 'Eldiven': return Hand;
+    case 'Ayakkabı': return Footprints;
+    case 'Gözlük': return Glasses;
+    case 'Zırh': return Shield;
+    case 'Yüzük': return CircleDot;
+    case 'Kolye': return Lasso;
+    case 'Maden': return Pickaxe;
+    case 'İksir': return Beaker;
+    case 'Tılsım': return Sparkles;
+    default: return Component;
+  }
+};
+
+export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit }) => {
+  if (!item) return null;
+
+  const colorClass = CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
+  const CategoryIcon = getCategoryIcon(item.category);
+
+  const getGenderLabel = () => {
+    if (item.gender === 'Erkek') return { text: 'Erkek', color: 'text-blue-400' };
+    if (item.gender === 'Kadın') return { text: 'Kadın', color: 'text-pink-400' };
+    return { text: 'Tüm Cinsiyetler', color: 'text-gray-300' };
+  };
+  const gender = getGenderLabel();
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative bg-slate-900 border-2 border-yellow-500/50 rounded-xl shadow-[0_0_30px_rgba(0,0,0,0.9)] w-80 mx-4 animate-in fade-in zoom-in duration-200 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header with category color */}
+        <div className={`${colorClass} p-3 flex items-center gap-3 border-b-2`}>
+          <div className="bg-black/30 rounded-lg p-2">
+            {item.type === 'Recipe' ? (
+              <div className="relative">
+                <Scroll size={24} className="text-yellow-200" />
+                <div className="absolute -bottom-1 -right-1 bg-slate-800/90 rounded-full p-[2px] border border-slate-500">
+                  <CategoryIcon size={10} className="text-white" />
+                </div>
+              </div>
+            ) : (
+              <CategoryIcon size={24} className="text-white" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-white text-base">
+              {item.category}
+              {item.type === 'Recipe' && <span className="text-yellow-300 ml-1.5 text-sm">(Reçete)</span>}
+            </div>
+            {item.weaponType && (
+              <div className="text-red-300 text-xs font-semibold">{item.weaponType}</div>
+            )}
+          </div>
+          {item.count && item.count > 1 && (
+            <div className="bg-emerald-600 text-white text-sm font-bold px-2 py-0.5 rounded">
+              x{item.count}
+            </div>
+          )}
+          <button
+            onClick={onClose}
+            className="text-white/60 hover:text-white transition-colors ml-1"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-4 space-y-3">
+          {/* Class + Level row */}
+          <div className="flex items-center justify-between">
+            <div className={`${CLASS_COLORS[item.heroClass]} font-bold text-sm`}>
+              {item.heroClass}
+            </div>
+            <div className="bg-slate-800 text-green-400 text-sm font-bold px-3 py-1 rounded-full border border-slate-700">
+              Lv. {item.level}
+            </div>
+          </div>
+
+          {/* Gender */}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-400">Cinsiyet:</span>
+            <span className={`font-bold ${gender.color}`}>{gender.text}</span>
+          </div>
+
+          {/* Recipe status */}
+          {item.type === 'Recipe' && (
+            <div className={`text-xs font-bold px-2 py-1 rounded inline-block ${item.isRead ? 'bg-purple-900 border border-purple-600 text-purple-200' : 'bg-slate-800 border border-slate-600 text-slate-400'}`}>
+              {item.isRead ? 'Okunmuş' : 'Okunmamış'}
+            </div>
+          )}
+
+          {/* Enchantments */}
+          {(item.enchantment1 || item.enchantment2) && (
+            <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-1.5">
+              {item.category === 'Maden' ? (
+                <div className="text-orange-300 font-semibold text-sm">{item.enchantment1}</div>
+              ) : item.category === 'Tılsım' ? (
+                <>
+                  <div className="text-purple-300 font-semibold text-sm">{item.enchantment1}</div>
+                  {item.enchantment2 && <div className="text-purple-400 text-xs">Kademe: {item.enchantment2}</div>}
+                </>
+              ) : (
+                <>
+                  {item.enchantment1 && <div className="text-yellow-200 text-sm">• {item.enchantment1}</div>}
+                  {item.enchantment2 && <div className="text-yellow-200 text-sm">• {item.enchantment2}</div>}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Global visibility */}
+          {item.isGlobal && (
+            <div className="text-emerald-400 text-xs flex items-center gap-1">
+              <Globe size={12} className="inline" />
+              Globalde Görünür
+            </div>
+          )}
+        </div>
+
+        {/* Edit button */}
+        <div className="p-4 pt-0">
+          <button
+            onClick={onEdit}
+            className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors shadow-[0_0_10px_rgba(234,179,8,0.3)] border border-yellow-400"
+          >
+            <Pencil size={16} />
+            Düzenle
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
