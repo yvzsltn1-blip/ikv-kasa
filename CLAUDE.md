@@ -77,7 +77,8 @@ metadata/enchantments
 - **Arama detayları**: Sonuçlarda silah cinsi (weaponType) ve maden/iksir adedi gösterilir, weaponType ile aranabilir
 - **Kelime bazlı arama**: Arama metni boşlukla ayrılır, her kelime ayrı ayrı aranır (AND mantığı). Örn: "Alman Dış" → enchantment1'de "alman", enchantment2'de "dış" bulunur → eşleşir
 - **Global arama optimizasyonu**: Sorgu bazlı fetch (kategori filtresine göre `where`), `limit(20)`, 5 dakika client-side cache, Firebase ücretsiz kota içinde kalır
-- **Global set takip**: Tüm hesaplar/sunucular/karakterler genelinde set tamamlanma durumu. App.tsx'te `globalSetLookup` (Map) ve `globalSetMap` (Map) useMemo ile hesaplanır. Key format: `ench1|ench2|gender|heroClass`. GlobalSearchModal ve ItemModal'a prop olarak geçilir. Set rozeti tıklanınca SetDetailModal açılır (2x4 kompakt grid, kategori renkleri, seviye + konum bilgisi)
+- **Global set takip**: Tüm hesaplar/sunucular/karakterler genelinde set tamamlanma durumu. App.tsx'te `globalSetLookup` (Map) ve `globalSetMap` (Map) useMemo ile hesaplanır. Key format: `ench1|ench2|gender|heroClass`. GlobalSearchModal ve ItemModal'a prop olarak geçilir. Set rozeti tıklanınca SetDetailModal açılır (2x4 kompakt grid, kategori renkleri, seviye + konum bilgisi). Reçete item'ları "Reçete" badge'i + "Okunmuş"/"Okunmamış" durumu ile vurgulanır
+- **Mobil sürükle-bırak / detay ayrımı**: ContainerGrid.tsx'te 400ms long-press sonrası 15px `DRAG_THRESHOLD` ile ayrım yapılır. Eşik aşılmazsa detay penceresi açılır, aşılırsa sürükleme modu başlar (gölge item ancak eşik aşılınca görünür)
 - **Global efsun önerileri**: `metadata/enchantments` Firestore dokümanında tüm kullanıcıların girdiği efsun isimleri saklanır (arrayUnion). Login'de fetch edilir, `enchantmentSuggestions`'a merge edilir. ItemModal'da 2+ harf yazınca öneriler görünür. handleSaveItem'da yeni efsunlar otomatik eklenir
 
 ## Deployment
@@ -87,16 +88,17 @@ metadata/enchantments
 - Batch scriptler: `firebase-guncelle.bat`, `github-guncelle.bat`
 
 ## Son Güncelleme
-- **Tarih**: 2026-02-06
-- **Versiyon**: v4.4
-- **Son yapılanlar**: Global set takip (cross-account set tamamlanma + SetDetailModal), global efsun önerileri (metadata/enchantments koleksiyonu, tüm kullanıcılar arası paylaşım), SetDetailModal kompakt 2x4 grid tasarım
+- **Tarih**: 2026-02-07
+- **Versiyon**: v4.5
+- **Son yapılanlar**: Mobil sürükle-bırak / detay penceresi ayrımı iyileştirildi (15px drag threshold), SetDetailModal'da reçete badge'i ve okunmuş/okunmamış durumu eklendi
 
 > **NOT**: Büyük değişiklikler yapıldığında oturum sonunda "CLAUDE.md'yi güncelle" deyin.
 
 ## Sık Değiştirilen Yerler
 - **UI düzenlemeleri**: App.tsx (header bölümü ~satır 630-880)
 - **Item yönetimi**: App.tsx (handleMoveItem, updateSlot, handleSaveItem, handleReadRecipe, syncGlobalItem)
-- **Set takip**: App.tsx (globalSetLookup/globalSetMap useMemo), components/SetDetailModal.tsx
+- **Set takip**: App.tsx (globalSetLookup/globalSetMap useMemo), components/SetDetailModal.tsx (reçete badge, okunmuş/okunmamış durumu)
+- **Mobil touch davranışı**: components/ContainerGrid.tsx (DRAG_THRESHOLD, touchInfo ref, handleTouchStart/End/Move)
 - **Efsun önerileri**: App.tsx (enchantmentSuggestions useMemo, globalEnchantments state, handleSaveItem içinde arrayUnion)
 - **Arama**: components/GlobalSearchModal.tsx
 - **Yeni özellik tipi**: types.ts → interface güncelle, constants.ts → create fonksiyonlarını güncelle
