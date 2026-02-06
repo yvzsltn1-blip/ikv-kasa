@@ -491,10 +491,10 @@ export default function App() {
   const activeContainer = activeChar[currentView];
 
   return (
-    <div className="h-screen w-screen bg-[url('https://picsum.photos/1920/1080?grayscale&blur=2')] bg-cover bg-center flex items-center justify-center overflow-hidden">
+    <div className="min-h-screen w-screen bg-slate-950 md:bg-[url('https://picsum.photos/1920/1080?grayscale&blur=2')] md:bg-cover md:bg-center flex md:items-center md:justify-center md:h-screen md:overflow-hidden">
       
       {/* Değişiklik: h-[97vh] yerine h-[95dvh] ve max-h-[100dvh] ekledik */}
-<div className="w-[97vw] h-[97vh] md:w-[98vw] md:h-[98vh] bg-slate-900/95 border border-slate-700/60 md:border-2 md:border-slate-700 rounded-2xl md:rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative">
+<div className="w-full md:w-[98vw] min-h-screen md:min-h-0 md:h-[98vh] bg-slate-900/95 border-0 md:border-2 md:border-slate-700 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(0,0,0,0.9)] md:overflow-hidden flex flex-col relative">
         
         {/* === HEADER === */}
         <div className="flex flex-col border-b-2 border-slate-700 shrink-0">
@@ -690,11 +690,11 @@ export default function App() {
         </div>
 
         {/* Content Area */}
-        <div className="p-1 bg-slate-800/50 flex-1 overflow-visible flex flex-col h-auto">
-           <div className="flex-1 w-full h-full">
+        <div className="p-1 bg-slate-800/50 md:flex-1 flex flex-col md:min-h-0">
+           <div className="md:flex-1 w-full md:h-full">
               {currentView === 'bag' ? (
-                 <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                    <div className="w-full h-full max-w-[90%] max-h-[80%] bg-[#1a1510] p-1 rounded-xl border-4 border-[#3e3428] shadow-2xl relative flex flex-col">
+                 <div className="w-full md:h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
+                    <div className="w-full md:h-full max-w-[90%] md:max-h-[80%] bg-[#1a1510] p-1 rounded-xl border-4 border-[#3e3428] shadow-2xl relative flex flex-col">
                         <ContainerGrid 
                             container={activeContainer} 
                             onSlotClick={handleSlotClick} 
@@ -706,7 +706,7 @@ export default function App() {
                     </div>
                  </div>
               ) : (
-                  <div className="w-full h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="w-full md:h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
                      <ContainerGrid 
                         container={activeContainer} 
                         onSlotClick={handleSlotClick} 

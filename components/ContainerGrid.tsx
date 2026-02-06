@@ -59,7 +59,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   };
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col md:h-full w-full">
       {/* Container Header */}
       <div className="bg-slate-800 border-t-2 border-l-2 border-r-2 border-slate-600 p-1 px-2 flex justify-between items-center rounded-t-md select-none shrink-0">
         <div className="flex items-center gap-2">
@@ -82,9 +82,9 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
       </div>
 
       {/* Grid Area - Added flex-col and justify-center to center content if extra height */}
-      <div className="relative bg-slate-900 border-2 border-slate-600 p-0.5 md:p-1 rounded-b-md shadow-inner metal-pattern flex-1 flex flex-col justify-center min-h-0 overflow-auto">
+      <div className="relative bg-slate-900 border-2 border-slate-600 p-0.5 md:p-1 rounded-b-md shadow-inner metal-pattern md:flex-1 flex flex-col justify-center md:min-h-0 overflow-auto">
         {/* Added h-full to grid to force it to fill vertical space */}
-        <div className="grid gap-0.5 md:gap-1 w-full h-full" style={gridStyle}>
+        <div className="grid gap-0.5 md:gap-1 w-full md:h-full" style={gridStyle}>
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
             return (
