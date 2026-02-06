@@ -43,6 +43,18 @@ export default function App() {
   // Tooltip State
   const [tooltip, setTooltip] = useState<{ item: ItemData; x: number; y: number } | null>(null);
 
+  // Toast & Unsaved Changes State
+  const [toast, setToast] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(msg);
+    setHasUnsavedChanges(true);
+    toastTimer.current = setTimeout(() => setToast(null), 2000);
+  };
+
   // --- BAŞLANGIÇ: VERİLERİ BULUTTAN ÇEKME ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -109,7 +121,7 @@ export default function App() {
   // Varsayılan hesap oluşturucu (Yardımcı Fonksiyon)
   const initializeDefault = async (docRef: any) => {
     const newId = Math.random().toString(36).substr(2, 9);
-    const defaultAccount = createAccount(newId, 'Oyuncu 1');
+    const defaultAccount = createAccount(newId, 'Hesap 1');
     const initialAccounts = [defaultAccount];
     
     // Veritabanına kaydet
@@ -130,6 +142,7 @@ export default function App() {
     try {
         const userDocRef = doc(db, "users", user.uid);
         await setDoc(userDocRef, { accounts: accounts }, { merge: true });
+        setHasUnsavedChanges(false);
         alert("✅ Tüm veriler başarıyla buluta kaydedildi!");
     } catch (error) {
         console.error("Kayıt hatası:", error);
@@ -163,18 +176,17 @@ export default function App() {
   // --- Account Management ---
 
   const handleAddAccount = () => {
-    if (userRole !== 'admin') return;
     const newId = Math.random().toString(36).substr(2, 9);
-    const name = `Oyuncu ${accounts.length + 1}`;
+    const name = `Hesap ${accounts.length + 1}`;
     const newAccount = createAccount(newId, name);
     const newAccounts = [...accounts, newAccount];
     setAccounts(newAccounts);
     setSelectedAccountId(newId);
     setActiveCharIndex(0);
+    setHasUnsavedChanges(true);
   };
 
   const handleDeleteAccount = () => {
-    if (userRole !== 'admin') return;
     if (accounts.length <= 1) {
       alert("En az bir hesap kalmalıdır.");
       return;
@@ -185,7 +197,7 @@ export default function App() {
       setAccounts(newAccounts);
       setSelectedAccountId(newAccounts[0].id);
       setActiveCharIndex(0);
-      // Not: Otomatik save yapmıyoruz, kullanıcı kaydet butonuna basmalı veya buraya saveData() eklenebilir.
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -211,20 +223,22 @@ export default function App() {
   // --- Name Update Handlers (Commit) ---
 
   const commitAccountName = () => {
-    const newAccounts = accounts.map(acc => 
+    const newAccounts = accounts.map(acc =>
       acc.id === selectedAccountId ? { ...acc, name: tempAccountName } : acc
     );
     updateAccountsState(newAccounts);
+    setHasUnsavedChanges(true);
   };
 
   const commitCharacterName = () => {
     if (!activeAccount) return;
     const newChars = [...activeAccount.characters];
     newChars[activeCharIndex] = { ...newChars[activeCharIndex], name: tempCharName };
-    const newAccounts = accounts.map(acc => 
+    const newAccounts = accounts.map(acc =>
         acc.id === selectedAccountId ? { ...acc, characters: newChars } : acc
     );
     updateAccountsState(newAccounts);
+    setHasUnsavedChanges(true);
   };
 
 
@@ -323,6 +337,7 @@ export default function App() {
 
       return { ...acc, characters: newChars };
     }));
+    setHasUnsavedChanges(true);
   };
 
   const updateSlot = (containerId: string, slotId: number, item: ItemData | null) => {
@@ -379,6 +394,7 @@ export default function App() {
         newChars[activeCharIndex] = targetChar;
         return { ...acc, characters: newChars };
       }));
+      setHasUnsavedChanges(true);
   };
 
   const handleUnlearnRecipe = (recipeId: string) => {
@@ -390,6 +406,7 @@ export default function App() {
         newChars[activeCharIndex] = targetChar;
         return { ...acc, characters: newChars };
     }));
+    setHasUnsavedChanges(true);
   };
 
   const handleSlotClick = (containerId: string, slotId: number) => {
@@ -403,6 +420,12 @@ export default function App() {
       setTooltip({ item, x: e.clientX, y: e.clientY });
     } else {
       setTooltip(null);
+    }
+  };
+
+  const handleSlotLongPress = (item: ItemData | null, x: number, y: number) => {
+    if (item) {
+      setTooltip({ item, x, y });
     }
   };
 
@@ -442,12 +465,14 @@ export default function App() {
     } else {
         updateSlot(activeSlot.containerId, activeSlot.slotId, item);
     }
+    showToast('Kaydetmek için disket butonuna basmayı unutmayın!');
   };
 
   const handleDeleteItem = () => {
     if (activeSlot) {
       updateSlot(activeSlot.containerId, activeSlot.slotId, null);
       setModalOpen(false);
+      setHasUnsavedChanges(true);
     }
   };
 
@@ -514,7 +539,7 @@ export default function App() {
                   placeholder="Hesap İsmi"
                 />
               </div>
-              {userRole === 'user' && <span className="text-[9px] text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded-full px-2.5 py-0.5 shrink-0 tracking-wide">Gözlemci</span>}
+              {userRole === 'user' && <span className="text-[9px] text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded-full px-2.5 py-0.5 shrink-0 tracking-wide">Kullanıcı</span>}
             </div>
 
             <div className="px-3 pb-2 flex items-center justify-between gap-2">
@@ -535,20 +560,23 @@ export default function App() {
                   </select>
                   <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
                 </div>
-                {userRole === 'admin' && (
-                  <>
-                    <button onClick={handleAddAccount} className="p-1.5 text-green-500 active:text-green-400 rounded-lg active:bg-green-900/30" title="Hesap Ekle"><Plus size={16} /></button>
-                    {accounts.length > 1 && (
-                      <button onClick={handleDeleteAccount} className="p-1.5 text-red-800 active:text-red-500 rounded-lg active:bg-red-900/30" title="Hesap Sil"><Trash2 size={16} /></button>
-                    )}
-                  </>
+                <button onClick={handleAddAccount} className="p-1.5 text-green-500 active:text-green-400 rounded-lg active:bg-green-900/30" title="Hesap Ekle"><Plus size={16} /></button>
+                {accounts.length > 1 && (
+                  <button onClick={handleDeleteAccount} className="p-1.5 text-red-800 active:text-red-500 rounded-lg active:bg-red-900/30" title="Hesap Sil"><Trash2 size={16} /></button>
                 )}
               </div>
 
               <div className="flex items-center bg-slate-900/40 rounded-xl p-1 border border-slate-700/30 gap-0.5">
                 <button onClick={() => setIsSearchOpen(true)} className="p-2 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={16} /></button>
                 <button onClick={handleExportExcel} className="p-2 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={16} /></button>
-                <button onClick={saveData} className="p-2 text-blue-400 active:bg-blue-600/20 rounded-lg transition-colors"><Save size={16} /></button>
+                <div className="relative">
+                  <button onClick={saveData} className={`p-2 rounded-lg transition-colors ${hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 animate-pulse ring-2 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20'}`}><Save size={16} /></button>
+                  {hasUnsavedChanges && (
+                    <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap shadow-lg animate-bounce">
+                      Kaydet!
+                    </div>
+                  )}
+                </div>
                 <div className="w-px h-5 bg-slate-600/40 mx-0.5"></div>
                 <button onClick={handleLogout} className="p-2 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={16} /></button>
               </div>
@@ -556,26 +584,26 @@ export default function App() {
           </div>
 
           {/* DESKTOP TOP BAR */}
-          <div className="hidden md:flex bg-slate-800 p-1 justify-between items-center gap-2">
-            <div className="flex items-center gap-2">
-               <div className="bg-slate-700 p-1 rounded border border-slate-600 shadow-inner">
-                 <Shield size={16} className="text-yellow-600" />
+          <div className="hidden md:flex bg-gradient-to-r from-slate-800 via-slate-800/95 to-slate-800 px-4 py-2 justify-between items-center gap-4 border-b border-slate-700/50">
+            {/* Left: Logo + Account */}
+            <div className="flex items-center gap-3">
+               <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-700/10 p-2 rounded-lg border border-yellow-500/30 shadow-lg shadow-yellow-900/20">
+                 <Shield size={20} className="text-yellow-500" />
                </div>
 
-               <div className="flex flex-col">
-                  <div className="relative group flex items-center gap-1 mb-1">
+               <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
                     <input
                       value={tempAccountName}
                       onChange={(e) => setTempAccountName(e.target.value)}
-                      className="bg-transparent text-yellow-500 font-bold text-lg outline-none w-40 placeholder-slate-600 focus:border-b focus:border-yellow-600 transition-all"
-                      placeholder="Hesap İsmi"
+                      onBlur={commitAccountName}
+                      className="bg-transparent text-yellow-400 font-bold text-base outline-none w-36 placeholder-slate-600 border-b border-transparent focus:border-yellow-600/50 transition-all"
+                      placeholder="Hesap Adı"
                     />
-                    <button onClick={commitAccountName} className="p-1 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"><Save size={12} /></button>
-                    {userRole === 'user' && <span className="text-[10px] text-slate-500 ml-2 border border-slate-600 rounded px-1">Gözlemci Modu</span>}
+                    {userRole === 'user' && <span className="text-[9px] text-amber-400/70 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider uppercase">Kullanıcı</span>}
                   </div>
 
-                  <div className="flex items-center gap-2">
-                     <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">HESAP:</span>
+                  <div className="flex items-center gap-1.5">
                      <div className="relative">
                         <select
                           value={selectedAccountId}
@@ -584,80 +612,76 @@ export default function App() {
                             setActiveCharIndex(0);
                             setCurrentViewIndex(0);
                           }}
-                          className="appearance-none bg-slate-900/50 hover:bg-slate-700 text-slate-300 text-[10px] py-0.5 pl-1 pr-3 rounded border border-slate-600 focus:outline-none cursor-pointer"
+                          className="appearance-none bg-slate-900/60 hover:bg-slate-700 text-slate-300 text-[11px] py-1 pl-2.5 pr-6 rounded-md border border-slate-600/50 focus:outline-none focus:border-yellow-600/50 cursor-pointer transition-colors"
                         >
                           {accounts.map(acc => (
                             <option key={acc.id} value={acc.id}>{acc.name}</option>
                           ))}
                         </select>
-                        <ChevronDown size={8} className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
+                        <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
                      </div>
-
-                     {userRole === 'admin' && (
-                        <>
-                           <button onClick={handleAddAccount} className="text-green-500 hover:text-green-400"><Plus size={12} /></button>
-                           {accounts.length > 1 && (
-                            <button onClick={handleDeleteAccount} className="text-red-800 hover:text-red-500"><Trash2 size={12} /></button>
-                           )}
-                        </>
+                     <button onClick={handleAddAccount} className="p-1 text-green-500/70 hover:text-green-400 hover:bg-green-900/20 rounded transition-colors" title="Hesap Ekle"><Plus size={14} /></button>
+                     {accounts.length > 1 && (
+                       <button onClick={handleDeleteAccount} className="p-1 text-red-800/70 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors" title="Hesap Sil"><Trash2 size={14} /></button>
                      )}
                   </div>
                </div>
             </div>
 
-            <div className="flex items-center gap-1">
-              <button onClick={() => setIsSearchOpen(true)} className="flex items-center gap-1 px-3 py-1 bg-slate-700 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[10px] font-bold rounded border border-yellow-500/30 transition-colors"><Search size={12} /><span>Ara</span></button>
-              <button onClick={handleExportExcel} className="flex items-center gap-1 px-2 py-1 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 text-[10px] font-bold rounded border border-emerald-800/50"><FileSpreadsheet size={12} /><span>Excel</span></button>
-              <button onClick={saveData} className="flex items-center gap-1 px-3 py-1 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 text-[10px] font-bold rounded border border-blue-800/50"><Save size={12} /><span>Kaydet</span></button>
-              <button onClick={handleLogout} className="flex items-center gap-1 px-2 py-1 bg-red-900/20 hover:bg-red-900/60 text-red-300 text-[10px] font-bold rounded border border-red-900/50 ml-2"><LogOut size={12} /></button>
+            {/* Right: Action Buttons */}
+            <div className="flex items-center gap-1.5">
+              <button onClick={() => setIsSearchOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all"><Search size={13} /><span>Ara</span></button>
+              <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all"><FileSpreadsheet size={13} /><span>Excel</span></button>
+              <button onClick={saveData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500'}`}><Save size={13} /><span>Kaydet</span></button>
+              <div className="w-px h-6 bg-slate-600/30 mx-1"></div>
+              <button onClick={handleLogout} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-md border border-transparent hover:border-red-800/30 transition-all" title="Çıkış"><LogOut size={14} /></button>
             </div>
           </div>
 
           {/* Bottom Bar: Characters */}
-          <div className="bg-slate-800 px-1 flex justify-between items-end gap-1">
-             <div className="flex gap-0.5 overflow-x-auto w-full no-scrollbar">
+          <div className="bg-gradient-to-b from-slate-800/80 to-slate-800/40 px-2 flex justify-between items-end gap-2">
+             <div className="flex gap-1 overflow-x-auto w-full no-scrollbar py-0.5">
                 {activeAccount.characters.map((char, idx) => (
                   <button
                     key={char.id}
                     onClick={() => { setActiveCharIndex(idx); setCurrentViewIndex(0); }}
                     className={`
-                      px-3 md:px-3 py-2 md:py-1 rounded-t-lg font-bold text-[11px] md:text-xs tracking-wide transition-all border-t border-x whitespace-nowrap flex items-center gap-1 flex-1 justify-center
-                      ${activeCharIndex === idx 
-                        ? 'bg-slate-900/50 border-slate-600 text-white translate-y-[1px] border-b-0' 
-                        : 'bg-slate-900/20 border-transparent text-slate-500 hover:bg-slate-700 hover:text-slate-300'
+                      px-3 md:px-4 py-2 md:py-1.5 rounded-t-lg font-bold text-[11px] md:text-xs tracking-wide transition-all whitespace-nowrap flex items-center gap-1.5 flex-1 justify-center
+                      ${activeCharIndex === idx
+                        ? 'bg-slate-900/80 text-white shadow-inner border-t-2 border-x border-yellow-500/40 border-x-slate-600/50'
+                        : 'bg-slate-900/20 text-slate-500 hover:bg-slate-800/60 hover:text-slate-300 border-t-2 border-x border-transparent'
                       }
                     `}
                   >
-                    <User size={10} className={activeCharIndex === idx ? 'text-yellow-500' : 'opacity-50'} />
+                    <User size={11} className={activeCharIndex === idx ? 'text-yellow-500' : 'opacity-40'} />
                     {char.name}
                   </button>
                 ))}
              </div>
 
-             <div className="hidden md:flex items-center gap-2 bg-black/20 px-2 py-1 rounded-t-md border-t border-x border-slate-700/50">
-                <button 
+             <div className="hidden md:flex items-center gap-2 bg-slate-900/40 px-3 py-1.5 rounded-t-lg border-t border-x border-slate-700/30 shrink-0">
+                <button
                   onClick={() => setIsRecipeBookOpen(true)}
-                  className="p-1 mr-1 text-purple-400 hover:text-purple-200 hover:bg-purple-900/30 rounded transition-colors relative group"
+                  className="p-1 text-purple-400 hover:text-purple-300 hover:bg-purple-900/30 rounded-md transition-colors relative"
                   title="Reçete Kitabı"
                 >
                     <Book size={14} />
                     {activeChar.learnedRecipes?.length > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-[8px] rounded-full w-3 h-3 flex items-center justify-center">
+                        <span className="absolute -top-1.5 -right-1.5 bg-purple-500 text-white text-[7px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold shadow-sm">
                             {activeChar.learnedRecipes.length}
                         </span>
                     )}
                 </button>
 
-                <div className="w-[1px] h-4 bg-slate-700 mx-1"></div>
+                <div className="w-px h-4 bg-slate-700/50"></div>
 
-                <span className="text-[9px] text-slate-500 uppercase font-bold">AKTİF:</span>
-                <input 
+                <input
                    value={tempCharName}
                    onChange={(e) => setTempCharName(e.target.value)}
-                   className="bg-transparent text-blue-300 font-bold text-xs outline-none w-20 border-b border-transparent focus:border-blue-500 placeholder-slate-600"
-                   placeholder="Karakter İsmi"
+                   onBlur={commitCharacterName}
+                   className="bg-transparent text-blue-300 font-bold text-xs outline-none w-24 border-b border-transparent focus:border-blue-500/50 placeholder-slate-600 transition-colors"
+                   placeholder="Karakter Adı"
                 />
-                 <button onClick={commitCharacterName} className="p-0.5 bg-slate-700 hover:bg-green-600 text-slate-300 hover:text-white rounded border border-slate-600 transition-colors"><Save size={10} /></button>
              </div>
           </div>
 
@@ -695,10 +719,11 @@ export default function App() {
               {currentView === 'bag' ? (
                  <div className="w-full md:h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
                     <div className="w-full md:h-full max-w-[90%] md:max-h-[80%] bg-[#1a1510] p-1 rounded-xl border-4 border-[#3e3428] shadow-2xl relative flex flex-col">
-                        <ContainerGrid 
-                            container={activeContainer} 
-                            onSlotClick={handleSlotClick} 
+                        <ContainerGrid
+                            container={activeContainer}
+                            onSlotClick={handleSlotClick}
                             onSlotHover={handleSlotHover}
+                            onSlotLongPress={handleSlotLongPress}
                             onMoveItem={handleMoveItem}
                             searchQuery={""}
                             onNext={handleNextView}
@@ -707,10 +732,11 @@ export default function App() {
                  </div>
               ) : (
                   <div className="w-full md:h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
-                     <ContainerGrid 
-                        container={activeContainer} 
-                        onSlotClick={handleSlotClick} 
+                     <ContainerGrid
+                        container={activeContainer}
+                        onSlotClick={handleSlotClick}
                         onSlotHover={handleSlotHover}
+                        onSlotLongPress={handleSlotLongPress}
                         onMoveItem={handleMoveItem}
                         searchQuery={""}
                         onNext={handleNextView}
@@ -720,9 +746,19 @@ export default function App() {
            </div>
         </div>
 
+        {/* Save Reminder Toast */}
+        {toast && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="bg-yellow-600 text-black text-xs md:text-sm font-bold px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 whitespace-nowrap">
+              <Save size={14} />
+              {toast}
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="bg-slate-900 p-0.5 flex justify-between items-center text-[8px] md:text-[9px] text-slate-600 border-t border-slate-700 shrink-0">
-           <span className="w-full text-center">IKV KASA YÖNETİM SİSTEMİ v3.0 • {activeChar.name} • {userRole?.toUpperCase()} MODU • {userRole === 'admin' ? 'Yönetici' : 'İzleyici'}</span>
+           <span className="w-full text-center">IKV KASA YÖNETİM SİSTEMİ v3.0 • {activeChar.name} • {userRole?.toUpperCase()} MODU • {userRole === 'admin' ? 'Yönetici' : 'Kullanıcı'}</span>
         </div>
       </div>
 
@@ -750,12 +786,13 @@ export default function App() {
         onUnlearn={handleUnlearnRecipe}
       />
 
+      {/* Desktop Tooltip (mouse hover) */}
       {tooltip && (
-        <div 
-          className="fixed z-50 pointer-events-none"
-          style={{ 
-            top: tooltip.y + 15, 
-            left: Math.min(tooltip.x + 15, window.innerWidth - 220) 
+        <div
+          className="fixed z-50 pointer-events-none hidden md:block"
+          style={{
+            top: tooltip.y + 15,
+            left: Math.min(tooltip.x + 15, window.innerWidth - 220)
           }}
         >
           <div className="bg-slate-900 border-2 border-slate-500 rounded p-2 text-xs shadow-[0_0_15px_rgba(0,0,0,0.8)] text-left w-52">
@@ -765,11 +802,11 @@ export default function App() {
                   <span className="float-right text-emerald-400">x{tooltip.item.count}</span>
               )}
             </div>
-            
+
             <div className={`${CLASS_COLORS[tooltip.item.heroClass]} font-bold mb-1`}>
               Sınıf: {tooltip.item.heroClass}
             </div>
-            
+
             {tooltip.item.weaponType && (
                <div className="text-red-400 font-bold mb-1 border-b border-slate-700/50 pb-0.5">
                   {tooltip.item.weaponType}
@@ -781,13 +818,57 @@ export default function App() {
             </div>
 
             <div className="text-green-400 mb-1">Seviye: {tooltip.item.level}</div>
-            
+
             {(tooltip.item.enchantment1 || tooltip.item.enchantment2) && (
               <div className="bg-slate-800 p-1.5 rounded mt-1 border border-slate-700 space-y-1">
                   {tooltip.item.enchantment1 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment1}</div>}
                   {tooltip.item.enchantment2 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment2}</div>}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Tooltip (long press) - centered overlay */}
+      {tooltip && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center md:hidden"
+          onClick={() => setTooltip(null)}
+          onTouchEnd={() => setTooltip(null)}
+        >
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative bg-slate-900 border-2 border-yellow-500/50 rounded-xl p-4 text-sm shadow-[0_0_30px_rgba(0,0,0,0.9)] text-left w-72 mx-4 animate-in fade-in zoom-in duration-200">
+            <div className={`font-bold border-b border-slate-700 pb-2 mb-2 text-base ${tooltip.item.type === 'Recipe' ? 'text-yellow-300' : 'text-white'}`}>
+              {tooltip.item.category} {tooltip.item.type === 'Recipe' ? '(Reçete)' : ''}
+              {tooltip.item.count && tooltip.item.count > 1 && (
+                  <span className="float-right text-emerald-400">x{tooltip.item.count}</span>
+              )}
+            </div>
+
+            <div className={`${CLASS_COLORS[tooltip.item.heroClass]} font-bold mb-2 text-base`}>
+              Sınıf: {tooltip.item.heroClass}
+            </div>
+
+            {tooltip.item.weaponType && (
+               <div className="text-red-400 font-bold mb-2 border-b border-slate-700/50 pb-1">
+                  {tooltip.item.weaponType}
+               </div>
+            )}
+
+            <div className="text-gray-300 mb-2">
+              Cinsiyet: <span className="text-white font-bold">{tooltip.item.gender || 'Belirtilmedi'}</span>
+            </div>
+
+            <div className="text-green-400 mb-2">Seviye: {tooltip.item.level}</div>
+
+            {(tooltip.item.enchantment1 || tooltip.item.enchantment2) && (
+              <div className="bg-slate-800 p-2 rounded mt-2 border border-slate-700 space-y-1.5">
+                  {tooltip.item.enchantment1 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment1}</div>}
+                  {tooltip.item.enchantment2 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment2}</div>}
+              </div>
+            )}
+
+            <div className="text-center text-slate-500 text-xs mt-3">Kapatmak için dokun</div>
           </div>
         </div>
       )}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Container, SlotData, ItemData } from '../types';
 import { SlotItem } from './SlotItem';
 import { ArrowRight } from 'lucide-react';
@@ -7,18 +7,138 @@ interface ContainerGridProps {
   container: Container;
   onSlotClick: (containerId: string, slotId: number) => void;
   onSlotHover: (item: ItemData | null, e: React.MouseEvent) => void;
-  onMoveItem: (containerId: string, fromSlotId: number, toSlotId: number) => void; // New prop for DnD
+  onSlotLongPress?: (item: ItemData | null, x: number, y: number) => void;
+  onMoveItem: (containerId: string, fromSlotId: number, toSlotId: number) => void;
   searchQuery: string;
   onNext?: () => void;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext }) => {
-  // Determine grid template based on rows/cols
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onSlotLongPress, onMoveItem, searchQuery, onNext }) => {
   const gridStyle = {
     gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
-    // Değişiklik: minmax(0, 1fr) yerine minmax(40px, 1fr) yaptık.
-    // Böylece mobilde kutular çok ezilmez, aşağı doğru uzar ve scroll açılır.
     gridTemplateRows: `repeat(${container.rows}, minmax(56px, 1fr))`,
+  };
+
+  // Touch drag visual state (for floating item indicator)
+  const [dragVisual, setDragVisual] = useState<{
+    x: number; y: number; item: ItemData; sourceSlotId: number;
+  } | null>(null);
+
+  // Refs
+  const gridRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPress = useRef(false);
+  const touchInfo = useRef({
+    startX: 0, startY: 0, slotId: -1, item: null as ItemData | null,
+    longPressDetected: false, hasMoved: false,
+  });
+
+  const clearTimer = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  // Non-passive touchmove on grid to allow preventDefault during drag
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+
+    const handleMove = (e: TouchEvent) => {
+      if (!touchInfo.current.longPressDetected) {
+        // Not yet long pressed — check if finger moved too much (= scrolling)
+        const touch = e.touches[0];
+        const dx = Math.abs(touch.clientX - touchInfo.current.startX);
+        const dy = Math.abs(touch.clientY - touchInfo.current.startY);
+        if (dx > 10 || dy > 10) {
+          clearTimer();
+        }
+        return;
+      }
+
+      // Long press active — dragging mode
+      e.preventDefault(); // prevent page scroll while dragging
+      touchInfo.current.hasMoved = true;
+      const touch = e.touches[0];
+      setDragVisual(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+    };
+
+    el.addEventListener('touchmove', handleMove, { passive: false });
+    return () => el.removeEventListener('touchmove', handleMove);
+  }, []);
+
+  const handleTouchStart = (slot: SlotData, e: React.TouchEvent) => {
+    if (!slot.item) return;
+    isLongPress.current = false;
+    const touch = e.touches[0];
+
+    touchInfo.current = {
+      startX: touch.clientX, startY: touch.clientY,
+      slotId: slot.id, item: slot.item,
+      longPressDetected: false, hasMoved: false,
+    };
+
+    longPressTimer.current = setTimeout(() => {
+      touchInfo.current.longPressDetected = true;
+      try { navigator.vibrate?.(30); } catch {}
+      // Show "picked up" state
+      setDragVisual({
+        sourceSlotId: slot.id,
+        item: slot.item!,
+        x: touchInfo.current.startX,
+        y: touchInfo.current.startY,
+      });
+    }, 400);
+  };
+
+  const resetTouchState = () => {
+    clearTimer();
+    setDragVisual(null);
+    touchInfo.current = {
+      startX: 0, startY: 0, slotId: -1, item: null,
+      longPressDetected: false, hasMoved: false,
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    clearTimer();
+
+    if (touchInfo.current.longPressDetected) {
+      isLongPress.current = true; // prevent the following click
+
+      if (touchInfo.current.hasMoved) {
+        // Finger moved after long press → find drop target
+        const touch = e.changedTouches[0];
+        const el = document.elementFromPoint(touch.clientX, touch.clientY);
+        const slotEl = el?.closest('[data-slot-id]') as HTMLElement | null;
+        if (slotEl && touchInfo.current.slotId >= 0) {
+          const targetId = parseInt(slotEl.dataset.slotId || '', 10);
+          if (!isNaN(targetId) && targetId !== touchInfo.current.slotId) {
+            onMoveItem(container.id, touchInfo.current.slotId, targetId);
+          }
+        }
+      } else {
+        // Held still → show tooltip
+        if (touchInfo.current.item && onSlotLongPress) {
+          onSlotLongPress(touchInfo.current.item, touchInfo.current.startX, touchInfo.current.startY);
+        }
+      }
+    }
+
+    resetTouchState();
+  };
+
+  const handleTouchCancel = () => {
+    resetTouchState();
+  };
+
+  const handleSlotClick = (containerId: string, slotId: number) => {
+    if (isLongPress.current) {
+      isLongPress.current = false;
+      return;
+    }
+    onSlotClick(containerId, slotId);
   };
 
   const isMatchingSearch = (slot: SlotData) => {
@@ -31,16 +151,13 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     );
   };
 
-  // --- Drag and Drop Handlers ---
+  // --- Desktop Drag and Drop ---
   const handleDragStart = (e: React.DragEvent, slotId: number) => {
-    // Only allow dragging if there is an item
     e.dataTransfer.setData("text/plain", slotId.toString());
     e.dataTransfer.effectAllowed = "move";
-    // Optional: Set a drag image or style
   };
 
   const handleDragOver = (e: React.DragEvent) => {
-    // Prevent default to allow drop
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
@@ -49,12 +166,9 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     e.preventDefault();
     const sourceSlotIdStr = e.dataTransfer.getData("text/plain");
     if (!sourceSlotIdStr) return;
-
     const sourceSlotId = parseInt(sourceSlotIdStr, 10);
-    
-    // Check if valid number and not dropping on itself
     if (!isNaN(sourceSlotId) && sourceSlotId !== targetSlotId) {
-        onMoveItem(container.id, sourceSlotId, targetSlotId);
+      onMoveItem(container.id, sourceSlotId, targetSlotId);
     }
   };
 
@@ -63,45 +177,52 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
       {/* Container Header */}
       <div className="bg-slate-800 border-t-2 border-l-2 border-r-2 border-slate-600 p-1 px-2 flex justify-between items-center rounded-t-md select-none shrink-0">
         <div className="flex items-center gap-2">
-            <span className="text-xs md:text-sm font-bold text-yellow-500 ml-1 md:ml-2 uppercase tracking-wide">{container.name}</span>
-            <div className="text-[10px] text-slate-500 bg-black/30 px-2 py-0.5 rounded-full">
-                {container.slots.filter(s => s.item).length} / {container.slots.length}
-            </div>
+          <span className="text-xs md:text-sm font-bold text-yellow-500 ml-1 md:ml-2 uppercase tracking-wide">{container.name}</span>
+          <div className="text-[10px] text-slate-500 bg-black/30 px-2 py-0.5 rounded-full">
+            {container.slots.filter(s => s.item).length} / {container.slots.length}
+          </div>
         </div>
-        
+
         {onNext && (
-            <button 
-                onClick={onNext}
-                className="group flex items-center gap-1 text-slate-400 hover:text-white bg-slate-700 hover:bg-blue-600 px-3 py-1 rounded transition-all text-xs font-bold"
-                title="Sonraki Depo"
-            >
-                <span>SONRAKİ</span>
-                <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-            </button>
+          <button
+            onClick={onNext}
+            className="group flex items-center gap-1 text-slate-400 hover:text-white bg-slate-700 hover:bg-blue-600 px-3 py-1 rounded transition-all text-xs font-bold"
+            title="Sonraki Depo"
+          >
+            <span>SONRAKİ</span>
+            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+          </button>
         )}
       </div>
 
-      {/* Grid Area - Added flex-col and justify-center to center content if extra height */}
-      <div className="relative bg-slate-900 border-2 border-slate-600 p-0.5 md:p-1 rounded-b-md shadow-inner metal-pattern md:flex-1 flex flex-col justify-center md:min-h-0 overflow-auto">
-        {/* Added h-full to grid to force it to fill vertical space */}
+      {/* Grid Area */}
+      <div
+        ref={gridRef}
+        className="relative bg-slate-900 border-2 border-slate-600 p-0.5 md:p-1 rounded-b-md shadow-inner metal-pattern md:flex-1 flex flex-col justify-center md:min-h-0 overflow-auto"
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
+      >
         <div className="grid gap-0.5 md:gap-1 w-full md:h-full" style={gridStyle}>
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
+            const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
             return (
               <div
                 key={slot.id}
-                draggable={!!slot.item} // Only draggable if item exists
+                data-slot-id={slot.id}
+                draggable={!!slot.item}
                 onDragStart={(e) => slot.item && handleDragStart(e, slot.id)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, slot.id)}
-                onClick={() => onSlotClick(container.id, slot.id)}
+                onClick={() => handleSlotClick(container.id, slot.id)}
                 onMouseEnter={(e) => onSlotHover(slot.item, e)}
                 onMouseLeave={(e) => onSlotHover(null, e)}
-                // Removed fixed aspect ratio (aspect-[2.2/1]) to allow slots to stretch vertically
+                onTouchStart={(e) => handleTouchStart(slot, e)}
                 className={`
-                    relative bg-black/40 border border-slate-700/50 
-                    transition-colors group
-                    ${slot.item ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800' : 'hover:bg-slate-800/50'}
+                  relative bg-black/40 border border-slate-700/50
+                  transition-colors group
+                  ${slot.item ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800' : 'hover:bg-slate-800/50'}
+                  ${isBeingDragged ? 'opacity-30 border-yellow-500 border-2' : ''}
                 `}
               >
                 {slot.item && <SlotItem item={slot.item} highlight={highlight} />}
@@ -109,6 +230,23 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
             );
           })}
         </div>
+
+        {/* Floating drag indicator (mobile) */}
+        {dragVisual && (
+          <div
+            className="fixed z-[100] pointer-events-none"
+            style={{
+              left: dragVisual.x - 30,
+              top: dragVisual.y - 50,
+              width: 60,
+              height: 50,
+            }}
+          >
+            <div className="w-full h-full border-2 border-yellow-400 rounded-lg shadow-[0_0_20px_rgba(234,179,8,0.5)] bg-slate-900/90">
+              <SlotItem item={dragVisual.item} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

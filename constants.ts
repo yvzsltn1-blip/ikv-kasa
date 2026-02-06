@@ -11,6 +11,13 @@ export const CLASS_COLORS: Record<HeroClass, string> = {
   'Tüm Sınıflar': 'text-gray-200'
 };
 
+export const CLASS_STRIP_COLORS: Record<HeroClass, string> = {
+  'Savaşçı': 'bg-red-500',
+  'Şifacı': 'bg-green-500',
+  'Büyücü': 'bg-blue-500',
+  'Tüm Sınıflar': 'bg-gray-400'
+};
+
 export const CATEGORY_COLORS: Record<string, string> = {
   'Silah': 'bg-red-900 border-red-700',
   'Ceket': 'bg-blue-900 border-blue-700',
