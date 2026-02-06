@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ItemData } from '../types';
-import { X, Search, Trash2, Scroll } from 'lucide-react';
+import { X, Search, Trash2, Scroll, Pencil } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS } from '../constants';
 
 interface RecipeBookModalProps {
@@ -9,9 +9,10 @@ interface RecipeBookModalProps {
   characterName: string;
   recipes: ItemData[];
   onUnlearn: (recipeId: string) => void;
+  onEdit: (recipe: ItemData) => void;
 }
 
-export const RecipeBookModal: React.FC<RecipeBookModalProps> = ({ isOpen, onClose, characterName, recipes, onUnlearn }) => {
+export const RecipeBookModal: React.FC<RecipeBookModalProps> = ({ isOpen, onClose, characterName, recipes, onUnlearn, onEdit }) => {
   const [search, setSearch] = useState('');
 
   if (!isOpen) return null;
@@ -96,17 +97,26 @@ export const RecipeBookModal: React.FC<RecipeBookModalProps> = ({ isOpen, onClos
                             {/* Right: Actions */}
                             <div className="flex flex-col items-end gap-1">
                                 <span className="text-[10px] font-mono text-[#5e5044]">{recipe.gender}</span>
-                                <button 
-                                    onClick={() => {
-                                        if(window.confirm('Bu reçeteyi unutmak (silmek) istediğinize emin misiniz?')) {
-                                            onUnlearn(recipe.id);
-                                        }
-                                    }}
-                                    className="p-1.5 text-red-900/40 hover:text-red-500 hover:bg-red-900/20 rounded transition-colors opacity-0 group-hover:opacity-100"
-                                    title="Unut (Sil)"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => onEdit(recipe)}
+                                        className="p-1.5 text-blue-400/60 hover:text-blue-400 hover:bg-blue-900/20 rounded transition-colors"
+                                        title="Düzenle"
+                                    >
+                                        <Pencil size={14} />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if(window.confirm('Bu reçeteyi unutmak (silmek) istediğinize emin misiniz?')) {
+                                                onUnlearn(recipe.id);
+                                            }
+                                        }}
+                                        className="p-1.5 text-red-900/40 hover:text-red-500 hover:bg-red-900/20 rounded transition-colors"
+                                        title="Unut (Sil)"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     ))}

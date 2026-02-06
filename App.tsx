@@ -78,6 +78,10 @@ export default function App() {
   const [detailItem, setDetailItem] = useState<ItemData | null>(null);
   const [detailSlot, setDetailSlot] = useState<{ containerId: string; slotId: number } | null>(null);
 
+  // Recipe Edit Modal State
+  const [editingRecipe, setEditingRecipe] = useState<ItemData | null>(null);
+  const [isRecipeEditModalOpen, setIsRecipeEditModalOpen] = useState(false);
+
   // Toast & Unsaved Changes State
   const [toast, setToast] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -703,6 +707,39 @@ export default function App() {
         return { ...acc, servers: newServers };
     }));
     setHasUnsavedChanges(true);
+  };
+
+  const handleEditRecipe = (recipe: ItemData) => {
+    setEditingRecipe(recipe);
+    setIsRecipeEditModalOpen(true);
+  };
+
+  const handleSaveEditedRecipe = (item: ItemData) => {
+    setAccounts(prevAccounts => prevAccounts.map(acc => {
+        if (acc.id !== selectedAccountId) return acc;
+        const newServers = [...acc.servers];
+        const newServer = { ...newServers[selectedServerIndex] };
+        const newChars = [...newServer.characters];
+        const targetChar = { ...newChars[activeCharIndex] };
+        targetChar.learnedRecipes = targetChar.learnedRecipes.map(r =>
+            r.id === item.id ? item : r
+        );
+        newChars[activeCharIndex] = targetChar;
+        newServer.characters = newChars;
+        newServers[selectedServerIndex] = newServer;
+        return { ...acc, servers: newServers };
+    }));
+    setIsRecipeEditModalOpen(false);
+    setEditingRecipe(null);
+    setHasUnsavedChanges(true);
+  };
+
+  const handleDeleteEditedRecipe = () => {
+    if (editingRecipe) {
+        handleUnlearnRecipe(editingRecipe.id);
+        setIsRecipeEditModalOpen(false);
+        setEditingRecipe(null);
+    }
   };
 
   const handleSlotClick = (containerId: string, slotId: number) => {
@@ -1404,6 +1441,18 @@ export default function App() {
         characterName={activeChar.name}
         recipes={activeChar.learnedRecipes || []}
         onUnlearn={handleUnlearnRecipe}
+        onEdit={handleEditRecipe}
+      />
+
+      <ItemModal
+        isOpen={isRecipeEditModalOpen}
+        onClose={() => { setIsRecipeEditModalOpen(false); setEditingRecipe(null); }}
+        onSave={handleSaveEditedRecipe}
+        onDelete={handleDeleteEditedRecipe}
+        existingItem={editingRecipe}
+        enchantmentSuggestions={enchantmentSuggestions}
+        globalSetLookup={globalSetLookup}
+        globalSetMap={globalSetMap}
       />
 
       {/* Desktop Tooltip (mouse hover) */}
