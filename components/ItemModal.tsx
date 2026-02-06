@@ -60,7 +60,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     if (formData.category && formData.type) {
       onSave({
         ...formData as ItemData,
-        id: existingItem?.id || Math.random().toString(36).substr(2, 9),
+        id: existingItem?.id || crypto.randomUUID(),
       });
       onClose();
     }
@@ -224,7 +224,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       min="1" 
                       max="999"
                       value={formData.level}
-                      onChange={(e) => setFormData({...formData, level: parseInt(e.target.value) || 1})}
+                      onChange={(e) => setFormData({...formData, level: Math.min(999, Math.max(1, parseInt(e.target.value) || 1))})}
                       className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none"
                     />
                   </div>
@@ -240,7 +240,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                           min="1" 
                           max="9999"
                           value={formData.count || 1}
-                          onChange={(e) => setFormData({...formData, count: parseInt(e.target.value) || 1})}
+                          onChange={(e) => setFormData({...formData, count: Math.min(9999, Math.max(1, parseInt(e.target.value) || 1))})}
                           className="w-full bg-slate-900 border border-emerald-700/50 rounded px-2 py-1 text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
@@ -257,6 +257,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                         type="text" 
                         placeholder="Örn: Balta, Çifte, Hızar, Kafa Koparan..."
                         value={formData.weaponType || ''}
+                        maxLength={50}
                         onChange={(e) => setFormData({...formData, weaponType: e.target.value})}
                         className="w-full bg-slate-900 border border-red-900/60 rounded px-2 py-1 text-sm focus:border-red-500 focus:outline-none placeholder-slate-600 text-red-100"
                       />
@@ -270,6 +271,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   type="text" 
                   placeholder="1. Efsun (Örn: Alman Modeli)"
                   value={formData.enchantment1}
+                  maxLength={100}
                   onChange={(e) => setFormData({...formData, enchantment1: e.target.value})}
                   className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
                 />
@@ -277,6 +279,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   type="text" 
                   placeholder="2. Efsun (Örn: Dış Şehir Modeli)"
                   value={formData.enchantment2}
+                  maxLength={100}
                   onChange={(e) => setFormData({...formData, enchantment2: e.target.value})}
                   className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none placeholder-slate-600"
                 />

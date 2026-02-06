@@ -66,16 +66,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       checkUserRole(user);
 
     } catch (err: any) {
-      console.error(err);
-      let msg = "Bir hata oluştu: " + err.message;
+      let msg = "Bir hata oluştu. Lütfen tekrar deneyin.";
       if (err.code === 'auth/invalid-email') msg = "Geçersiz e-posta adresi formatı.";
-      if (err.code === 'auth/user-not-found') msg = "Bu e-posta ile kayıtlı kullanıcı bulunamadı.";
-      if (err.code === 'auth/wrong-password') msg = "Şifre hatalı.";
-      if (err.code === 'auth/email-already-in-use') msg = "Bu e-posta adresi zaten kullanımda.";
-      if (err.code === 'auth/weak-password') msg = "Şifre çok zayıf (en az 6 karakter olmalı).";
-      if (err.code === 'auth/invalid-credential') msg = "Giriş bilgileri hatalı.";
-      if (err.code === 'auth/popup-closed-by-user') msg = "Giriş penceresi kapatıldı.";
-      
+      else if (err.code === 'auth/user-not-found') msg = "Bu e-posta ile kayıtlı kullanıcı bulunamadı.";
+      else if (err.code === 'auth/wrong-password') msg = "Şifre hatalı.";
+      else if (err.code === 'auth/email-already-in-use') msg = "Bu e-posta adresi zaten kullanımda.";
+      else if (err.code === 'auth/weak-password') msg = "Şifre çok zayıf (en az 6 karakter olmalı).";
+      else if (err.code === 'auth/invalid-credential') msg = "Giriş bilgileri hatalı.";
+      else if (err.code === 'auth/popup-closed-by-user') msg = "Giriş penceresi kapatıldı.";
+
       setError(msg);
       setLoading(false);
     }
@@ -92,8 +91,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       // Google hesapları doğrulandı sayılır, ekstra kontrole gerek yok
       checkUserRole(result.user);
     } catch (err: any) {
-      console.error(err);
-      setError("Google ile giriş hatası: " + err.message);
+      const msg = err.code === 'auth/popup-closed-by-user' ? "Giriş penceresi kapatıldı." : "Google ile giriş sırasında bir hata oluştu.";
+      setError(msg);
       setLoading(false);
     }
   };
@@ -113,50 +112,52 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen w-screen bg-[url('https://picsum.photos/1920/1080?grayscale&blur=4')] bg-cover bg-center bg-fixed flex items-center justify-center py-8">
-      <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-slate-900/60 to-black/70 backdrop-blur-sm"></div>
-      
-      <div className="relative z-10 w-[92vw] md:w-full max-w-md animate-in fade-in zoom-in duration-500">
+     <div className="min-h-[100dvh] w-screen flex items-center justify-center bg-slate-950 py-3 px-3 md:py-8 md:px-4">
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(234,179,8,0.04),transparent_70%)]"></div>
+      </div>
+
+      <div className="relative z-10 w-full max-w-md animate-in fade-in zoom-in duration-500">
 
         <div className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-slate-700/50 rounded-2xl shadow-[0_8px_60px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)_inset] overflow-hidden backdrop-blur-xl">
-          
-          <div className="bg-gradient-to-b from-slate-800/80 to-slate-800/40 px-8 py-5 text-center border-b border-slate-700/40 relative overflow-hidden">
+
+          <div className="bg-gradient-to-b from-slate-800/80 to-slate-800/40 px-6 py-3 md:px-8 md:py-5 text-center border-b border-slate-700/40 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-yellow-500/60 to-transparent"></div>
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(234,179,8,0.08),transparent_70%)]"></div>
-            <Shield size={40} className="mx-auto text-yellow-500 mb-2 drop-shadow-[0_0_20px_rgba(234,179,8,0.4)]" />
-            <h1 className="text-xl font-semibold text-slate-100 tracking-[0.15em] font-serif">İKV KASA</h1>
-            <p className="text-slate-500 text-[10px] uppercase tracking-[0.25em] mt-1 font-medium">
+            <Shield size={32} className="mx-auto text-yellow-500 mb-1 md:mb-2 drop-shadow-[0_0_20px_rgba(234,179,8,0.4)] md:!w-10 md:!h-10" />
+            <h1 className="text-lg md:text-xl font-semibold text-slate-100 tracking-[0.15em] font-serif">İKV KASA</h1>
+            <p className="text-slate-500 text-[9px] md:text-[10px] uppercase tracking-[0.25em] mt-0.5 md:mt-1 font-medium">
               {isRegistering ? 'YENİ HESAP OLUŞTUR' : 'YÖNETİM PANELİ'}
             </p>
           </div>
 
-          <div className="px-8 py-6">
-            <form onSubmit={handleAuth} className="space-y-5">
-              
-              <div className="space-y-1.5">
+          <div className="px-5 py-4 md:px-8 md:py-6">
+            <form onSubmit={handleAuth} className="space-y-3 md:space-y-5">
+
+              <div className="space-y-1">
                 <label className="text-[10px] font-semibold text-slate-500 ml-1 tracking-wider">E-POSTA ADRESİ</label>
                 <div className="relative group">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500/80 transition-colors duration-300" size={16} />
-                  <input 
-                    type="email" 
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500/80 transition-colors duration-300" size={15} />
+                  <input
+                    type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3 pl-10 text-sm text-slate-200 outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-all duration-300 placeholder-slate-600"
+                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 pl-9 md:p-3 md:pl-10 text-sm text-slate-200 outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-all duration-300 placeholder-slate-600"
                     placeholder="ornek@email.com"
                     required
                   />
                 </div>
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <label className="text-[10px] font-semibold text-slate-500 ml-1 tracking-wider">ŞİFRE</label>
                 <div className="relative group">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500/80 transition-colors duration-300" size={16} />
-                  <input 
-                    type="password" 
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500/80 transition-colors duration-300" size={15} />
+                  <input
+                    type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-3 pl-10 text-sm text-slate-200 outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-all duration-300 placeholder-slate-600"
+                    className="w-full bg-slate-950/80 border border-slate-800 rounded-lg p-2.5 pl-9 md:p-3 md:pl-10 text-sm text-slate-200 outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-all duration-300 placeholder-slate-600"
                     placeholder="••••••••"
                     required
                     minLength={6}
@@ -165,18 +166,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               </div>
 
               {error && (
-                <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-2.5 flex items-start gap-2 text-red-300/90 text-xs animate-in slide-in-from-left-2">
+                <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-2 flex items-start gap-2 text-red-300/90 text-xs animate-in slide-in-from-left-2">
                   <AlertCircle size={14} className="mt-0.5 shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={loading}
-                className={`w-full font-semibold text-sm py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed
-                  ${isRegistering 
-                    ? 'bg-gradient-to-r from-emerald-700 to-emerald-600 hover:from-emerald-600 hover:to-emerald-500 text-white shadow-emerald-900/30' 
+                className={`w-full font-semibold text-sm py-2.5 md:py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-[1.02] hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed
+                  ${isRegistering
+                    ? 'bg-gradient-to-r from-emerald-700 to-emerald-600 hover:from-emerald-600 hover:to-emerald-500 text-white shadow-emerald-900/30'
                     : 'bg-gradient-to-r from-yellow-600 to-amber-500 hover:from-yellow-500 hover:to-amber-400 text-slate-950 shadow-yellow-900/30'
                   }`}
               >
@@ -184,23 +185,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                   <span className="animate-pulse">İşlem Yapılıyor...</span>
                 ) : (
                   <>
-                    {isRegistering ? 'KAYIT OL' : 'GİRİŞ YAP'} 
+                    {isRegistering ? 'KAYIT OL' : 'GİRİŞ YAP'}
                     {isRegistering ? <UserPlus size={16} /> : <LogIn size={16} />}
                   </>
                 )}
               </button>
 
               {/* Google İle Giriş Butonu */}
-              <div className="relative py-1">
+              <div className="relative py-0.5 md:py-1">
                 <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-slate-800"></span></div>
                 <div className="relative flex justify-center text-[10px] uppercase tracking-wider"><span className="bg-slate-900 px-3 text-slate-600">veya</span></div>
               </div>
 
-              <button 
+              <button
                 type="button"
                 onClick={handleGoogleLogin}
                 disabled={loading}
-                className="w-full py-2.5 px-4 bg-slate-900/60 text-slate-400 text-xs font-medium rounded-lg border border-slate-800/80 flex items-center justify-center gap-2.5 hover:bg-slate-800/60 hover:text-slate-200 hover:border-slate-700 hover:scale-[1.01] hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group"
+                className="w-full py-2 md:py-2.5 px-4 bg-slate-900/60 text-slate-400 text-xs font-medium rounded-lg border border-slate-800/80 flex items-center justify-center gap-2.5 hover:bg-slate-800/60 hover:text-slate-200 hover:border-slate-700 hover:scale-[1.01] hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed group"
               >
                 {/* Mini Google Logo */}
                 <div className="p-1 bg-slate-800/80 rounded-md group-hover:bg-slate-700 transition-colors duration-300">
@@ -211,14 +212,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/>
                   </svg>
                 </div>
-                
+
                 <span className="group-hover:text-slate-100 transition-colors duration-300">
                   Google ile devam et
                 </span>
               </button>
 
-              <div className="text-center pt-1">
-                 <button 
+              <div className="text-center">
+                 <button
                     type="button"
                     onClick={() => {
                         setIsRegistering(!isRegistering);
@@ -228,15 +229,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                     }}
                     className="text-slate-500 hover:text-yellow-500/80 text-[11px] underline underline-offset-4 decoration-slate-700 hover:decoration-yellow-500/50 transition-all duration-300"
                  >
-                    {isRegistering 
-                        ? 'Zaten bir hesabın var mı? Giriş yap' 
+                    {isRegistering
+                        ? 'Zaten bir hesabın var mı? Giriş yap'
                         : 'Hesabın yok mu? Yeni hesap oluştur'}
                  </button>
               </div>
             </form>
           </div>
-          
-          <div className="bg-slate-950/60 px-4 py-2 text-center border-t border-slate-800/50">
+
+          <div className="bg-slate-950/60 px-4 py-1.5 md:py-2 text-center border-t border-slate-800/50">
              <span className="text-[9px] text-slate-600 tracking-wider">Secure Cloud Inventory System v3.1</span>
           </div>
 

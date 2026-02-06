@@ -237,8 +237,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     });
 
     // 3. Dosyayı Oluştur ve İndir
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-      + rows.map(e => e.map(c => `"${c}"`).join(",")).join("\n");
+    const sanitizeCell = (val: string) => {
+      let s = val.replace(/"/g, '""');
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return `"${s}"`;
+    };
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
+      + rows.map(e => e.map(c => sanitizeCell(c)).join(",")).join("\n");
       
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");

@@ -6,7 +6,7 @@ import { ItemModal } from './components/ItemModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle } from 'lucide-react';
 
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase'; 
@@ -93,15 +93,14 @@ export default function App() {
           }
           
           // Rol Belirleme (Admin misin?)
-          // BURAYA KENDİ E-POSTA ADRESİNİ YAZMAYI UNUTMA
-          if (user.email === 'seninmailin@gmail.com') { 
+          const adminEmail = "yvzsltn61@gmail.com";
+          if (user.email === adminEmail) {
              setUserRole('admin');
           } else {
              setUserRole('user');
           }
 
         } catch (error) {
-          console.error("Veri çekme hatası:", error);
           alert("Veriler yüklenirken bir hata oluştu. İnternet bağlantınızı kontrol edin.");
         } finally {
           setLoading(false);
@@ -120,7 +119,7 @@ export default function App() {
 
   // Varsayılan hesap oluşturucu (Yardımcı Fonksiyon)
   const initializeDefault = async (docRef: any) => {
-    const newId = Math.random().toString(36).substr(2, 9);
+    const newId = crypto.randomUUID();
     const defaultAccount = createAccount(newId, 'Hesap 1');
     const initialAccounts = [defaultAccount];
     
@@ -132,21 +131,29 @@ export default function App() {
   };
 
   // --- VERİLERİ BULUTA KAYDETME ---
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveNotification, setSaveNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   const saveData = async () => {
+    if (isSaving) return;
     const user = auth.currentUser;
     if (!user) {
         alert("Oturum süresi dolmuş, lütfen sayfayı yenileyip tekrar giriş yapın.");
         return;
     }
 
+    setIsSaving(true);
     try {
         const userDocRef = doc(db, "users", user.uid);
         await setDoc(userDocRef, { accounts: accounts }, { merge: true });
         setHasUnsavedChanges(false);
-        alert("✅ Tüm veriler başarıyla buluta kaydedildi!");
+        setSaveNotification({ type: 'success', message: 'Tüm veriler başarıyla buluta kaydedildi!' });
+        setTimeout(() => setSaveNotification(null), 3000);
     } catch (error) {
-        console.error("Kayıt hatası:", error);
-        alert("❌ Kayıt sırasında bir hata oluştu!");
+        setSaveNotification({ type: 'error', message: 'Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.' });
+        setTimeout(() => setSaveNotification(null), 4000);
+    } finally {
+        setTimeout(() => setIsSaving(false), 2000);
     }
   };
 
@@ -176,7 +183,7 @@ export default function App() {
   // --- Account Management ---
 
   const handleAddAccount = () => {
-    const newId = Math.random().toString(36).substr(2, 9);
+    const newId = crypto.randomUUID();
     const name = `Hesap ${accounts.length + 1}`;
     const newAccount = createAccount(newId, name);
     const newAccounts = [...accounts, newAccount];
@@ -280,8 +287,13 @@ export default function App() {
       });
     });
 
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
-      + rows.map(e => e.map(c => `"${c}"`).join(",")).join("\n");
+    const sanitizeCell = (val: string) => {
+      let s = val.replace(/"/g, '""');
+      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+      return `"${s}"`;
+    };
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
+      + rows.map(e => e.map(c => sanitizeCell(c)).join(",")).join("\n");
       
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -516,7 +528,7 @@ export default function App() {
   const activeContainer = activeChar[currentView];
 
   return (
-    <div className="min-h-screen w-screen bg-slate-950 md:bg-[url('https://picsum.photos/1920/1080?grayscale&blur=2')] md:bg-cover md:bg-center flex md:items-center md:justify-center md:h-screen md:overflow-hidden">
+    <div className="min-h-screen w-screen bg-slate-950 md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 flex md:items-center md:justify-center md:h-screen md:overflow-hidden">
       
       {/* Değişiklik: h-[97vh] yerine h-[95dvh] ve max-h-[100dvh] ekledik */}
 <div className="w-full md:w-[98vw] min-h-screen md:min-h-0 md:h-[98vh] bg-slate-900/95 border-0 md:border-2 md:border-slate-700 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(0,0,0,0.9)] md:overflow-hidden flex flex-col relative">
@@ -530,14 +542,16 @@ export default function App() {
               <div className="bg-gradient-to-br from-yellow-500/15 to-yellow-700/10 p-2 rounded-xl border border-yellow-500/20 shadow-lg shadow-yellow-900/10">
                 <Shield size={16} className="text-yellow-500" />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 flex items-center gap-1.5 group/acc">
                 <input
                   value={tempAccountName}
                   onChange={(e) => setTempAccountName(e.target.value)}
                   onBlur={commitAccountName}
-                  className="bg-transparent text-yellow-500 font-bold text-[15px] outline-none w-full placeholder-slate-600"
+                  className="bg-transparent text-yellow-500 font-bold text-[15px] outline-none flex-1 min-w-0 placeholder-slate-600"
                   placeholder="Hesap İsmi"
+                  maxLength={30}
                 />
+                <Edit3 size={11} className="text-yellow-400 shrink-0" />
               </div>
               {userRole === 'user' && <span className="text-[9px] text-slate-400 bg-slate-700/50 border border-slate-600/50 rounded-full px-2.5 py-0.5 shrink-0 tracking-wide">Kullanıcı</span>}
             </div>
@@ -592,14 +606,18 @@ export default function App() {
                </div>
 
                <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={tempAccountName}
-                      onChange={(e) => setTempAccountName(e.target.value)}
-                      onBlur={commitAccountName}
-                      className="bg-transparent text-yellow-400 font-bold text-base outline-none w-36 placeholder-slate-600 border-b border-transparent focus:border-yellow-600/50 transition-all"
-                      placeholder="Hesap Adı"
-                    />
+                  <div className="flex items-center gap-2 group/acc">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        value={tempAccountName}
+                        onChange={(e) => setTempAccountName(e.target.value)}
+                        onBlur={commitAccountName}
+                        className="bg-transparent text-yellow-400 font-bold text-base outline-none w-36 placeholder-slate-600 border-b border-dashed border-yellow-700/30 focus:border-yellow-600/50 focus:border-solid transition-all"
+                        placeholder="Hesap Adı"
+                        maxLength={30}
+                      />
+                      <Edit3 size={11} className="text-yellow-400 shrink-0" />
+                    </div>
                     {userRole === 'user' && <span className="text-[9px] text-amber-400/70 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider uppercase">Kullanıcı</span>}
                   </div>
 
@@ -675,13 +693,17 @@ export default function App() {
 
                 <div className="w-px h-4 bg-slate-700/50"></div>
 
-                <input
-                   value={tempCharName}
-                   onChange={(e) => setTempCharName(e.target.value)}
-                   onBlur={commitCharacterName}
-                   className="bg-transparent text-blue-300 font-bold text-xs outline-none w-24 border-b border-transparent focus:border-blue-500/50 placeholder-slate-600 transition-colors"
-                   placeholder="Karakter Adı"
-                />
+                <div className="flex items-center gap-1 group/char">
+                  <input
+                     value={tempCharName}
+                     onChange={(e) => setTempCharName(e.target.value)}
+                     onBlur={commitCharacterName}
+                     className="bg-transparent text-blue-300 font-bold text-xs outline-none w-24 border-b border-dashed border-blue-500/25 focus:border-blue-500/50 focus:border-solid placeholder-slate-600 transition-colors"
+                     placeholder="Karakter Adı"
+                     maxLength={20}
+                  />
+                  <Edit3 size={10} className="text-blue-400 shrink-0" />
+                </div>
              </div>
           </div>
 
@@ -707,6 +729,7 @@ export default function App() {
                   onBlur={commitCharacterName}
                   className="bg-transparent text-blue-300 font-bold text-[13px] outline-none flex-1 min-w-0 placeholder-slate-600"
                   placeholder="Karakter İsmi"
+                  maxLength={20}
                 />
               </div>
             </div>
@@ -752,6 +775,43 @@ export default function App() {
             <div className="bg-yellow-600 text-black text-xs md:text-sm font-bold px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 whitespace-nowrap">
               <Save size={14} />
               {toast}
+            </div>
+          </div>
+        )}
+
+        {/* Save Notification */}
+        {saveNotification && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setSaveNotification(null)}>
+            <div
+              className="relative mx-4 px-8 py-6 rounded-2xl shadow-2xl flex flex-col items-center gap-3 animate-in zoom-in-95 fade-in duration-300"
+              style={{
+                background: saveNotification.type === 'success'
+                  ? 'linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%)'
+                  : 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 50%, #b91c1c 100%)',
+                border: `1px solid ${saveNotification.type === 'success' ? 'rgba(52,211,153,0.3)' : 'rgba(252,165,165,0.3)'}`,
+                boxShadow: saveNotification.type === 'success'
+                  ? '0 0 40px rgba(16,185,129,0.3), 0 20px 60px rgba(0,0,0,0.4)'
+                  : '0 0 40px rgba(239,68,68,0.3), 0 20px 60px rgba(0,0,0,0.4)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`p-3 rounded-full ${saveNotification.type === 'success' ? 'bg-emerald-500/20 ring-2 ring-emerald-400/40' : 'bg-red-500/20 ring-2 ring-red-400/40'}`}>
+                {saveNotification.type === 'success'
+                  ? <CheckCircle size={36} className="text-emerald-400 drop-shadow-lg" />
+                  : <XCircle size={36} className="text-red-400 drop-shadow-lg" />
+                }
+              </div>
+              <p className="text-white font-bold text-sm md:text-base text-center leading-relaxed">{saveNotification.message}</p>
+              <button
+                onClick={() => setSaveNotification(null)}
+                className={`mt-1 px-5 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  saveNotification.type === 'success'
+                    ? 'bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-200 border border-emerald-400/30'
+                    : 'bg-red-500/25 hover:bg-red-500/40 text-red-200 border border-red-400/30'
+                }`}
+              >
+                Tamam
+              </button>
             </div>
           </div>
         )}
