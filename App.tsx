@@ -47,7 +47,16 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Kullanıcı giriş yapmış, verileri çekelim
+        // --- YENİ EKLENEN KISIM: E-POSTA DOĞRULAMA KONTROLÜ ---
+        if (!user.emailVerified) {
+            alert("Giriş yapabilmek için lütfen e-posta adresinizi doğrulayın. (Spam kutusunu kontrol etmeyi unutmayın)");
+            await signOut(auth); // Kullanıcıyı sistemden at
+            setLoading(false); // Yükleniyor ekranını kapat
+            return; // İşlemi durdur, veri çekmeye çalışma
+        }
+        // -------------------------------------------------------
+
+        // Kullanıcı giriş yapmış ve onaylı, verileri çekelim
         setLoading(true);
         const userDocRef = doc(db, "users", user.uid);
         
@@ -484,7 +493,8 @@ export default function App() {
   return (
     <div className="h-screen w-screen bg-[url('https://picsum.photos/1920/1080?grayscale&blur=2')] bg-cover bg-center flex items-center justify-center overflow-hidden">
       
-      <div className="w-[97vw] h-[97vh] md:w-[98vw] md:h-[98vh] bg-slate-900/95 border border-slate-700/60 md:border-2 md:border-slate-700 rounded-2xl md:rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative">
+      {/* Değişiklik: h-[97vh] yerine h-[95dvh] ve max-h-[100dvh] ekledik */}
+<div className="w-[97vw] h-[97vh] md:w-[98vw] md:h-[98vh] bg-slate-900/95 border border-slate-700/60 md:border-2 md:border-slate-700 rounded-2xl md:rounded-lg shadow-[0_0_50px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative">
         
         {/* === HEADER === */}
         <div className="flex flex-col border-b-2 border-slate-700 shrink-0">
@@ -680,7 +690,7 @@ export default function App() {
         </div>
 
         {/* Content Area */}
-        <div className="p-1 bg-slate-800/50 flex-1 overflow-hidden flex flex-col">
+        <div className="p-1 bg-slate-800/50 flex-1 overflow-visible flex flex-col h-auto">
            <div className="flex-1 w-full h-full">
               {currentView === 'bag' ? (
                  <div className="w-full h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">

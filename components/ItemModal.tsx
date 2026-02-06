@@ -105,7 +105,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   className="p-4 bg-slate-700 hover:bg-slate-600 border-2 border-slate-500 rounded-lg flex flex-col items-center gap-2 transition-all hover:scale-105"
                 >
                   <span className="text-2xl">⚔️</span>
-                  <span className="font-bold">Normal İtem</span>
+                  <span className="font-bold">İtem</span>
                 </button>
                 <button
                   onClick={() => { setFormData({ ...formData, type: 'Recipe', isRead: false }); handleNext(); }}
@@ -255,7 +255,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                      </label>
                      <input 
                         type="text" 
-                        placeholder="Örn: Kılıç, Yay, Çift El, Hançer..."
+                        placeholder="Örn: Balta, Çifte, Hızar, Kafa Koparan..."
                         value={formData.weaponType || ''}
                         onChange={(e) => setFormData({...formData, weaponType: e.target.value})}
                         className="w-full bg-slate-900 border border-red-900/60 rounded px-2 py-1 text-sm focus:border-red-500 focus:outline-none placeholder-slate-600 text-red-100"

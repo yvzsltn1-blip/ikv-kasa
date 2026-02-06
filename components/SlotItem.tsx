@@ -1,7 +1,7 @@
 import React from 'react';
 import { ItemData } from '../types';
 import { CATEGORY_COLORS } from '../constants';
-import { Shield, Sword, Gem, Component, Scroll, Hand, Footprints, Shirt, Glasses, Beaker } from 'lucide-react';
+import { Shield, Sword, Gem, Component, Scroll, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe } from 'lucide-react';
 
 interface SlotItemProps {
   item: ItemData;
@@ -14,15 +14,18 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight }) => {
   // Helper to get the specific icon component for a category
   const getCategoryIcon = () => {
     switch (item.category) {
-      case 'Silah': return Sword;
-      case 'Eldiven': return Hand;
-      case 'Ayakkabı': return Footprints;
-      case 'Ceket': return Shirt;
-      case 'Gözlük': return Glasses;
-      case 'Zırh':
-      case 'Pantolon': return Shield;
-      case 'İksir': return Beaker;
-      case 'Maden': return Gem;
+      case 'Silah': return Sword;       // Kılıç ikonu
+      case 'Ceket': return Shirt;       // Gömlek ikonu
+      case 'Pantolon': return Columns;  // İki sütun (Bacak gibi durduğu için)
+      case 'Eldiven': return Hand;      // El ikonu
+      case 'Ayakkabı': return Footprints; // Ayak izi
+      case 'Gözlük': return Glasses;    // Gözlük
+      case 'Zırh': return Shield;       // Kalkan
+      case 'Yüzük': return CircleDot;   // Halka/Yüzük şekli
+      case 'Kolye': return Lasso;       // İp/Kolye şekli
+      case 'Maden': return Pickaxe;     // Kazma (Maden için)
+      case 'İksir': return Beaker;      // Deney tüpü
+      case 'Tılsım': return Sparkles;   // Parıltı/Büyü
       default: return Component;
     }
   };

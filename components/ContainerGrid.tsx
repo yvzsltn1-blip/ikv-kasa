@@ -16,7 +16,9 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   // Determine grid template based on rows/cols
   const gridStyle = {
     gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
-    gridTemplateRows: `repeat(${container.rows}, minmax(0, 1fr))`,
+    // Değişiklik: minmax(0, 1fr) yerine minmax(40px, 1fr) yaptık.
+    // Böylece mobilde kutular çok ezilmez, aşağı doğru uzar ve scroll açılır.
+    gridTemplateRows: `repeat(${container.rows}, minmax(40px, 1fr))`,
   };
 
   const isMatchingSearch = (slot: SlotData) => {

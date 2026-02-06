@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Account, ItemData, CATEGORY_OPTIONS } from '../types';
-import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book } from 'lucide-react';
+import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS } from '../constants';
 
 interface SearchResult {
@@ -185,7 +185,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         charId: char.id,
                         charName: char.name,
                         containerId: 'learned',
-                        containerName: 'Reçete Kitabı',
+                        containerName: 'Okunmuş Reçete',
                         containerKey: 'learned',
                         slotId: -1,
                         row: idx + 1, // Visual index
@@ -200,6 +200,55 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
     return found;
   }, [debouncedQuery, accounts, hasActiveFilters, filterCategory, filterClass, filterGender, filterMinLevel, filterMaxLevel, filterType, filterRecipeStatus]);
+
+// --- EXCEL ÇIKTISI ALMA FONKSİYONU (GÜNCELLENMİŞ) ---
+  const handleExportSearchResults = () => {
+    if (results.length === 0) {
+        alert("İndirilecek sonuç bulunamadı!");
+        return;
+    }
+
+    // 1. Başlık Satırı (Ana ekrandaki formatla birebir aynı)
+    const rows = [
+      ["Hesap", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+    ];
+
+    // 2. Verileri Satırlara Ekle
+    results.forEach(res => {
+      // Okunmuş durumu: Eğer reçete kitabından geliyorsa (learned) veya eşya okunmuşsa "Evet"
+      const isRead = res.containerKey === 'learned' || (res.item.type === 'Recipe' && res.item.isRead) ? "Evet" : "Hayır";
+      
+      rows.push([
+        res.accountName,                                // Hesap
+        res.charName,                                   // Karakter
+        res.containerName,                              // Kasa/Çanta (Örn: Kasa 1, Çanta)
+        res.row.toString(),                             // Satır
+        res.col.toString(),                             // Sütun
+        res.item.enchantment1 || "-",                   // Efsun 1
+        res.item.enchantment2 || "-",                   // Efsun 2
+        res.item.category,                              // Kategori
+        res.item.weaponType || "-",                     // Silah Cinsi
+        res.item.level.toString(),                      // Seviye
+        res.item.gender || "-",                         // Cinsiyet
+        res.item.heroClass,                             // Sınıf
+        isRead,                                         // Okunmuş
+        res.item.count ? res.item.count.toString() : "1" // Adet
+      ]);
+    });
+
+    // 3. Dosyayı Oluştur ve İndir
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + rows.map(e => e.map(c => `"${c}"`).join(",")).join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "detayli_arama_sonuclari.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  // ---------------------------------------
 
   if (!isOpen) return null;
 
@@ -348,7 +397,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                                 />
                             </div>
                         </div>
-
+                        {/* Excel Export Button */}
+                        <button 
+                            onClick={handleExportSearchResults}
+                            className="px-3 py-1.5 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 border border-emerald-800/50 rounded text-xs font-bold transition-colors flex items-center gap-1 h-[30px] mr-2"
+                            title="Sonuçları İndir"
+                        >
+                            <FileSpreadsheet size={12} /> Excel
+                        </button>
                         {/* Reset Button */}
                         <button 
                             onClick={resetFilters}

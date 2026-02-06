@@ -33,7 +33,7 @@ export const RecipeBookModal: React.FC<RecipeBookModalProps> = ({ isOpen, onClos
                 <Scroll className="text-purple-300" size={24} />
              </div>
              <div>
-                <h2 className="text-xl font-serif font-bold text-[#d4b483] tracking-wide">Reçete Kitabı</h2>
+                <h2 className="text-xl font-serif font-bold text-[#d4b483] tracking-wide">Okunmuş Reçeteler</h2>
                 <div className="text-xs text-[#8c7b6c]">{characterName} • {recipes.length} Reçete</div>
              </div>
           </div>
