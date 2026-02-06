@@ -1,7 +1,7 @@
 import React from 'react';
 import { SetItemLocation } from '../types';
 import { SET_CATEGORIES, CATEGORY_COLORS } from '../constants';
-import { X, CheckCircle, Circle, MapPin } from 'lucide-react';
+import { X, CheckCircle, Circle, MapPin, Sparkles, Shield } from 'lucide-react';
 
 interface SetDetailModalProps {
   isOpen: boolean;
@@ -14,9 +14,11 @@ export const SetDetailModal: React.FC<SetDetailModalProps> = ({ isOpen, onClose,
   if (!isOpen || !setKey) return null;
 
   const locations = setMap.get(setKey) || [];
-  const parts = setKey.split('|');
-  const enchantment1 = parts[0] || '';
-  const enchantment2 = parts[1] || '';
+
+  // Orijinal büyük harfli efsun isimlerini ilk item'dan al (key lowercase tutuyor)
+  const firstItem = locations.length > 0 ? locations[0].item : null;
+  const enchantment1 = firstItem?.enchantment1 || '';
+  const enchantment2 = firstItem?.enchantment2 || '';
 
   // Group locations by category
   const categoryMap = new Map<string, SetItemLocation[]>();
@@ -36,29 +38,58 @@ export const SetDetailModal: React.FC<SetDetailModalProps> = ({ isOpen, onClose,
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-slate-900 px-4 py-3 border-b border-slate-700 shrink-0">
-          {/* Mobile drag handle */}
-          <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-2 md:hidden" />
+        <div className={`shrink-0 relative overflow-hidden ${count >= 8 ? 'bg-gradient-to-br from-emerald-950 via-slate-900 to-emerald-950' : 'bg-gradient-to-br from-amber-950/80 via-slate-900 to-slate-900'}`}>
+          {/* Decorative glow */}
+          <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-32 h-16 rounded-full blur-2xl opacity-20 ${count >= 8 ? 'bg-emerald-400' : 'bg-amber-400'}`} />
 
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2.5 flex-1 min-w-0">
-              <span className={`text-base font-bold shrink-0 ${count >= 8 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {count}/8
-              </span>
-              <div className="flex-1 bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-700">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${count >= 8 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                  style={{ width: `${progressPercent}%` }}
-                />
+          <div className="relative px-4 py-3 border-b border-white/10">
+            {/* Mobile drag handle */}
+            <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-3 md:hidden" />
+
+            {/* Top row: icon + title + close */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${count >= 8 ? 'bg-emerald-500/20 border border-emerald-500/30' : 'bg-amber-500/20 border border-amber-500/30'}`}>
+                  {count >= 8
+                    ? <Sparkles size={16} className="text-emerald-400" />
+                    : <Shield size={16} className="text-amber-400" />
+                  }
+                </div>
+                <div>
+                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Set Durumu</h3>
+                  <span className={`text-lg font-black leading-tight ${count >= 8 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {count}<span className="text-slate-500 font-medium">/8</span>
+                  </span>
+                </div>
               </div>
+              <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1 -mr-1">
+                <X size={20} />
+              </button>
             </div>
-            <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors shrink-0 ml-3 p-1 -mr-1">
-              <X size={20} />
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs">
-            {enchantment1 && <span className="text-yellow-300 font-semibold">{enchantment1}</span>}
-            {enchantment2 && <><span className="text-slate-600">+</span><span className="text-yellow-200/70">{enchantment2}</span></>}
+
+            {/* Progress bar */}
+            <div className="bg-slate-950/60 rounded-full h-2 overflow-hidden border border-white/5 mb-3">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${count >= 8 ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' : 'bg-gradient-to-r from-amber-600 to-amber-400'}`}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            {/* Enchantment names */}
+            <div className={`rounded-lg px-3 py-2 border ${count >= 8 ? 'bg-emerald-950/30 border-emerald-800/30' : 'bg-amber-950/20 border-amber-800/20'}`}>
+              {enchantment1 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-500 shrink-0">1.</span>
+                  <span className="text-[13px] font-bold text-yellow-200">{enchantment1}</span>
+                </div>
+              )}
+              {enchantment2 && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] text-slate-500 shrink-0">2.</span>
+                  <span className="text-[13px] font-semibold text-yellow-300/70">{enchantment2}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
