@@ -28,9 +28,10 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   const gridRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
+  const DRAG_THRESHOLD = 15; // px movement needed after long press to enter drag mode
   const touchInfo = useRef({
     startX: 0, startY: 0, slotId: -1, item: null as ItemData | null,
-    longPressDetected: false, hasMoved: false,
+    longPressDetected: false, hasMoved: false, dragConfirmed: false,
   });
 
   const clearTimer = () => {
@@ -57,11 +58,28 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
         return;
       }
 
-      // Long press active — dragging mode
-      e.preventDefault(); // prevent page scroll while dragging
-      touchInfo.current.hasMoved = true;
+      // Long press active — prevent scroll
+      e.preventDefault();
       const touch = e.touches[0];
-      setDragVisual(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+
+      if (touchInfo.current.dragConfirmed) {
+        // Already in drag mode — update floating item position
+        setDragVisual(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+      } else {
+        // Check if movement exceeds threshold to enter drag mode
+        const dx = Math.abs(touch.clientX - touchInfo.current.startX);
+        const dy = Math.abs(touch.clientY - touchInfo.current.startY);
+        if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+          touchInfo.current.dragConfirmed = true;
+          touchInfo.current.hasMoved = true;
+          setDragVisual({
+            sourceSlotId: touchInfo.current.slotId,
+            item: touchInfo.current.item!,
+            x: touch.clientX,
+            y: touch.clientY,
+          });
+        }
+      }
     };
 
     el.addEventListener('touchmove', handleMove, { passive: false });
@@ -76,19 +94,13 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     touchInfo.current = {
       startX: touch.clientX, startY: touch.clientY,
       slotId: slot.id, item: slot.item,
-      longPressDetected: false, hasMoved: false,
+      longPressDetected: false, hasMoved: false, dragConfirmed: false,
     };
 
     longPressTimer.current = setTimeout(() => {
       touchInfo.current.longPressDetected = true;
       try { navigator.vibrate?.(30); } catch {}
-      // Show "picked up" state
-      setDragVisual({
-        sourceSlotId: slot.id,
-        item: slot.item!,
-        x: touchInfo.current.startX,
-        y: touchInfo.current.startY,
-      });
+      // Don't show drag visual yet — wait for finger movement to exceed threshold
     }, 400);
   };
 
@@ -97,7 +109,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     setDragVisual(null);
     touchInfo.current = {
       startX: 0, startY: 0, slotId: -1, item: null,
-      longPressDetected: false, hasMoved: false,
+      longPressDetected: false, hasMoved: false, dragConfirmed: false,
     };
   };
 
@@ -107,8 +119,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     if (touchInfo.current.longPressDetected) {
       isLongPress.current = true; // prevent the following click
 
-      if (touchInfo.current.hasMoved) {
-        // Finger moved after long press → find drop target
+      if (touchInfo.current.dragConfirmed) {
+        // Drag threshold exceeded → find drop target
         const touch = e.changedTouches[0];
         const el = document.elementFromPoint(touch.clientX, touch.clientY);
         const slotEl = el?.closest('[data-slot-id]') as HTMLElement | null;
@@ -119,7 +131,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
           }
         }
       } else {
-        // Held still → show tooltip
+        // Long press without significant movement → show detail
         if (touchInfo.current.item && onSlotLongPress) {
           onSlotLongPress(touchInfo.current.item, touchInfo.current.startX, touchInfo.current.startY);
         }
