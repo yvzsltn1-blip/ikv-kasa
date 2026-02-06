@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation } from './types';
-import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES } from './constants';
+import { Account, Container, ItemData, UserRole } from './types';
+import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
-import { SetDetailModal } from './components/SetDetailModal';
 import { LoginScreen } from './components/LoginScreen';
 import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2 } from 'lucide-react';
 
@@ -71,10 +70,6 @@ export default function App() {
   const [activeSlot, setActiveSlot] = useState<{ containerId: string; slotId: number } | null>(null);
   // Tooltip State
   const [tooltip, setTooltip] = useState<{ item: ItemData; x: number; y: number } | null>(null);
-
-  // Set Detail Modal State
-  const [showSetDetail, setShowSetDetail] = useState(false);
-  const [activeSetKey, setActiveSetKey] = useState<string | null>(null);
 
   // Toast & Unsaved Changes State
   const [toast, setToast] = useState<string | null>(null);
@@ -308,64 +303,6 @@ export default function App() {
     });
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
   }, [accounts]);
-
-  const setMap = useMemo(() => {
-    const map = new Map<string, SetItemLocation[]>();
-    accounts.forEach(acc => {
-      acc.servers.forEach(server => {
-        server.characters.forEach(char => {
-          const containers = [
-            { container: char.bank1, name: 'Kasa 1' },
-            { container: char.bank2, name: 'Kasa 2' },
-            { container: char.bag, name: 'Çanta' },
-          ];
-          containers.forEach(({ container, name }) => {
-            container.slots.forEach(slot => {
-              if (!slot.item) return;
-              if (!slot.item.enchantment1?.trim()) return;
-              if (!SET_CATEGORIES.includes(slot.item.category)) return;
-              const key = `${slot.item.enchantment1.trim()}|||${slot.item.enchantment2.trim()}`;
-              const loc: SetItemLocation = {
-                accountName: acc.name,
-                serverName: server.name,
-                charName: char.name,
-                containerName: name,
-                row: Math.floor(slot.id / container.cols) + 1,
-                col: (slot.id % container.cols) + 1,
-                category: slot.item.category,
-                item: slot.item,
-              };
-              if (!map.has(key)) map.set(key, []);
-              map.get(key)!.push(loc);
-            });
-          });
-          (char.learnedRecipes || []).forEach(recipe => {
-            if (!recipe.enchantment1?.trim()) return;
-            if (!SET_CATEGORIES.includes(recipe.category)) return;
-            const key = `${recipe.enchantment1.trim()}|||${recipe.enchantment2.trim()}`;
-            const loc: SetItemLocation = {
-              accountName: acc.name,
-              serverName: server.name,
-              charName: char.name,
-              containerName: 'Reçete Kitabı',
-              row: -1,
-              col: -1,
-              category: recipe.category,
-              item: recipe,
-            };
-            if (!map.has(key)) map.set(key, []);
-            map.get(key)!.push(loc);
-          });
-        });
-      });
-    });
-    return map;
-  }, [accounts]);
-
-  const handleSetClick = (enchantment1: string, enchantment2: string) => {
-    setActiveSetKey(`${enchantment1.trim()}|||${enchantment2.trim()}`);
-    setShowSetDetail(true);
-  };
 
   useEffect(() => {
     if (activeAccount) {
@@ -1077,8 +1014,6 @@ export default function App() {
                             onMoveItem={handleMoveItem}
                             searchQuery={""}
                             onNext={handleNextView}
-                            setMap={setMap}
-                            onSetClick={handleSetClick}
                         />
                     </div>
                  </div>
@@ -1092,8 +1027,6 @@ export default function App() {
                         onMoveItem={handleMoveItem}
                         searchQuery={""}
                         onNext={handleNextView}
-                        setMap={setMap}
-                        onSetClick={handleSetClick}
                     />
                   </div>
               )}
@@ -1289,8 +1222,6 @@ export default function App() {
         onRead={handleReadRecipe}
         existingItem={getCurrentItem()}
         enchantmentSuggestions={enchantmentSuggestions}
-        setMap={setMap}
-        onSetClick={handleSetClick}
       />
 
       <GlobalSearchModal
@@ -1306,13 +1237,6 @@ export default function App() {
         characterName={activeChar.name}
         recipes={activeChar.learnedRecipes || []}
         onUnlearn={handleUnlearnRecipe}
-      />
-
-      <SetDetailModal
-        isOpen={showSetDetail}
-        onClose={() => setShowSetDetail(false)}
-        setKey={activeSetKey}
-        setMap={setMap}
       />
 
       {/* Desktop Tooltip (mouse hover) */}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CATEGORY_OPTIONS, ItemData, SetItemLocation } from '../types';
-import { HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
+import { CATEGORY_OPTIONS, ItemData } from '../types';
+import { HERO_CLASSES, GENDER_OPTIONS } from '../constants';
 import { X, BookOpen, CheckCircle, Circle, Layers, Sword, Globe, Lock } from 'lucide-react';
 
 interface ItemModalProps {
@@ -11,11 +11,9 @@ interface ItemModalProps {
   onRead?: (item: ItemData) => void;
   existingItem: ItemData | null;
   enchantmentSuggestions?: string[];
-  setMap?: Map<string, SetItemLocation[]>;
-  onSetClick?: (enchantment1: string, enchantment2: string) => void;
 }
 
-export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], setMap, onSetClick }) => {
+export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [] }) => {
   const [step, setStep] = useState(1);
   const [activeField, setActiveField] = useState<'enchantment1' | 'enchantment2' | null>(null);
   const [formData, setFormData] = useState<Partial<ItemData>>({
@@ -57,6 +55,20 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     }
   }, [isOpen, existingItem]);
 
+  const filteredSuggestions = useMemo(() => {
+    if (!activeField) return [];
+    const text = (formData[activeField] || '').trim().toLocaleLowerCase('tr');
+    if (!text) return [];
+    return enchantmentSuggestions
+      .filter(s => {
+        const lower = s.toLocaleLowerCase('tr');
+        return lower !== text && lower.includes(text);
+      })
+      .slice(0, 5);
+  }, [activeField, formData.enchantment1, formData.enchantment2, enchantmentSuggestions]);
+
+  const blurTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
   if (!isOpen) return null;
 
   const handleNext = () => setStep((prev) => prev + 1);
@@ -87,19 +99,6 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   // Categories that don't have gender selection
   const isGenderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden'].includes(formData.category || '');
 
-  const filteredSuggestions = useMemo(() => {
-    if (!activeField) return [];
-    const text = (formData[activeField] || '').trim().toLocaleLowerCase('tr');
-    if (!text) return [];
-    return enchantmentSuggestions
-      .filter(s => {
-        const lower = s.toLocaleLowerCase('tr');
-        return lower !== text && lower.includes(text);
-      })
-      .slice(0, 5);
-  }, [activeField, formData.enchantment1, formData.enchantment2, enchantmentSuggestions]);
-
-  const blurTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleFieldBlur = () => {
     blurTimeout.current = setTimeout(() => setActiveField(null), 150);
   };
@@ -466,25 +465,6 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   </div>
                 </div>
               )}
-
-              {/* Set Completion Info */}
-              {setMap && formData.enchantment1?.trim() && SET_CATEGORIES.includes(formData.category || '') && (() => {
-                const key = `${formData.enchantment1!.trim()}|||${(formData.enchantment2 || '').trim()}`;
-                const locations = setMap.get(key);
-                const setCount = locations ? new Set(locations.map(l => l.category)).size : 0;
-                if (setCount === 0) return null;
-                return (
-                  <div
-                    onClick={() => onSetClick?.(formData.enchantment1!, formData.enchantment2 || '')}
-                    className="cursor-pointer bg-slate-900/50 p-2 rounded border border-slate-700 flex items-center justify-between hover:bg-slate-800 transition-colors"
-                  >
-                    <span className="text-xs text-slate-300">Set Tamamlama</span>
-                    <span className={`text-sm font-bold ${setCount >= 8 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {setCount} / 8
-                    </span>
-                  </div>
-                );
-              })()}
 
               <div className="flex gap-2 mt-6 pt-4 border-t border-slate-700 flex-wrap">
                 {existingItem && (
