@@ -1,6 +1,6 @@
 import { HeroClass, Account, Server } from './types';
 
-export const HERO_CLASSES: HeroClass[] = ['Savaşçı', 'Şifacı', 'Büyücü', 'Tüm Sınıflar'];
+export const HERO_CLASSES: HeroClass[] = ['Savaşçı', 'Büyücü', 'Şifacı', 'Tüm Sınıflar'];
 
 export const GENDER_OPTIONS = ['Erkek', 'Kadın', 'Tüm Cinsiyetler'];
 

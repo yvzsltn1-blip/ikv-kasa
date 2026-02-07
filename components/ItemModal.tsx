@@ -208,8 +208,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       setFormData({
                         ...formData,
                         category: cat,
-                        gender: genderless ? 'Tüm Cinsiyetler' : formData.gender,
-                        heroClass: classless ? 'Tüm Sınıflar' : formData.heroClass,
+                        gender: genderless ? 'Tüm Cinsiyetler' : (formData.gender === 'Tüm Cinsiyetler' ? 'Erkek' : formData.gender),
+                        heroClass: classless ? 'Tüm Sınıflar' : (formData.heroClass === 'Tüm Sınıflar' ? 'Savaşçı' : formData.heroClass),
                         // Reset enchantments when switching category
                         enchantment1: '',
                         enchantment2: '',
@@ -229,19 +229,20 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
           {/* STEP 3: Details Form */}
           {step === 3 && (
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="bg-slate-900/50 p-3 rounded border border-slate-700 mb-2">
-                 <div className="flex items-center gap-2 mb-1">
-                   <span className="text-xs text-slate-400">Tür:</span>
-                   <span className="text-xs font-bold text-yellow-400">{formData.type}</span>
+              <div className="bg-slate-900/50 px-2.5 py-1.5 rounded border border-slate-700 mb-2 flex items-center justify-center gap-3">
+                 <div className="flex items-center gap-1">
+                   <span className="text-[10px] text-slate-500">Tür:</span>
+                   <span className="text-[10px] font-bold text-yellow-400">{formData.type === 'Recipe' ? 'Reçete' : 'İtem'}</span>
                    {formData.type === 'Recipe' && (
-                       <span className={`text-[10px] px-1.5 py-0.5 rounded border ml-1 ${formData.isRead ? 'bg-purple-900 border-purple-600 text-purple-200' : 'bg-slate-800 border-slate-600 text-slate-400'}`}>
+                       <span className={`text-[8px] px-1 py-px rounded border ${formData.isRead ? 'bg-purple-900 border-purple-600 text-purple-200' : 'bg-slate-800 border-slate-600 text-slate-400'}`}>
                            {formData.isRead ? 'Okunmuş' : 'Okunmamış'}
                        </span>
                    )}
                  </div>
-                 <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400">Sınıf:</span>
-                    <span className="text-xs font-bold text-yellow-400">{formData.category}</span>
+                 <div className="w-px h-3 bg-slate-700" />
+                 <div className="flex items-center gap-1">
+                    <span className="text-[10px] text-slate-500">Sınıf:</span>
+                    <span className="text-[10px] font-bold text-yellow-400">{formData.category}</span>
                  </div>
               </div>
 
@@ -270,43 +271,53 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                 </div>
               )}
 
-              {/* Gender - hidden for Yüzük, Kolye, Tılsım, İksir, Maden */}
-              {!isGenderless && (
+              {/* Gender */}
               <div>
                 <label className="block text-xs font-bold mb-1 text-slate-400">Cinsiyet</label>
                 <div className="flex bg-slate-900 rounded p-1 gap-1">
-                  {GENDER_OPTIONS.map(g => (
-                    <button
-                      key={g}
-                      type="button"
-                      onClick={() => setFormData({...formData, gender: g as any})}
-                      className={`flex-1 text-xs py-1 rounded transition-colors ${formData.gender === g ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                    >
-                      {g}
-                    </button>
-                  ))}
+                  {isGenderless ? (
+                    <div className="flex-1 text-xs py-1 rounded bg-indigo-600 text-white text-center">Tüm Cinsiyetler</div>
+                  ) : (
+                    GENDER_OPTIONS.filter(g => isWeapon || g !== 'Tüm Cinsiyetler').map(g => {
+                      const activeColor = g === 'Erkek' ? 'bg-blue-600 text-white' : g === 'Kadın' ? 'bg-pink-600 text-white' : 'bg-indigo-600 text-white';
+                      return (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setFormData({...formData, gender: g as any})}
+                          className={`flex-1 text-xs py-1 rounded transition-colors ${formData.gender === g ? activeColor : 'text-slate-500 hover:text-slate-300'}`}
+                        >
+                          {g}
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
-              )}
 
-              {/* Hero Class - hidden for classless categories */}
-              {!isClassless && (
+              {/* Hero Class */}
               <div>
                 <label className="block text-xs font-bold mb-1 text-slate-400">Karakter Sınıfı</label>
                 <div className="flex flex-wrap gap-1 bg-slate-900 rounded p-1">
-                  {HERO_CLASSES.map(cls => (
-                    <button
-                      key={cls}
-                      type="button"
-                      onClick={() => setFormData({...formData, heroClass: cls})}
-                      className={`px-2 py-1 text-xs rounded transition-colors flex-grow ${formData.heroClass === cls ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                    >
-                      {cls}
-                    </button>
-                  ))}
+                  {isClassless ? (
+                    <div className="px-2 py-1 text-xs rounded bg-blue-600 text-white flex-grow text-center">Tüm Sınıflar</div>
+                  ) : (
+                    HERO_CLASSES.filter(cls => cls !== 'Tüm Sınıflar').map(cls => {
+                      const activeColor = cls === 'Savaşçı' ? 'bg-blue-600 text-white' : cls === 'Büyücü' ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
+                      return (
+                      <button
+                        key={cls}
+                        type="button"
+                        onClick={() => setFormData({...formData, heroClass: cls})}
+                        className={`px-2 py-1 text-xs rounded transition-colors flex-grow ${formData.heroClass === cls ? activeColor : 'text-slate-500 hover:text-slate-300'}`}
+                      >
+                        {cls}
+                      </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
-              )}
 
               {/* Level & Count Row */}
               <div className="flex gap-3">
