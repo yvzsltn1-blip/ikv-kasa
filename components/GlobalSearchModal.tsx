@@ -4,7 +4,7 @@ import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp,
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { SetDetailModal } from './SetDetailModal';
 import { db } from '../firebase';
-import { collection, getDocs, query as fsQuery, where, limit, QueryConstraint, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query as fsQuery, where, limit, QueryConstraint, doc, getDoc, runTransaction } from 'firebase/firestore';
 
 interface SearchResult {
   accountId: string;
@@ -68,6 +68,116 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   // Search limit states
   const [searchLimitReached, setSearchLimitReached] = useState(false);
   const [searchLimitMessage, setSearchLimitMessage] = useState('');
+  const [searchLimitTotal, setSearchLimitTotal] = useState<number | null>(null);
+  const [searchLimitUsed, setSearchLimitUsed] = useState(0);
+  const [searchResetAt, setSearchResetAt] = useState<number | null>(null);
+  const [searchResetCountdown, setSearchResetCountdown] = useState('');
+
+  const getLocalDayKey = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const getNextLocalMidnight = () => {
+    const next = new Date();
+    next.setHours(24, 0, 0, 0);
+    return next.getTime();
+  };
+
+  const formatDuration = (ms: number) => {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours}s ${minutes}d ${seconds}sn`;
+  };
+
+  const updateQuotaState = (limitValue: number, usedValue: number) => {
+    const normalizedLimit = Math.max(1, Math.floor(limitValue || 50));
+    const normalizedUsed = Math.max(0, usedValue);
+    const remaining = Math.max(0, normalizedLimit - normalizedUsed);
+    const nextReset = getNextLocalMidnight();
+
+    setSearchLimitTotal(normalizedLimit);
+    setSearchLimitUsed(normalizedUsed);
+    setSearchResetAt(nextReset);
+    setSearchLimitReached(remaining <= 0);
+    setSearchLimitMessage(
+      remaining <= 0
+        ? `Bugun global arama hakkiniz bitti. Yenilenmesine ${formatDuration(nextReset - Date.now())} kaldi.`
+        : `${remaining} adet hakkiniz kaldi.`
+    );
+  };
+
+  const refreshQuota = async (consumeOne: boolean) => {
+    if (!currentUserUid) return { allowed: true };
+
+    let resolvedLimit = 50;
+    try {
+      const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
+      if (limitsDoc.exists()) {
+        const limitsData = limitsDoc.data();
+        const defaultLimit = limitsData.defaultLimit || 50;
+        const userOverrides = limitsData.userOverrides || {};
+        resolvedLimit = userOverrides[currentUserUid] !== undefined ? userOverrides[currentUserUid] : defaultLimit;
+      }
+    } catch {
+      // If limits cannot be read, continue with default limit.
+    }
+
+    const userRef = doc(db, "users", currentUserUid);
+    const todayKey = getLocalDayKey();
+
+    if (consumeOne) {
+      try {
+        const txnResult = await runTransaction(db, async (transaction) => {
+          const snap = await transaction.get(userRef);
+          const data = snap.exists() ? snap.data() : {};
+          const quota = (data?.searchQuota?.global || {}) as { day?: string; used?: number };
+
+          const currentUsed = quota.day === todayKey ? Math.max(0, quota.used || 0) : 0;
+          if (currentUsed >= resolvedLimit) {
+            return { allowed: false, used: currentUsed };
+          }
+
+          const nextUsed = currentUsed + 1;
+          transaction.set(userRef, {
+            searchQuota: {
+              global: {
+                day: todayKey,
+                used: nextUsed,
+                updatedAt: Date.now(),
+              },
+            },
+          }, { merge: true });
+
+          return { allowed: true, used: nextUsed };
+        });
+
+        updateQuotaState(resolvedLimit, txnResult.used);
+        return { allowed: txnResult.allowed };
+      } catch {
+        // Fallback: if quota write fails, do not block search.
+        updateQuotaState(resolvedLimit, 0);
+        return { allowed: true };
+      }
+    }
+
+    try {
+      const userSnap = await getDoc(userRef);
+      const data = userSnap.exists() ? userSnap.data() : {};
+      const quota = (data?.searchQuota?.global || {}) as { day?: string; used?: number };
+      const currentUsed = quota.day === todayKey ? Math.max(0, quota.used || 0) : 0;
+      updateQuotaState(resolvedLimit, currentUsed);
+      return { allowed: currentUsed < resolvedLimit };
+    } catch {
+      updateQuotaState(resolvedLimit, 0);
+      return { allowed: true };
+    }
+  };
 
   // Debounce search input
   useEffect(() => {
@@ -112,9 +222,34 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       setSetDetailKey(null);
       setSearchLimitReached(false);
       setSearchLimitMessage('');
+      setSearchLimitTotal(null);
+      setSearchLimitUsed(0);
+      setSearchResetAt(null);
+      setSearchResetCountdown('');
       resetFilters();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || searchMode !== 'global') return;
+    refreshQuota(false);
+  }, [isOpen, searchMode, currentUserUid]);
+
+  useEffect(() => {
+    if (!isOpen || searchMode !== 'global' || !searchResetAt) return;
+
+    const updateCountdown = () => {
+      const remainingMs = searchResetAt - Date.now();
+      setSearchResetCountdown(formatDuration(remainingMs));
+      if (remainingMs <= 0) {
+        refreshQuota(false);
+      }
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [isOpen, searchMode, searchResetAt, currentUserUid]);
 
   // Fetch global items with targeted query (max 50 docs per search, 5 min cache)
   useEffect(() => {
@@ -136,33 +271,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     if (serverKey === globalCacheKey && (Date.now() - globalCacheTime) < 300000) return;
 
     const doFetch = async () => {
-      // Check daily search limit
-      if (currentUserUid) {
-        try {
-          const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
-          if (limitsDoc.exists()) {
-            const limitsData = limitsDoc.data();
-            const defaultLimit = limitsData.defaultLimit || 50;
-            const userOverrides = limitsData.userOverrides || {};
-            const userLimit = userOverrides[currentUserUid] !== undefined ? userOverrides[currentUserUid] : defaultLimit;
-
-            const today = new Date().toISOString().split('T')[0];
-            const storageKey = `globalSearch_${currentUserUid}_${today}`;
-            const currentCount = parseInt(localStorage.getItem(storageKey) || '0', 10);
-
-            if (currentCount >= userLimit) {
-              setSearchLimitReached(true);
-              setSearchLimitMessage(`Günlük global arama limitinize ulaştınız (${userLimit}/${userLimit}). Yarın tekrar deneyin.`);
-              return;
-            }
-
-            // Increment counter
-            localStorage.setItem(storageKey, String(currentCount + 1));
-            setSearchLimitReached(false);
-            setSearchLimitMessage('');
-          }
-        } catch { /* no limits doc, proceed */ }
-      }
+      const quota = await refreshQuota(true);
+      if (!quota.allowed) return;
 
       setGlobalLoading(true);
       try {
@@ -450,6 +560,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         }
     }
   };
+
+  const searchLimitRemaining = searchLimitTotal !== null ? Math.max(0, searchLimitTotal - searchLimitUsed) : null;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-start justify-center pt-2 md:pt-20 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -739,10 +851,33 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           {/* GLOBAL MODE */}
           {searchMode === 'global' && (
             <>
+              {searchLimitTotal !== null && (
+                <div className={`border rounded-lg p-3 ${searchLimitReached ? 'bg-red-950/30 border-red-800/40' : 'bg-emerald-950/20 border-emerald-800/40'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className={`text-xs font-bold ${searchLimitReached ? 'text-red-300' : 'text-emerald-300'}`}>
+                        {searchLimitReached ? 'Bugun arama kotan doldu' : `Global Arama Hakkin: ${searchLimitRemaining}/${searchLimitTotal}`}
+                      </p>
+                      {!searchLimitReached && (
+                        <p className="text-[11px] text-emerald-200/80 mt-0.5">
+                          {searchLimitMessage}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-400">Yenilenme</p>
+                      <p className={`text-xs font-bold ${searchLimitReached ? 'text-red-300' : 'text-slate-200'}`}>
+                        {searchResetCountdown || '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {searchLimitReached && (
                 <div className="text-center p-6 text-red-400">
                   <AlertTriangle size={48} className="mx-auto mb-4 opacity-60" />
-                  <p className="font-bold text-sm mb-1">Arama Limiti</p>
+                  <p className="font-bold text-sm mb-1">Bugun hakkiniz bitmistir</p>
                   <p className="text-xs text-red-300/80">{searchLimitMessage}</p>
                 </div>
               )}
@@ -854,3 +989,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     </div>
   );
 };
+
+
+

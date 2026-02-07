@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AdminUserInfo, SearchLimitsConfig, Account } from '../types';
 import { CATEGORY_OPTIONS } from '../types';
-import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, where, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
 
@@ -37,7 +37,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [userSearch, setUserSearch] = useState('');
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   // Fetch all data on mount
   useEffect(() => {
@@ -292,11 +294,42 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       // Update local state
       setAllUsers(prev => prev.filter(u => u.uid !== user.uid));
       setDeleteConfirm(null);
+      setResetConfirm(null);
     } catch (error) {
       console.error("Kullanıcı silme hatası:", error);
       alert("Kullanıcı silinirken hata oluştu.");
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleResetUserData = async (user: AdminUserInfo) => {
+    setResetting(true);
+    try {
+      const batch = writeBatch(db);
+
+      // Delete all globalItems belonging to this user
+      const globalQ = query(collection(db, "globalItems"), where("uid", "==", user.uid));
+      const globalSnap = await getDocs(globalQ);
+      globalSnap.forEach(d => batch.delete(d.ref));
+
+      // Clear all accounts to reset all items/recipes
+      batch.set(doc(db, "users", user.uid), { accounts: [] }, { merge: true });
+
+      await batch.commit();
+
+      setAllUsers(prev => prev.map(u => (
+        u.uid === user.uid
+          ? { ...u, accounts: [], accountCount: 0, totalItemCount: 0, totalRecipeCount: 0 }
+          : u
+      )));
+      setResetConfirm(null);
+      setDeleteConfirm(null);
+    } catch (error) {
+      console.error("KullanÄ±cÄ± veri sÄ±fÄ±rlama hatasÄ±:", error);
+      alert("KullanÄ±cÄ±nÄ±n item/reÃ§ete verileri sÄ±fÄ±rlanÄ±rken hata oluÅŸtu.");
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -602,6 +635,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         </span>
                       </div>
 
+                      {/* Reset user data */}
+                      {resetConfirm === user.uid ? (
+                        <div className="flex items-center gap-2 mt-2 bg-amber-950/30 border border-amber-900/50 rounded-lg p-2">
+                          <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                          <span className="text-[11px] text-amber-300 flex-1">Bu kullanıcının tüm verilerini sıfırlamak istiyor musunuz?</span>
+                          <button
+                            onClick={() => handleResetUserData(user)}
+                            disabled={resetting || deleting}
+                            className="px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50"
+                          >
+                            {resetting ? 'Sıfırlanıyor...' : 'Evet, Sıfırla'}
+                          </button>
+                          <button
+                            onClick={() => setResetConfirm(null)}
+                            className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-[10px] font-bold rounded transition-colors"
+                          >
+                            Vazgeç
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setDeleteConfirm(null); setResetConfirm(user.uid); }}
+                          disabled={deleting || resetting}
+                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-amber-950/30 hover:bg-amber-900/40 text-amber-400 hover:text-amber-300 text-[10px] font-bold rounded-lg border border-amber-900/30 hover:border-amber-700/50 transition-colors disabled:opacity-50"
+                        >
+                          <RotateCcw size={12} />
+                          Veri Sıfırla
+                        </button>
+                      )}
+
                       {/* Delete */}
                       {deleteConfirm === user.uid ? (
                         <div className="flex items-center gap-2 mt-2 bg-red-950/30 border border-red-900/50 rounded-lg p-2">
@@ -609,7 +672,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                           <span className="text-[11px] text-red-300 flex-1">Bu kullanıcının tüm verileri silinecek. Emin misiniz?</span>
                           <button
                             onClick={() => handleDeleteUser(user)}
-                            disabled={deleting}
+                            disabled={deleting || resetting}
                             className="px-3 py-1 bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50"
                           >
                             {deleting ? 'Siliniyor...' : 'Evet, Sil'}
@@ -623,7 +686,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         </div>
                       ) : (
                         <button
-                          onClick={() => setDeleteConfirm(user.uid)}
+                          onClick={() => { setResetConfirm(null); setDeleteConfirm(user.uid); }}
+                          disabled={deleting || resetting}
                           className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-red-950/30 hover:bg-red-900/40 text-red-400 hover:text-red-300 text-[10px] font-bold rounded-lg border border-red-900/30 hover:border-red-700/50 transition-colors"
                         >
                           <Trash2 size={12} />
