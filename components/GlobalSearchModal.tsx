@@ -44,9 +44,10 @@ interface GlobalSearchModalProps {
   globalSetMap: Map<string, SetItemLocation[]>;
   currentUserUid?: string;
   currentUserRole?: UserRole;
+  canUseGlobalSearch?: boolean;
 }
 
-export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap, currentUserUid, currentUserRole }) => {
+export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap, currentUserUid, currentUserRole, canUseGlobalSearch = true }) => {
   const MIN_GLOBAL_SEARCH_CHARS = 4;
   const SAME_RESULTS_FREE_WINDOW_MS = 300000;
   const [query, setQuery] = useState('');
@@ -75,6 +76,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   const [searchResetAt, setSearchResetAt] = useState<number | null>(null);
   const [searchResetCountdown, setSearchResetCountdown] = useState('');
   const globalSearchChargeCacheRef = useRef<Map<string, { signature: string; expiresAt: number }>>(new Map());
+  const globalSearchEnabled = canUseGlobalSearch;
 
   const getLocalDayKey = () => {
     const now = new Date();
@@ -116,6 +118,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   };
 
   const refreshQuota = async (consumeOne: boolean) => {
+    if (!globalSearchEnabled) {
+      setSearchLimitReached(true);
+      setSearchLimitMessage('Global arama yetkiniz admin tarafindan devre disi birakildi.');
+      setSearchLimitTotal(null);
+      setSearchLimitUsed(0);
+      setSearchResetAt(null);
+      setSearchResetCountdown('');
+      return { allowed: false };
+    }
+
     if (currentUserRole === 'admin') {
       setSearchLimitReached(false);
       setSearchLimitMessage('');
@@ -192,6 +204,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     }
   };
 
+  useEffect(() => {
+    if (!globalSearchEnabled && searchMode === 'global') {
+      setSearchMode('local');
+      setGlobalItems([]);
+    }
+  }, [globalSearchEnabled, searchMode]);
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -244,7 +263,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   useEffect(() => {
     if (!isOpen || searchMode !== 'global') return;
     refreshQuota(false);
-  }, [isOpen, searchMode, currentUserUid, currentUserRole]);
+  }, [isOpen, searchMode, currentUserUid, currentUserRole, globalSearchEnabled]);
 
   useEffect(() => {
     if (!isOpen || searchMode !== 'global' || !searchResetAt) return;
@@ -265,6 +284,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   // Fetch global items and consume quota only when needed.
   useEffect(() => {
     if (searchMode !== 'global') return;
+    if (!globalSearchEnabled) return;
     if (globalLoading) return;
 
     const hasSearchCriteria = (debouncedQuery && debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) || hasActiveFilters;
@@ -363,7 +383,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       }
     };
     doFetch();
-  }, [searchMode, debouncedQuery, hasActiveFilters, filterCategory, filterClass, filterGender, filterMinLevel, filterMaxLevel, filterType]);
+  }, [searchMode, debouncedQuery, hasActiveFilters, filterCategory, filterClass, filterGender, filterMinLevel, filterMaxLevel, filterType, globalSearchEnabled]);
 
   const results = useMemo(() => {
     // If no text query AND no filters active, show nothing
@@ -673,11 +693,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
               </button>
               <button
                 onClick={() => setSearchMode('global')}
+                disabled={!globalSearchEnabled}
                 className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
                   searchMode === 'global'
                     ? 'bg-emerald-600 text-white border-emerald-500 shadow-sm'
-                    : 'bg-slate-900/50 text-slate-400 border-slate-700 hover:bg-slate-800 hover:text-slate-300'
+                    : globalSearchEnabled
+                      ? 'bg-slate-900/50 text-slate-400 border-slate-700 hover:bg-slate-800 hover:text-slate-300'
+                      : 'bg-slate-900/30 text-slate-600 border-slate-800 cursor-not-allowed opacity-70'
                 }`}
+                title={globalSearchEnabled ? undefined : 'Global arama yetkiniz admin tarafindan kapatildi'}
               >
                 <Globe size={13} />
                 Globalde Ara
@@ -915,6 +939,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           {/* GLOBAL MODE */}
           {searchMode === 'global' && (
             <>
+              {!globalSearchEnabled && (
+                <div className="text-center p-8 text-red-300 bg-red-950/20 border border-red-900/40 rounded-lg">
+                  <AlertTriangle size={42} className="mx-auto mb-3 opacity-70" />
+                  <p className="font-bold text-sm">Global arama yetkiniz kapatildi.</p>
+                  <p className="text-xs text-red-300/80 mt-1">Bu yetkiyi yalnizca yonetici tekrar acabilir.</p>
+                </div>
+              )}
+
               {searchLimitTotal !== null && (
                 <div className={`border rounded-lg p-3 ${searchLimitReached ? 'bg-red-950/30 border-red-800/40' : 'bg-emerald-950/20 border-emerald-800/40'}`}>
                   <div className="flex items-center justify-between gap-3">
@@ -938,7 +970,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 </div>
               )}
 
-              {searchLimitReached && (
+              {globalSearchEnabled && searchLimitReached && (
                 <div className="text-center p-6 text-red-400">
                   <AlertTriangle size={48} className="mx-auto mb-4 opacity-60" />
                   <p className="font-bold text-sm mb-1">Bugun hakkiniz bitmistir</p>
@@ -946,27 +978,27 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 </div>
               )}
 
-              {!searchLimitReached && globalLoading && (
+              {globalSearchEnabled && !searchLimitReached && globalLoading && (
                 <div className="text-center p-10 text-slate-500">
                   <Loader2 size={48} className="mx-auto mb-4 opacity-40 animate-spin" />
                   <p>Global eşyalar yükleniyor...</p>
                 </div>
               )}
 
-              {!searchLimitReached && !globalLoading && (!debouncedQuery || debouncedQuery.length < MIN_GLOBAL_SEARCH_CHARS) && !hasActiveFilters && (
+              {globalSearchEnabled && !searchLimitReached && !globalLoading && (!debouncedQuery || debouncedQuery.length < MIN_GLOBAL_SEARCH_CHARS) && !hasActiveFilters && (
                 <div className="text-center p-10 text-slate-500">
                   <Globe size={48} className="mx-auto mb-4 opacity-20" />
                   <p>Global arama için en az 4 karakter giriniz veya filtre seçiniz.</p>
                 </div>
               )}
 
-              {!searchLimitReached && !globalLoading && globalResults.length === 0 && ((debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) || hasActiveFilters) && (
+              {globalSearchEnabled && !searchLimitReached && !globalLoading && globalResults.length === 0 && ((debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) || hasActiveFilters) && (
                 <div className="text-center p-10 text-slate-500">
                   <p>Kriterlere uygun global sonuç bulunamadı.</p>
                 </div>
               )}
 
-              {!searchLimitReached && !globalLoading && globalResults.map((gItem, idx) => (
+              {globalSearchEnabled && !searchLimitReached && !globalLoading && globalResults.map((gItem, idx) => (
                 <div
                   key={`global-${gItem.item.id}-${idx}`}
                   className="w-full text-left bg-slate-800/50 border border-emerald-900/40 p-3 rounded flex items-center gap-4"

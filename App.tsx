@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo } from './types';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
@@ -7,7 +7,7 @@ import { ItemDetailModal } from './components/ItemDetailModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock } from 'lucide-react';
 import { AdminPanel } from './components/AdminPanel';
 
 // --- FIREBASE IMPORTLARI ---
@@ -34,9 +34,30 @@ const migrateAccount = (acc: any): Account => {
   };
 };
 
+const DEFAULT_USER_PERMISSIONS: UserPermissions = {
+  canDataEntry: true,
+  canGlobalSearch: true,
+};
+
+const normalizeUserPermissions = (raw: unknown): UserPermissions => {
+  const fromDoc = (raw && typeof raw === 'object') ? raw as Partial<UserPermissions> : {};
+  return {
+    canDataEntry: typeof fromDoc.canDataEntry === 'boolean' ? fromDoc.canDataEntry : true,
+    canGlobalSearch: typeof fromDoc.canGlobalSearch === 'boolean' ? fromDoc.canGlobalSearch : true,
+  };
+};
+
+type AccessAlert = {
+  kind: 'dataEntry' | 'globalSearch';
+  title: string;
+  message: string;
+  hint?: string;
+};
+
 export default function App() {
   // --- Auth & Loading State ---
   const [userRole, setUserRole] = useState<UserRole>(null);
+  const [userPermissions, setUserPermissions] = useState<UserPermissions>(DEFAULT_USER_PERMISSIONS);
   const [loading, setLoading] = useState(true);
 
   // Global State
@@ -87,6 +108,7 @@ export default function App() {
   // Toast & Unsaved Changes State
   const [toast, setToast] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [accessAlert, setAccessAlert] = useState<AccessAlert | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string) => {
@@ -94,6 +116,41 @@ export default function App() {
     setToast(msg);
     setHasUnsavedChanges(true);
     toastTimer.current = setTimeout(() => setToast(null), 2000);
+  };
+
+  const canEditData = userRole === 'admin' || userPermissions.canDataEntry;
+  const canUseGlobalSearch = userRole === 'admin' || userPermissions.canGlobalSearch;
+
+  const showAccessAlert = (kind: AccessAlert['kind']) => {
+    if (kind === 'dataEntry') {
+      setAccessAlert({
+        kind,
+        title: 'Veri Girisi Duraklatildi',
+        message: 'Bu hesap icin veri girisi yetkiniz yonetici tarafindan gecici olarak kapatildi.',
+        hint: 'Salt okunur modda inceleme yapabilirsiniz.',
+      });
+      return;
+    }
+
+    setAccessAlert({
+      kind,
+      title: 'Global Arama Kapali',
+      message: 'Global arama yetkiniz yonetici tarafindan devre disi birakildi.',
+      hint: 'Hesaplarim sekmesindeki yerel aramayi kullanmaya devam edebilirsiniz.',
+    });
+  };
+
+  const ensureCanEditData = () => {
+    if (canEditData) return true;
+    showAccessAlert('dataEntry');
+    return false;
+  };
+
+  const handleOpenSearch = () => {
+    if (!canUseGlobalSearch) {
+      showAccessAlert('globalSearch');
+    }
+    setIsSearchOpen(true);
   };
 
   // --- BAŞLANGIÇ: VERİLERİ BULUTTAN ÇEKME ---
@@ -117,6 +174,8 @@ export default function App() {
             const data = docSnap.data();
             const rawAccounts = data.accounts || [];
             const loadedAccounts = rawAccounts.map(migrateAccount);
+            const resolvedPermissions = normalizeUserPermissions(data.permissions);
+            setUserPermissions(resolvedPermissions);
 
             // Load username
             if (data.username) {
@@ -135,6 +194,14 @@ export default function App() {
             // Mevcut kullanıcılara email alanı yoksa ekle
             if (!data.email && user.email) {
               setDoc(userDocRef, { email: user.email }, { merge: true }).catch(() => {});
+            }
+
+            if (
+              !data.permissions ||
+              typeof data.permissions.canDataEntry !== 'boolean' ||
+              typeof data.permissions.canGlobalSearch !== 'boolean'
+            ) {
+              setDoc(userDocRef, { permissions: resolvedPermissions }, { merge: true }).catch(() => {});
             }
 
             if (loadedAccounts.length > 0) {
@@ -192,6 +259,7 @@ export default function App() {
         setUsername(null);
         setSocialLink('');
         setGlobalEnchantments([]);
+        setUserPermissions(DEFAULT_USER_PERMISSIONS);
         setLoading(false);
       }
     });
@@ -209,10 +277,12 @@ export default function App() {
       accounts: initialAccounts,
       email: user?.email || '',
       createdAt: Date.now(),
+      permissions: DEFAULT_USER_PERMISSIONS,
     });
 
     setAccounts(initialAccounts);
     setSelectedAccountId(newId);
+    setUserPermissions(DEFAULT_USER_PERMISSIONS);
   };
 
   // --- USERNAME SET ---
@@ -264,6 +334,7 @@ export default function App() {
   const handleSaveSocialLink = async () => {
     const user = auth.currentUser;
     if (!user) return;
+    if (!ensureCanEditData()) return;
 
     const trimmed = socialLinkInput.trim();
 
@@ -300,6 +371,7 @@ export default function App() {
         return;
     }
 
+    if (!ensureCanEditData()) return;
     setIsSaving(true);
     try {
         const userDocRef = doc(db, "users", user.uid);
@@ -528,6 +600,7 @@ export default function App() {
   // --- Account Management ---
 
   const handleAddAccount = () => {
+    if (!ensureCanEditData()) return;
     const newId = crypto.randomUUID();
     const name = `Hesap ${accounts.length + 1}`;
     const newAccount = createAccount(newId, name);
@@ -540,6 +613,7 @@ export default function App() {
   };
 
   const handleDeleteAccount = () => {
+    if (!ensureCanEditData()) return;
     if (accounts.length <= 1) {
       alert("En az bir hesap kalmalıdır.");
       return;
@@ -576,6 +650,10 @@ export default function App() {
   // --- Name Update Handlers (Commit) ---
 
   const commitAccountName = () => {
+    if (!canEditData) {
+      if (activeAccount) setTempAccountName(activeAccount.name);
+      return;
+    }
     const newAccounts = accounts.map(acc =>
       acc.id === selectedAccountId ? { ...acc, name: tempAccountName } : acc
     );
@@ -584,6 +662,10 @@ export default function App() {
   };
 
   const commitCharacterName = () => {
+    if (!canEditData) {
+      if (activeChar) setTempCharName(activeChar.name);
+      return;
+    }
     if (!activeAccount || !activeServer) return;
     const newChars = [...activeServer.characters];
     newChars[activeCharIndex] = { ...newChars[activeCharIndex], name: tempCharName };
@@ -671,6 +753,7 @@ export default function App() {
   // --- Item Management ---
 
   const handleMoveItem = (containerId: string, fromSlotId: number, toSlotId: number) => {
+    if (!ensureCanEditData()) return;
     if (fromSlotId === toSlotId) return;
     if (!activeAccount) return;
 
@@ -709,6 +792,7 @@ export default function App() {
   };
 
   const updateSlot = (containerId: string, slotId: number, item: ItemData | null) => {
+    if (!canEditData) return;
     if (!activeAccount) return;
 
     setAccounts(prevAccounts => prevAccounts.map(acc => {
@@ -740,6 +824,7 @@ export default function App() {
   };
 
   const handleReadRecipe = (item: ItemData) => {
+      if (!ensureCanEditData()) return;
       if (!activeAccount || !activeSlot) return;
 
       setAccounts(prevAccounts => prevAccounts.map(acc => {
@@ -774,6 +859,7 @@ export default function App() {
   };
 
   const handleUnlearnRecipe = (recipeId: string) => {
+    if (!ensureCanEditData()) return;
     setAccounts(prevAccounts => prevAccounts.map(acc => {
         if (acc.id !== selectedAccountId) return acc;
         const newServers = [...acc.servers];
@@ -790,11 +876,13 @@ export default function App() {
   };
 
   const handleEditRecipe = (recipe: ItemData) => {
+    if (!ensureCanEditData()) return;
     setEditingRecipe(recipe);
     setIsRecipeEditModalOpen(true);
   };
 
   const handleSaveEditedRecipe = (item: ItemData) => {
+    if (!ensureCanEditData()) return;
     setAccounts(prevAccounts => prevAccounts.map(acc => {
         if (acc.id !== selectedAccountId) return acc;
         const newServers = [...acc.servers];
@@ -815,6 +903,7 @@ export default function App() {
   };
 
   const handleDeleteEditedRecipe = () => {
+    if (!ensureCanEditData()) return;
     if (editingRecipe) {
         handleUnlearnRecipe(editingRecipe.id);
         setIsRecipeEditModalOpen(false);
@@ -840,6 +929,7 @@ export default function App() {
       setDetailItem(item);
       setDetailSlot({ containerId, slotId });
     } else {
+      if (!ensureCanEditData()) return;
       // Open ItemModal for creating new item in empty slot
       setActiveSlot({ containerId, slotId });
       setModalOpen(true);
@@ -847,6 +937,7 @@ export default function App() {
   };
 
   const handleEditFromDetail = () => {
+    if (!ensureCanEditData()) return;
     if (detailSlot) {
       setActiveSlot(detailSlot);
       setModalOpen(true);
@@ -895,6 +986,7 @@ export default function App() {
   };
 
   const handleSaveItem = (item: ItemData) => {
+    if (!ensureCanEditData()) return;
     if (!activeAccount || !activeSlot) return;
 
     if (item.type === 'Recipe' && item.isRead) {
@@ -956,6 +1048,7 @@ export default function App() {
   };
 
   const handleDeleteItem = () => {
+    if (!ensureCanEditData()) return;
     if (activeSlot) {
       const currentItem = getCurrentItem();
       updateSlot(activeSlot.containerId, activeSlot.slotId, null);
@@ -1029,6 +1122,7 @@ export default function App() {
                   value={tempAccountName}
                   onChange={(e) => setTempAccountName(e.target.value)}
                   onBlur={commitAccountName}
+                  readOnly={!canEditData}
                   className="bg-transparent text-yellow-500 font-bold text-[14px] outline-none flex-1 min-w-0 placeholder-slate-600"
                   placeholder="Hesap İsmi"
                   maxLength={30}
@@ -1042,7 +1136,8 @@ export default function App() {
               )}
               <button
                 onClick={() => { setSocialLinkInput(socialLink); setShowSocialLinkModal(true); }}
-                className={`p-1 rounded-lg shrink-0 transition-colors ${socialLink ? 'text-blue-400 bg-blue-900/30 border border-blue-700/30' : 'text-slate-500 bg-slate-800/40 border border-slate-700/30'}`}
+                disabled={!canEditData}
+                className={`p-1 rounded-lg shrink-0 transition-colors ${!canEditData ? 'text-slate-600 bg-slate-800/20 border border-slate-700/20 cursor-not-allowed opacity-60' : (socialLink ? 'text-blue-400 bg-blue-900/30 border border-blue-700/30' : 'text-slate-500 bg-slate-800/40 border border-slate-700/30')}`}
                 title="Sosyal Medya Linki"
               >
                 <Link2 size={12} />
@@ -1068,17 +1163,17 @@ export default function App() {
                   </select>
                   <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
                 </div>
-                <button onClick={handleAddAccount} className="p-1 text-green-500 active:text-green-400 rounded-lg active:bg-green-900/30 shrink-0" title="Hesap Ekle"><Plus size={15} /></button>
+                <button onClick={handleAddAccount} disabled={!canEditData} className={`p-1 rounded-lg shrink-0 ${canEditData ? 'text-green-500 active:text-green-400 active:bg-green-900/30' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Ekle"><Plus size={15} /></button>
                 {accounts.length > 1 && (
-                  <button onClick={handleDeleteAccount} className="p-1 text-red-800 active:text-red-500 rounded-lg active:bg-red-900/30 shrink-0" title="Hesap Sil"><Trash2 size={15} /></button>
+                  <button onClick={handleDeleteAccount} disabled={!canEditData} className={`p-1 rounded-lg shrink-0 ${canEditData ? 'text-red-800 active:text-red-500 active:bg-red-900/30' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Sil"><Trash2 size={15} /></button>
                 )}
               </div>
 
               <div className="flex items-center bg-slate-900/40 rounded-xl p-0.5 border border-slate-700/30 gap-0.5 shrink-0">
-                <button onClick={() => setIsSearchOpen(true)} className="p-1.5 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={15} /></button>
+                <button onClick={handleOpenSearch} className="p-1.5 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={15} /></button>
                 <button onClick={handleExportExcel} className="p-1.5 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={15} /></button>
                 <div className="relative">
-                  <button onClick={saveData} className={`p-1.5 rounded-lg transition-colors ${hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 animate-pulse ring-2 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20'}`}><Save size={15} /></button>
+                  <button onClick={saveData} disabled={!canEditData} className={`p-1.5 rounded-lg transition-colors ${!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 animate-pulse ring-2 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20')}`}><Save size={15} /></button>
                   {hasUnsavedChanges && (
                     <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap shadow-lg animate-bounce">
                       Kaydet!
@@ -1130,6 +1225,7 @@ export default function App() {
                         value={tempAccountName}
                         onChange={(e) => setTempAccountName(e.target.value)}
                         onBlur={commitAccountName}
+                        readOnly={!canEditData}
                         className="bg-transparent text-yellow-400 font-bold text-base outline-none w-36 placeholder-slate-600 border-b border-dashed border-yellow-700/30 focus:border-yellow-600/50 focus:border-solid transition-all"
                         placeholder="Hesap Adı"
                         maxLength={30}
@@ -1143,7 +1239,8 @@ export default function App() {
                     )}
                     <button
                       onClick={() => { setSocialLinkInput(socialLink); setShowSocialLinkModal(true); }}
-                      className={`p-1 rounded-md transition-colors ${socialLink ? 'text-blue-400 bg-blue-900/20 border border-blue-700/25 hover:bg-blue-900/40' : 'text-slate-500 bg-slate-800/30 border border-slate-700/25 hover:text-blue-400 hover:bg-blue-900/20'}`}
+                      disabled={!canEditData}
+                      className={`p-1 rounded-md transition-colors ${!canEditData ? 'text-slate-600 bg-slate-800/20 border border-slate-700/20 cursor-not-allowed opacity-60' : (socialLink ? 'text-blue-400 bg-blue-900/20 border border-blue-700/25 hover:bg-blue-900/40' : 'text-slate-500 bg-slate-800/30 border border-slate-700/25 hover:text-blue-400 hover:bg-blue-900/20')}`}
                       title="Sosyal Medya Linki"
                     >
                       <Link2 size={12} />
@@ -1169,9 +1266,9 @@ export default function App() {
                         </select>
                         <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
                      </div>
-                     <button onClick={handleAddAccount} className="p-1 text-green-500/70 hover:text-green-400 hover:bg-green-900/20 rounded transition-colors" title="Hesap Ekle"><Plus size={14} /></button>
+                     <button onClick={handleAddAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-green-500/70 hover:text-green-400 hover:bg-green-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Ekle"><Plus size={14} /></button>
                      {accounts.length > 1 && (
-                       <button onClick={handleDeleteAccount} className="p-1 text-red-800/70 hover:text-red-400 hover:bg-red-900/20 rounded transition-colors" title="Hesap Sil"><Trash2 size={14} /></button>
+                       <button onClick={handleDeleteAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-red-800/70 hover:text-red-400 hover:bg-red-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Sil"><Trash2 size={14} /></button>
                      )}
                   </div>
                </div>
@@ -1179,9 +1276,9 @@ export default function App() {
 
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-1.5">
-              <button onClick={() => setIsSearchOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all"><Search size={13} /><span>Ara</span></button>
+              <button onClick={handleOpenSearch} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all"><Search size={13} /><span>Ara</span></button>
               <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all"><FileSpreadsheet size={13} /><span>Excel</span></button>
-              <button onClick={saveData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500'}`}><Save size={13} /><span>Kaydet</span></button>
+              <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`}><Save size={13} /><span>Kaydet</span></button>
               {userRole === 'admin' && (
                 <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all"><Crown size={13} /><span>Admin</span></button>
               )}
@@ -1251,6 +1348,7 @@ export default function App() {
                      value={tempCharName}
                      onChange={(e) => setTempCharName(e.target.value)}
                      onBlur={commitCharacterName}
+                     readOnly={!canEditData}
                      className="bg-transparent text-blue-300 font-bold text-xs outline-none w-24 border-b border-dashed border-blue-500/25 focus:border-blue-500/50 focus:border-solid placeholder-slate-600 transition-colors"
                      placeholder="Karakter Adı"
                      maxLength={20}
@@ -1280,6 +1378,7 @@ export default function App() {
                   value={tempCharName}
                   onChange={(e) => setTempCharName(e.target.value)}
                   onBlur={commitCharacterName}
+                  readOnly={!canEditData}
                   className="bg-transparent text-blue-300 font-bold text-[13px] outline-none flex-1 min-w-0 placeholder-slate-600"
                   placeholder="Karakter İsmi"
                   maxLength={20}
@@ -1288,6 +1387,13 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        {(!canEditData || !canUseGlobalSearch) && (
+          <div className="px-3 py-1.5 bg-red-950/30 border-b border-red-900/40 text-[10px] text-red-200 flex flex-wrap gap-2">
+            {!canEditData && <span className="bg-red-900/40 border border-red-800/40 rounded px-2 py-0.5">Veri girisi yetkisi kapali (salt okunur mod)</span>}
+            {!canUseGlobalSearch && <span className="bg-amber-900/30 border border-amber-800/40 rounded px-2 py-0.5 text-amber-200">Global arama yetkisi kapali</span>}
+          </div>
+        )}
 
         {/* Content Area */}
         <div className="p-1 bg-slate-800/50 md:flex-1 flex flex-col md:min-h-0">
@@ -1365,6 +1471,56 @@ export default function App() {
               >
                 Tamam
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Access Alert Modal */}
+        {accessAlert && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setAccessAlert(null)}>
+            <div
+              className="relative mx-4 w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl animate-in zoom-in-95 fade-in duration-200"
+              style={{
+                background: accessAlert.kind === 'dataEntry'
+                  ? 'linear-gradient(145deg, rgba(69,10,10,0.95) 0%, rgba(30,41,59,0.95) 100%)'
+                  : 'linear-gradient(145deg, rgba(69,26,3,0.95) 0%, rgba(30,41,59,0.95) 100%)',
+                borderColor: accessAlert.kind === 'dataEntry' ? 'rgba(248,113,113,0.35)' : 'rgba(251,191,36,0.35)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`px-5 py-4 border-b ${accessAlert.kind === 'dataEntry' ? 'bg-red-950/35 border-red-800/40' : 'bg-amber-950/30 border-amber-800/40'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl border ${accessAlert.kind === 'dataEntry' ? 'bg-red-900/30 border-red-700/50' : 'bg-amber-900/30 border-amber-700/50'}`}>
+                    {accessAlert.kind === 'dataEntry'
+                      ? <Lock size={18} className="text-red-300" />
+                      : <Globe size={18} className="text-amber-300" />
+                    }
+                  </div>
+                  <div>
+                    <h3 className="text-white text-sm font-bold tracking-wide">{accessAlert.title}</h3>
+                    <p className={`text-[10px] mt-0.5 ${accessAlert.kind === 'dataEntry' ? 'text-red-200/80' : 'text-amber-200/80'}`}>
+                      Yetki bilgilendirmesi
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4">
+                <p className="text-slate-100 text-sm leading-relaxed">{accessAlert.message}</p>
+                {accessAlert.hint && (
+                  <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${accessAlert.kind === 'dataEntry' ? 'bg-red-950/25 border-red-900/50 text-red-100/90' : 'bg-amber-950/25 border-amber-900/50 text-amber-100/90'}`}>
+                    {accessAlert.hint}
+                  </div>
+                )}
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setAccessAlert(null)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors border ${accessAlert.kind === 'dataEntry' ? 'bg-red-700/70 hover:bg-red-600 text-white border-red-500/40' : 'bg-amber-700/70 hover:bg-amber-600 text-black border-amber-500/40'}`}
+                  >
+                    Tamam
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1531,6 +1687,7 @@ export default function App() {
         globalSetMap={globalSetMap}
         currentUserUid={auth.currentUser?.uid || ''}
         currentUserRole={userRole}
+        canUseGlobalSearch={canUseGlobalSearch}
       />
 
       <RecipeBookModal

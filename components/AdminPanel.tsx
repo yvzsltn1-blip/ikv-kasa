@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AdminUserInfo, SearchLimitsConfig, Account } from '../types';
+import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions } from '../types';
 import { CATEGORY_OPTIONS } from '../types';
-import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw } from 'lucide-react';
+import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, where, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
 
@@ -10,6 +10,11 @@ interface AdminPanelProps {
 }
 
 type TabType = 'dashboard' | 'users' | 'settings';
+
+const DEFAULT_USER_PERMISSIONS: UserPermissions = {
+  canDataEntry: true,
+  canGlobalSearch: true,
+};
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -40,6 +45,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [resetConfirm, setResetConfirm] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [permissionSaving, setPermissionSaving] = useState<Record<string, boolean>>({});
 
   // Fetch all data on mount
   useEffect(() => {
@@ -83,6 +89,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           const data = docSnap.data();
           const accounts = normalizeAccounts(data.accounts);
           const createdAt = toMillis(data.createdAt);
+          const rawPermissions = (data.permissions && typeof data.permissions === 'object') ? data.permissions as Partial<UserPermissions> : {};
+          const permissions: UserPermissions = {
+            canDataEntry: typeof rawPermissions.canDataEntry === 'boolean' ? rawPermissions.canDataEntry : DEFAULT_USER_PERMISSIONS.canDataEntry,
+            canGlobalSearch: typeof rawPermissions.canGlobalSearch === 'boolean' ? rawPermissions.canGlobalSearch : DEFAULT_USER_PERMISSIONS.canGlobalSearch,
+          };
 
           let totalItems = 0;
           let totalRecipes = 0;
@@ -114,6 +125,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             totalRecipeCount: totalRecipes,
             createdAt,
             accounts,
+            permissions,
           });
         } catch (userError) {
           console.warn("Kullanici parse atlaniyor:", docSnap.id, userError);
@@ -330,6 +342,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       alert("KullanÄ±cÄ±nÄ±n item/reÃ§ete verileri sÄ±fÄ±rlanÄ±rken hata oluÅŸtu.");
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleToggleUserPermission = async (user: AdminUserInfo, key: keyof UserPermissions, value: boolean) => {
+    setPermissionSaving(prev => ({ ...prev, [user.uid]: true }));
+    try {
+      const nextPermissions: UserPermissions = {
+        ...DEFAULT_USER_PERMISSIONS,
+        ...(user.permissions || DEFAULT_USER_PERMISSIONS),
+        [key]: value,
+      };
+
+      await setDoc(doc(db, "users", user.uid), { permissions: nextPermissions }, { merge: true });
+
+      setAllUsers(prev => prev.map(u => (
+        u.uid === user.uid
+          ? { ...u, permissions: nextPermissions }
+          : u
+      )));
+    } catch (error) {
+      console.error("Kullanici izin guncelleme hatasi:", error);
+      alert("Kullanici yetkisi guncellenirken hata olustu.");
+    } finally {
+      setPermissionSaving(prev => ({ ...prev, [user.uid]: false }));
     }
   };
 
@@ -633,6 +669,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         <span className="text-[10px] text-slate-300 font-bold">
                           {searchLimits.userOverrides[user.uid] !== undefined ? searchLimits.userOverrides[user.uid] : `Varsayılan (${searchLimits.defaultLimit})`}
                         </span>
+                      </div>
+
+                      <div className="mt-2 space-y-1.5">
+                        <span className="text-[10px] text-slate-500 font-bold tracking-wider">KULLANICI YETKILERI</span>
+
+                        <div className="flex items-center justify-between gap-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2">
+                          <div className="text-[11px]">
+                            <p className="text-slate-200 font-semibold">Veri Girisi</p>
+                            <p className="text-[10px] text-slate-500">Hesap, esya ve recete islemleri</p>
+                          </div>
+                          <button
+                            onClick={() => handleToggleUserPermission(user, 'canDataEntry', !(user.permissions?.canDataEntry ?? true))}
+                            disabled={deleting || resetting || !!permissionSaving[user.uid]}
+                            className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${(user.permissions?.canDataEntry ?? true) ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40' : 'bg-red-950/40 text-red-300 border-red-900/50 hover:bg-red-900/40'} disabled:opacity-50`}
+                          >
+                            {(user.permissions?.canDataEntry ?? true) ? <Unlock size={11} /> : <Lock size={11} />}
+                            {(user.permissions?.canDataEntry ?? true) ? 'Acik' : 'Kapali'}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2">
+                          <div className="text-[11px]">
+                            <p className="text-slate-200 font-semibold">Global Arama</p>
+                            <p className="text-[10px] text-slate-500">Global arama sekmesine erisim</p>
+                          </div>
+                          <button
+                            onClick={() => handleToggleUserPermission(user, 'canGlobalSearch', !(user.permissions?.canGlobalSearch ?? true))}
+                            disabled={deleting || resetting || !!permissionSaving[user.uid]}
+                            className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${(user.permissions?.canGlobalSearch ?? true) ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40' : 'bg-red-950/40 text-red-300 border-red-900/50 hover:bg-red-900/40'} disabled:opacity-50`}
+                          >
+                            {(user.permissions?.canGlobalSearch ?? true) ? <Unlock size={11} /> : <Lock size={11} />}
+                            {(user.permissions?.canGlobalSearch ?? true) ? 'Acik' : 'Kapali'}
+                          </button>
+                        </div>
                       </div>
 
                       {/* Reset user data */}

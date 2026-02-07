@@ -92,6 +92,11 @@ export interface GlobalSetInfo {
   categories: Set<string>;
 }
 
+export interface UserPermissions {
+  canDataEntry: boolean;
+  canGlobalSearch: boolean;
+}
+
 export interface AdminUserInfo {
   uid: string;
   email: string;
@@ -102,6 +107,7 @@ export interface AdminUserInfo {
   totalRecipeCount: number;
   createdAt?: number;
   accounts: Account[];
+  permissions: UserPermissions;
 }
 
 export interface SearchLimitsConfig {
