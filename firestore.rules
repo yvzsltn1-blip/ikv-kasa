@@ -90,6 +90,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Public profile index for messaging search
+    match /publicProfiles/{userId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null &&
+        (request.auth.uid == userId || isAdmin()) &&
+        request.resource.data.uid is string &&
+        request.resource.data.uid == userId &&
+        request.resource.data.username is string &&
+        request.resource.data.emailLower is string;
+      allow delete: if request.auth != null && (request.auth.uid == userId || isAdmin());
+    }
+
     // Global item sharing
     match /globalItems/{itemId} {
       allow read: if request.auth != null && (isAdmin() || canGlobalSearch());
@@ -155,7 +167,10 @@ service cloud.firestore {
           request.resource.data.createdAt == resource.data.createdAt
         )
       );
-      allow delete: if false;
+      allow delete: if request.auth != null && (
+        isAdmin() ||
+        request.auth.uid in resource.data.participants
+      );
     }
 
     // Deny everything else

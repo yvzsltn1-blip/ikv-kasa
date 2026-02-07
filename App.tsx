@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions } from './types';
-import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES } from './constants';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS } from './types';
+import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
 import { ItemDetailModal } from './components/ItemDetailModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle, MoreVertical, Upload } from 'lucide-react';
 import { AdminPanel } from './components/AdminPanel';
 import { MessagingModal } from './components/MessagingModal';
 
@@ -113,7 +113,11 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
   const [isMobileAccountMenuOpen, setIsMobileAccountMenuOpen] = useState(false);
+  const [isMobileQuickMenuOpen, setIsMobileQuickMenuOpen] = useState(false);
+  const [isImportingExcel, setIsImportingExcel] = useState(false);
   const mobileAccountMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const mobileQuickMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const excelImportInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Input State (Temporary states for name editing)
   const [tempAccountName, setTempAccountName] = useState('');
@@ -200,6 +204,8 @@ export default function App() {
 
         setLoading(true);
         const userDocRef = doc(db, "users", user.uid);
+        const emailLower = (user.email || '').trim().toLowerCase();
+        let profileUsername = '';
 
         try {
           const docSnap = await getDoc(userDocRef);
@@ -215,8 +221,10 @@ export default function App() {
             // Load username
             if (data.username) {
               setUsername(data.username);
+              profileUsername = data.username;
             } else {
               setUsername(null);
+              profileUsername = '';
             }
 
             // Load social link
@@ -266,6 +274,15 @@ export default function App() {
           }
 
           // Admin kontrolü: hardcoded email + Firestore metadata/admins
+          if (emailLower) {
+            setDoc(doc(db, "publicProfiles", user.uid), {
+              uid: user.uid,
+              username: profileUsername,
+              emailLower,
+              updatedAt: Date.now(),
+            }, { merge: true }).catch(() => {});
+          }
+
           const adminEmail = "yvzsltn61@gmail.com";
           let isAdmin = user.email === adminEmail;
           if (!isAdmin) {
@@ -418,6 +435,16 @@ export default function App() {
         transaction.set(usernameDocRef, { uid: user.uid, displayName: trimmed });
         transaction.set(doc(db, "users", user.uid), { username: trimmed }, { merge: true });
       });
+
+      const emailLower = (user.email || '').trim().toLowerCase();
+      if (emailLower) {
+        await setDoc(doc(db, "publicProfiles", user.uid), {
+          uid: user.uid,
+          username: trimmed,
+          emailLower,
+          updatedAt: Date.now(),
+        }, { merge: true });
+      }
 
       setUsername(trimmed);
       setShowUsernameModal(false);
@@ -793,13 +820,430 @@ export default function App() {
     setHasUnsavedChanges(true);
   };
 
+  type ImportContainerKey = 'bank1' | 'bank2' | 'bag' | 'learned';
+  type ParsedImportRow = Record<string, string>;
+
+  const normalizeImportText = (value: unknown) => (
+    String(value ?? '')
+      .trim()
+      .toLocaleLowerCase('tr')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/ı/g, 'i')
+      .replace(/[^a-z0-9]+/g, '')
+  );
+
+  const detectDelimiter = (text: string) => {
+    const firstLine = text.split(/\r?\n/).find(line => line.trim() !== '') || '';
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const semicolonCount = (firstLine.match(/;/g) || []).length;
+    return semicolonCount > commaCount ? ';' : ',';
+  };
+
+  const parseDelimitedRows = (text: string, delimiter: string): string[][] => {
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inQuotes) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') {
+            currentCell += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          currentCell += ch;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inQuotes = true;
+        continue;
+      }
+
+      if (ch === delimiter) {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+        continue;
+      }
+
+      if (ch === '\r') {
+        continue;
+      }
+
+      if (ch === '\n') {
+        currentRow.push(currentCell.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = '';
+        continue;
+      }
+
+      currentCell += ch;
+    }
+
+    currentRow.push(currentCell.trim());
+    rows.push(currentRow);
+    return rows.filter(row => row.some(cell => cell.trim() !== ''));
+  };
+
+  const getImportField = (row: ParsedImportRow, aliases: string[]) => {
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeImportText(alias);
+      if (normalizedAlias in row) {
+        return row[normalizedAlias];
+      }
+    }
+    return '';
+  };
+
+  const parseImportBoolean = (value: string) => {
+    const token = normalizeImportText(value);
+    return ['evet', 'yes', 'true', '1', 'okundu', 'okunmus'].includes(token);
+  };
+
+  const parseImportPositiveInt = (value: string, fallback: number) => {
+    const parsed = Number.parseInt(String(value).trim(), 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+    return parsed;
+  };
+
+  const resolveContainerKey = (value: string): ImportContainerKey | null => {
+    const token = normalizeImportText(value);
+    if (!token) return null;
+
+    if (['kasa1', 'bank1', 'kasa01'].includes(token)) return 'bank1';
+    if (['kasa2', 'bank2', 'kasa02'].includes(token)) return 'bank2';
+    if (['canta', 'cantasi', 'bag'].includes(token)) return 'bag';
+    if (['recetekitabi', 'recipebook', 'okunmusrecete', 'learnedrecipes'].includes(token)) return 'learned';
+    return null;
+  };
+
+  const resolveListValue = (options: readonly string[], rawValue: string, fallback: string) => {
+    const token = normalizeImportText(rawValue);
+    if (!token) return fallback;
+    const matched = options.find(option => normalizeImportText(option) === token);
+    return matched || fallback;
+  };
+
+  const openExcelImportPicker = () => {
+    if (!ensureCanEditData()) return;
+    excelImportInputRef.current?.click();
+  };
+
+  const handleExcelImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!ensureCanEditData()) {
+      event.target.value = '';
+      return;
+    }
+
+    setIsImportingExcel(true);
+
+    try {
+      const fileNameLower = file.name.toLocaleLowerCase();
+      if (!fileNameLower.endsWith('.csv') && !fileNameLower.endsWith('.txt')) {
+        showSystemAlert({
+          tone: 'warning',
+          title: 'Desteklenmeyen Dosya',
+          message: 'Suan sadece CSV import destekleniyor. Excel dosyanizi CSV olarak kaydedip tekrar yukleyin.',
+          hint: 'Ornek dosya: ornek-import.csv',
+        });
+        return;
+      }
+
+      const rawText = await file.text();
+      if (!rawText.trim()) {
+        showSystemAlert({
+          tone: 'error',
+          title: 'Import Hatasi',
+          message: 'Dosya bos gorunuyor. Lutfen gecerli satirlari olan bir CSV secin.',
+        });
+        return;
+      }
+
+      const sanitizedText = rawText.replace(/^\uFEFF/, '');
+      const rows = parseDelimitedRows(sanitizedText, detectDelimiter(sanitizedText));
+      if (rows.length < 2) {
+        showSystemAlert({
+          tone: 'error',
+          title: 'Import Hatasi',
+          message: 'Baslik ve veri satirlari bulunamadi. Lutfen ornek formata gore dosya yukleyin.',
+        });
+        return;
+      }
+
+      const header = rows[0].map(cell => normalizeImportText(cell));
+      const dataRows = rows.slice(1);
+      const parsedRows: ParsedImportRow[] = dataRows.map(row => {
+        const mapped: ParsedImportRow = {};
+        header.forEach((key, idx) => {
+          if (!key) return;
+          if (!(key in mapped)) mapped[key] = (row[idx] || '').trim();
+        });
+        return mapped;
+      });
+
+      const nextAccounts = structuredClone(accounts) as Account[];
+      const categoryMap = new Map(CATEGORY_OPTIONS.map(cat => [normalizeImportText(cat), cat]));
+      const fallbackAccountName = activeAccount?.name || '';
+      const fallbackServerName = activeServer?.name || '';
+      const fallbackCharName = activeChar?.name || '';
+
+      const defaultHeroClass = HERO_CLASSES[0] as ItemData['heroClass'];
+      const allHeroClass = (HERO_CLASSES.find(c => normalizeImportText(c) === 'tumsiniflar') || defaultHeroClass) as ItemData['heroClass'];
+      const defaultGender = GENDER_OPTIONS[0] as ItemData['gender'];
+      const allGender = (GENDER_OPTIONS.find(g => normalizeImportText(g) === 'tumcinsiyetler') || defaultGender) as ItemData['gender'];
+
+      const genderlessCategories = new Set(['yuzuk', 'kolye', 'tilsim', 'iksir', 'maden', 'diger']);
+      const classlessCategories = new Set(['yuzuk', 'kolye', 'iksir', 'maden', 'diger']);
+
+      const newEnchantments = new Set<string>();
+      const issues: string[] = [];
+      let appliedCount = 0;
+      let skippedCount = 0;
+      let createdAccountCount = 0;
+      let createdCharacterCount = 0;
+
+      parsedRows.forEach((parsedRow, index) => {
+        const rowNo = index + 2;
+        const accountName = getImportField(parsedRow, ['hesap', 'account']) || fallbackAccountName || `Hesap ${nextAccounts.length + 1}`;
+        const serverName = getImportField(parsedRow, ['sunucu', 'server']) || fallbackServerName;
+        const characterName = getImportField(parsedRow, ['karakter', 'character', 'char']) || fallbackCharName;
+        const containerName = getImportField(parsedRow, ['kasacanta', 'kasa', 'container']);
+
+        const accountToken = normalizeImportText(accountName);
+        const serverToken = normalizeImportText(serverName);
+        const characterToken = normalizeImportText(characterName);
+
+        let targetAccount = nextAccounts.find(acc => normalizeImportText(acc.name) === accountToken);
+        if (!targetAccount) {
+          targetAccount = createAccount(crypto.randomUUID(), accountName);
+          nextAccounts.push(targetAccount);
+          createdAccountCount++;
+        }
+
+        if (!serverToken) {
+          skippedCount++;
+          if (issues.length < 6) issues.push(`Satir ${rowNo}: Sunucu bilgisi bos.`);
+          return;
+        }
+
+        const targetServer = targetAccount.servers.find(server => normalizeImportText(server.name) === serverToken);
+        if (!targetServer) {
+          skippedCount++;
+          if (issues.length < 6) issues.push(`Satir ${rowNo}: Sunucu bulunamadi (${serverName}).`);
+          return;
+        }
+
+        let targetChar = targetServer.characters.find(char => normalizeImportText(char.name) === characterToken);
+        if (!targetChar && characterName.trim() !== '') {
+          const nextCharId = targetServer.characters.reduce((maxId, char) => {
+            const id = typeof char.id === 'number' ? char.id : -1;
+            return Math.max(maxId, id);
+          }, -1) + 1;
+          const newChar = createCharacter(nextCharId);
+          newChar.name = characterName;
+          targetServer.characters.push(newChar);
+          targetChar = newChar;
+          createdCharacterCount++;
+        }
+
+        if (!targetChar) {
+          skippedCount++;
+          if (issues.length < 6) issues.push(`Satir ${rowNo}: Karakter bulunamadi (${characterName || '-'})`);
+          return;
+        }
+
+        const containerKey = resolveContainerKey(containerName);
+        if (!containerKey) {
+          skippedCount++;
+          if (issues.length < 6) issues.push(`Satir ${rowNo}: Kasa/Canta alani gecersiz (${containerName || '-'})`);
+          return;
+        }
+
+        const categoryRaw = getImportField(parsedRow, ['kategori', 'category']);
+        const category = categoryMap.get(normalizeImportText(categoryRaw));
+        if (!category) {
+          skippedCount++;
+          if (issues.length < 6) issues.push(`Satir ${rowNo}: Kategori gecersiz (${categoryRaw || '-'})`);
+          return;
+        }
+
+        const typeRaw = getImportField(parsedRow, ['tur', 'type']);
+        const typeToken = normalizeImportText(typeRaw);
+        const readRaw = getImportField(parsedRow, ['okunmus', 'okundu', 'read']);
+        const isRead = parseImportBoolean(readRaw);
+        const isRecipeType = typeToken === 'recipe' || typeToken === 'recete' || containerKey === 'learned' || isRead;
+
+        const enchantment1 = getImportField(parsedRow, ['efsun1', 'enchantment1']).replace(/^-+$/, '').trim();
+        const enchantment2 = getImportField(parsedRow, ['efsun2', 'enchantment2']).replace(/^-+$/, '').trim();
+        if (enchantment1) newEnchantments.add(enchantment1);
+        if (enchantment2) newEnchantments.add(enchantment2);
+
+        const categoryToken = normalizeImportText(category);
+        const heroClassRaw = getImportField(parsedRow, ['sinif', 'class', 'heroclass']);
+        const genderRaw = getImportField(parsedRow, ['cinsiyet', 'gender']);
+
+        const heroClass = (
+          classlessCategories.has(categoryToken)
+            ? allHeroClass
+            : resolveListValue(HERO_CLASSES, heroClassRaw, defaultHeroClass)
+        ) as ItemData['heroClass'];
+
+        const gender = (
+          genderlessCategories.has(categoryToken)
+            ? allGender
+            : resolveListValue(GENDER_OPTIONS, genderRaw, defaultGender)
+        ) as ItemData['gender'];
+
+        const level = parseImportPositiveInt(getImportField(parsedRow, ['seviye', 'level']), 1);
+        const count = parseImportPositiveInt(getImportField(parsedRow, ['adet', 'count']), 1);
+        const weaponType = getImportField(parsedRow, ['silahcinsi', 'weapontype']).replace(/^-+$/, '').trim();
+
+        const importedItem: ItemData = {
+          id: crypto.randomUUID(),
+          type: isRecipeType ? 'Recipe' : 'Item',
+          category,
+          enchantment1,
+          enchantment2,
+          heroClass,
+          gender,
+          level,
+          count,
+          weaponType,
+          isRead: isRecipeType ? isRead || containerKey === 'learned' : false,
+          isGlobal: false,
+        };
+
+        const shouldStoreInRecipeBook = importedItem.type === 'Recipe' && (importedItem.isRead || containerKey === 'learned');
+        if (shouldStoreInRecipeBook) {
+          const recipeSignature = `${normalizeImportText(importedItem.category)}|${normalizeImportText(importedItem.enchantment1)}|${normalizeImportText(importedItem.enchantment2)}|${normalizeImportText(importedItem.weaponType || '')}|${importedItem.level}|${normalizeImportText(importedItem.gender)}|${normalizeImportText(importedItem.heroClass)}|${importedItem.count || 1}`;
+          const alreadyExists = targetChar.learnedRecipes.some(recipe => {
+            const existingSignature = `${normalizeImportText(recipe.category)}|${normalizeImportText(recipe.enchantment1)}|${normalizeImportText(recipe.enchantment2)}|${normalizeImportText(recipe.weaponType || '')}|${recipe.level}|${normalizeImportText(recipe.gender)}|${normalizeImportText(recipe.heroClass)}|${recipe.count || 1}`;
+            return existingSignature === recipeSignature;
+          });
+
+          if (!alreadyExists) {
+            targetChar.learnedRecipes.push({ ...importedItem, isRead: true });
+            appliedCount++;
+          } else {
+            skippedCount++;
+            if (issues.length < 6) issues.push(`Satir ${rowNo}: Reçete zaten tarif kitabinda mevcut.`);
+          }
+          return;
+        }
+
+        const rowValue = parseImportPositiveInt(getImportField(parsedRow, ['satir', 'row']), Number.NaN);
+        const colValue = parseImportPositiveInt(getImportField(parsedRow, ['sutun', 'column', 'col']), Number.NaN);
+        if (!Number.isFinite(rowValue) || !Number.isFinite(colValue)) {
+          skippedCount++;
+          if (issues.length < 6) issues.push(`Satir ${rowNo}: Satir/Sutun degeri gecersiz.`);
+          return;
+        }
+
+        const targetContainer =
+          containerKey === 'bank1' ? targetChar.bank1 :
+          containerKey === 'bank2' ? targetChar.bank2 :
+          targetChar.bag;
+
+        const rowIndex = rowValue - 1;
+        const colIndex = colValue - 1;
+        const slotIndex = (rowIndex * targetContainer.cols) + colIndex;
+        if (rowIndex < 0 || colIndex < 0 || rowIndex >= targetContainer.rows || colIndex >= targetContainer.cols || slotIndex >= targetContainer.slots.length) {
+          skippedCount++;
+          if (issues.length < 6) issues.push(`Satir ${rowNo}: Slot konumu kasa boyutunu asiyor.`);
+          return;
+        }
+
+        targetContainer.slots[slotIndex] = { ...targetContainer.slots[slotIndex], item: importedItem };
+        appliedCount++;
+      });
+
+      if (appliedCount === 0) {
+        showSystemAlert({
+          tone: 'error',
+          title: 'Import Basarisiz',
+          message: 'Uygulanabilir satir bulunamadi. Dosya formatini kontrol edin.',
+          hint: issues[0] || 'Ornek dosyayi baz alin: ornek-import.csv',
+        });
+        return;
+      }
+
+      setAccounts(nextAccounts);
+      setHasUnsavedChanges(true);
+
+      if (newEnchantments.size > 0) {
+        const enchantmentArray = Array.from(newEnchantments);
+        setDoc(doc(db, "metadata", "enchantments"), { names: arrayUnion(...enchantmentArray) }, { merge: true }).catch(() => {});
+        setGlobalEnchantments(prev => {
+          const merged = new Set(prev);
+          enchantmentArray.forEach(e => merged.add(e));
+          return [...merged];
+        });
+      }
+
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        showSystemAlert({
+          tone: 'warning',
+          title: 'Import Tamamlandi',
+          message: 'Veriler local olarak eklendi ancak buluta kayit icin tekrar giris yapmaniz gerekiyor.',
+        });
+        return;
+      }
+
+      try {
+        await setDoc(doc(db, "users", currentUser.uid), { accounts: nextAccounts }, { merge: true });
+        setHasUnsavedChanges(false);
+        setSaveNotification({
+          type: 'success',
+          message: `Import tamamlandi: ${appliedCount} satir eklendi${skippedCount > 0 ? `, ${skippedCount} satir atlandi.` : '.'}`,
+        });
+        setTimeout(() => setSaveNotification(null), 3500);
+      } catch {
+        setHasUnsavedChanges(true);
+        showSystemAlert({
+          tone: 'warning',
+          title: 'Import Edildi, Buluta Kaydedilemedi',
+          message: 'Veriler eklenmis durumda. Lutfen Kaydet butonuna basarak tekrar deneyin.',
+        });
+      }
+
+      if (skippedCount > 0 || createdAccountCount > 0 || createdCharacterCount > 0) {
+        const summary: string[] = [];
+        if (createdAccountCount > 0) summary.push(`${createdAccountCount} yeni hesap`);
+        if (createdCharacterCount > 0) summary.push(`${createdCharacterCount} yeni karakter`);
+        if (skippedCount > 0) summary.push(`${skippedCount} atlanan satir`);
+
+        showSystemAlert({
+          tone: 'info',
+          title: 'Import Ozeti',
+          message: summary.join(', ') || 'Import islemi tamamlandi.',
+          hint: issues.length > 0 ? issues.join(' | ') : undefined,
+        });
+      }
+    } finally {
+      event.target.value = '';
+      setIsImportingExcel(false);
+    }
+  };
+
 
   // --- Export Excel (CSV) ---
   const handleExportExcel = () => {
     if (!activeAccount) return;
 
     const rows = [
-      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Tur", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
     activeAccount.servers.forEach(server => {
@@ -813,6 +1257,7 @@ export default function App() {
                 activeAccount.name, server.name, char.name, container.name, row.toString(), col.toString(),
                 slot.item.enchantment1 || "-", slot.item.enchantment2 || "-",
                 slot.item.category,
+                slot.item.type || "Item",
                 slot.item.weaponType || "-",
                 slot.item.level.toString(), slot.item.gender || "-", slot.item.heroClass, "Hayır",
                 slot.item.count ? slot.item.count.toString() : "1"
@@ -826,6 +1271,7 @@ export default function App() {
               activeAccount.name, server.name, char.name, "Reçete Kitabı", "-", "-",
               item.enchantment1 || "-", item.enchantment2 || "-",
               item.category,
+              "Recipe",
               item.weaponType || "-",
               item.level.toString(), item.gender || "-", item.heroClass, "Evet",
               item.count ? item.count.toString() : "1"
@@ -1222,6 +1668,23 @@ export default function App() {
     };
   }, [isMobileAccountMenuOpen]);
 
+  useEffect(() => {
+    if (!isMobileQuickMenuOpen) return;
+
+    const handleOutside = (event: MouseEvent | TouchEvent) => {
+      if (!mobileQuickMenuRef.current) return;
+      if (mobileQuickMenuRef.current.contains(event.target as Node)) return;
+      setIsMobileQuickMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [isMobileQuickMenuOpen]);
+
   // --- RENDER MANTIĞI ---
 
   if (loading) {
@@ -1249,6 +1712,13 @@ export default function App() {
 
   return (
     <div className={`h-[100dvh] w-screen bg-slate-950 flex overflow-hidden ${isContainerFullscreen ? '' : 'md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 md:items-center md:justify-center'}`}>
+      <input
+        ref={excelImportInputRef}
+        type="file"
+        accept=".csv,.txt,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        className="hidden"
+        onChange={handleExcelImport}
+      />
 
 <div className={`w-full h-full bg-slate-900/95 flex flex-col relative overflow-hidden ${isContainerFullscreen ? 'border-0 rounded-none shadow-none' : 'md:w-[98vw] md:h-[98vh] border-0 md:border-2 md:border-slate-700 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(0,0,0,0.9)]'}`}>
 
@@ -1294,7 +1764,10 @@ export default function App() {
               <div ref={mobileAccountMenuRef} className="relative flex-1 min-w-0">
                 <div className="flex items-stretch gap-1.5">
                   <button
-                    onClick={() => setIsMobileAccountMenuOpen((prev) => !prev)}
+                    onClick={() => {
+                      setIsMobileQuickMenuOpen(false);
+                      setIsMobileAccountMenuOpen((prev) => !prev);
+                    }}
                     className="h-9 flex-1 min-w-0 bg-slate-900/55 text-slate-200 rounded-xl border border-slate-600/40 px-3 flex items-center justify-between gap-2 active:bg-slate-800/90 transition-colors"
                     title="Hesap Sec"
                   >
@@ -1360,15 +1833,6 @@ export default function App() {
 
               <div className="h-9 flex items-center bg-slate-900/55 rounded-xl px-1 border border-slate-700/35 gap-1 shrink-0">
                 <button onClick={handleOpenSearch} className="h-7 w-7 flex items-center justify-center text-yellow-400 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={14} /></button>
-                <button onClick={() => setIsMessagingOpen(true)} className="relative h-7 w-7 flex items-center justify-center text-cyan-400 active:bg-cyan-700/20 rounded-lg transition-colors" title="Mesajlar">
-                  <MessageCircle size={14} />
-                  {unreadMessageSenderCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] leading-4 font-bold text-center border border-red-300/60 shadow">
-                      {unreadMessageSenderCount > 99 ? '99+' : unreadMessageSenderCount}
-                    </span>
-                  )}
-                </button>
-                <button onClick={handleExportExcel} className="h-7 w-7 flex items-center justify-center text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={14} /></button>
                 <div className="relative">
                   <button onClick={saveData} disabled={!canEditData} className={`h-7 w-7 flex items-center justify-center rounded-lg transition-colors ${!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 ring-1 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20')}`}><Save size={14} /></button>
                   {hasUnsavedChanges && (
@@ -1380,7 +1844,67 @@ export default function App() {
                 {userRole === 'admin' && (
                   <button onClick={() => setShowAdminPanel(true)} className="h-7 w-7 flex items-center justify-center text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><Crown size={14} /></button>
                 )}
-                <button onClick={handleLogout} className="h-7 w-7 flex items-center justify-center text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={14} /></button>
+                <div ref={mobileQuickMenuRef} className="relative">
+                  <button
+                    onClick={() => {
+                      setIsMobileAccountMenuOpen(false);
+                      setIsMobileQuickMenuOpen((prev) => !prev);
+                    }}
+                    className="relative h-7 w-7 flex items-center justify-center text-slate-300 active:bg-slate-700/40 rounded-lg transition-colors"
+                    title="Hizli Menu"
+                  >
+                    <MoreVertical size={14} />
+                    {unreadMessageSenderCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] leading-4 font-bold text-center border border-red-300/60 shadow">
+                        {unreadMessageSenderCount > 99 ? '99+' : unreadMessageSenderCount}
+                      </span>
+                    )}
+                  </button>
+                  {isMobileQuickMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1.5 z-[90] min-w-[150px] rounded-xl border border-slate-600/40 bg-slate-900/95 backdrop-blur p-1.5 shadow-2xl space-y-1">
+                      <button
+                        onClick={() => { setIsMessagingOpen(true); setIsMobileQuickMenuOpen(false); }}
+                        className="w-full rounded-lg border border-slate-700/40 bg-slate-800/70 px-2.5 py-2 text-left text-[11px] text-slate-100 active:bg-slate-700/80 flex items-center justify-between gap-2"
+                      >
+                        <span>Mesajlar</span>
+                        <div className="relative">
+                          <MessageCircle size={13} className="text-cyan-300" />
+                          {unreadMessageSenderCount > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 min-w-[13px] h-3.5 px-1 rounded-full bg-red-500 text-white text-[8px] leading-3.5 font-bold text-center">
+                              {unreadMessageSenderCount > 99 ? '99+' : unreadMessageSenderCount}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => { handleExportExcel(); setIsMobileQuickMenuOpen(false); }}
+                        className="w-full rounded-lg border border-slate-700/40 bg-slate-800/70 px-2.5 py-2 text-left text-[11px] text-slate-100 active:bg-slate-700/80 flex items-center justify-between gap-2"
+                      >
+                        <span>Excel</span>
+                        <FileSpreadsheet size={13} className="text-emerald-300" />
+                      </button>
+                      <button
+                        onClick={() => { openExcelImportPicker(); setIsMobileQuickMenuOpen(false); }}
+                        disabled={!canEditData || isImportingExcel}
+                        className={`w-full rounded-lg border px-2.5 py-2 text-left text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                          !canEditData || isImportingExcel
+                            ? 'border-slate-700/25 bg-slate-800/35 text-slate-500 cursor-not-allowed opacity-70'
+                            : 'border-slate-700/40 bg-slate-800/70 text-slate-100 active:bg-slate-700/80'
+                        }`}
+                      >
+                        <span>{isImportingExcel ? 'Import...' : 'Ice Aktar'}</span>
+                        <Upload size={13} className={`${isImportingExcel ? 'text-amber-300 animate-pulse' : 'text-amber-300'}`} />
+                      </button>
+                      <button
+                        onClick={() => { setIsMobileQuickMenuOpen(false); handleLogout(); }}
+                        className="w-full rounded-lg border border-red-900/35 bg-red-950/20 px-2.5 py-2 text-left text-[11px] text-red-300 active:bg-red-900/30 flex items-center justify-between gap-2"
+                      >
+                        <span>Cikis Yap</span>
+                        <LogOut size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1480,6 +2004,18 @@ export default function App() {
                 )}
               </button>
               <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all"><FileSpreadsheet size={13} /><span>Excel</span></button>
+              <button
+                onClick={openExcelImportPicker}
+                disabled={!canEditData || isImportingExcel}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${
+                  !canEditData || isImportingExcel
+                    ? 'bg-slate-800/40 text-slate-600 border-slate-700/35 cursor-not-allowed opacity-70'
+                    : 'bg-slate-700/50 hover:bg-amber-700 text-amber-300 hover:text-white border-slate-600/40 hover:border-amber-500'
+                }`}
+              >
+                <Upload size={13} className={isImportingExcel ? 'animate-pulse' : ''} />
+                <span>{isImportingExcel ? 'Import...' : 'Ice Aktar'}</span>
+              </button>
               <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`}><Save size={13} /><span>Kaydet</span></button>
               {userRole === 'admin' && (
                 <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all"><Crown size={13} /><span>Admin</span></button>

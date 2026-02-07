@@ -18,3 +18,10 @@ View your app in AI Studio: https://ai.studio/apps/drive/1x5p7sUTw5qcKMWhKaVfwwf
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Excel Import (CSV)
+
+- The app now supports bulk import into chests from `CSV` files.
+- Use the new `Ice Aktar` button in the top bar.
+- Example file: `ornek-import.csv`
+- `xlsx/xls` files should be saved as `CSV` before import.

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Lock, MessageCircle, Search, Send, Shield, User, Users, X } from 'lucide-react';
+import { AlertTriangle, Lock, MessageCircle, Search, Send, Shield, Trash2, User, X } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, doc, getDoc, getDocs, onSnapshot, query, runTransaction, setDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, doc, documentId, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, setDoc, startAt, where, writeBatch } from 'firebase/firestore';
 import { UserRole } from '../types';
 
 interface MessagingModalProps {
@@ -18,11 +18,6 @@ interface RecipientOption {
   label: string;
   username?: string;
   email?: string;
-}
-
-interface RecipientDirectoryEntry {
-  username: string;
-  email: string;
 }
 
 interface ConversationSummary {
@@ -86,13 +81,14 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
   currentUserEmail,
 }) => {
   const isAdminUser = currentUserRole === 'admin';
-  const [recipientDirectory, setRecipientDirectory] = useState<Record<string, RecipientDirectoryEntry>>({});
+  const [searchResults, setSearchResults] = useState<RecipientOption[]>([]);
   const [recipientSearch, setRecipientSearch] = useState('');
   const [selectedPeerUid, setSelectedPeerUid] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
-  const [loadingRecipients, setLoadingRecipients] = useState(false);
+  const [searchingRecipients, setSearchingRecipients] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [receiveOnlyFromAdmin, setReceiveOnlyFromAdmin] = useState(false);
@@ -146,41 +142,30 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     }
   }, [currentUserUid, isAdminUser, updateQuotaState]);
 
+  const conversationRecipients = useMemo<RecipientOption[]>(
+    () => conversations.map(conv => ({
+      uid: conv.peerUid,
+      username: conv.peerLabel,
+      label: (conv.peerLabel && conv.peerLabel.trim()) || conv.peerUid,
+    })),
+    [conversations]
+  );
+
   const allRecipients = useMemo<RecipientOption[]>(() => {
     const map = new Map<string, RecipientOption>();
-
-    (Object.entries(recipientDirectory) as Array<[string, RecipientDirectoryEntry]>).forEach(([uid, info]) => {
-      const normalizedUsername = info.username.trim();
-      const normalizedEmail = info.email.trim().toLowerCase();
-      map.set(uid, {
-        uid,
-        username: normalizedUsername || undefined,
-        email: normalizedEmail || undefined,
-        label: normalizedUsername || normalizedEmail || uid,
-      });
+    conversationRecipients.forEach(option => map.set(option.uid, option));
+    searchResults.forEach(option => {
+      if (!map.has(option.uid)) {
+        map.set(option.uid, option);
+      }
     });
-
-    conversations.forEach(conv => {
-      const existing = map.get(conv.peerUid);
-      const username = existing?.username || '';
-      const email = existing?.email || '';
-      map.set(conv.peerUid, {
-        uid: conv.peerUid,
-        username: username || undefined,
-        email: email || undefined,
-        label: (conv.peerLabel && conv.peerLabel.trim()) || username || email || conv.peerUid,
-      });
-    });
-
     return Array.from(map.values())
-      .filter(option => option.uid !== currentUserUid)
-      .sort((a, b) => a.label.localeCompare(b.label, 'tr'));
-  }, [conversations, currentUserUid, recipientDirectory]);
+      .filter(option => option.uid !== currentUserUid);
+  }, [conversationRecipients, currentUserUid, searchResults]);
 
   const filteredRecipients = useMemo(() => {
     const queryText = recipientSearch.trim().toLocaleLowerCase('tr');
     if (!queryText) return allRecipients;
-    if (queryText.length < 4) return [];
     return allRecipients.filter(option =>
       option.label.toLocaleLowerCase('tr').includes(queryText) ||
       option.uid.toLocaleLowerCase('tr').includes(queryText) ||
@@ -189,7 +174,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     );
   }, [allRecipients, recipientSearch]);
 
-  const hasShortSearchText = recipientSearch.trim().length > 0 && recipientSearch.trim().length < 4;
+  const hasShortSearchText = recipientSearch.trim().length > 0 && recipientSearch.trim().length < 3;
 
   const selectedPeer = useMemo(
     () => allRecipients.find(option => option.uid === selectedPeerUid) || null,
@@ -209,11 +194,14 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
+      setSearchResults([]);
       setRecipientSearch('');
       setSelectedPeerUid(null);
       setConversations([]);
       setMessages([]);
       setMessageInput('');
+      setSearchingRecipients(false);
+      setDeletingMessageId(null);
       setSendError('');
       setSelectedPeerRestricted(false);
       setMessageResetCountdown('');
@@ -223,54 +211,89 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
 
   useEffect(() => {
     if (!isOpen || !currentUserUid) return;
-    let isCancelled = false;
+    const queryText = recipientSearch.trim().toLocaleLowerCase('tr');
+    if (queryText.length < 3) {
+      setSearchResults([]);
+      setSearchingRecipients(false);
+      return;
+    }
 
-    const loadRecipients = async () => {
-      setLoadingRecipients(true);
+    let isCancelled = false;
+    const searchRecipients = async () => {
+      setSearchingRecipients(true);
       try {
-        const [usersSnap, usernamesSnap] = await Promise.all([
-          getDocs(collection(db, 'users')),
-          getDocs(collection(db, 'usernames')),
+        const usernamesRef = collection(db, 'usernames');
+        const usernamesQuery = query(
+          usernamesRef,
+          orderBy(documentId()),
+          startAt(queryText),
+          endAt(`${queryText}\uf8ff`),
+          limit(20)
+        );
+        const profilesQuery = query(
+          collection(db, 'publicProfiles'),
+          orderBy('emailLower'),
+          startAt(queryText),
+          endAt(`${queryText}\uf8ff`),
+          limit(20)
+        );
+        const [usernamesSnap, profilesSnap] = await Promise.all([
+          getDocs(usernamesQuery),
+          getDocs(profilesQuery),
         ]);
 
-        const nextMap: Record<string, RecipientDirectoryEntry> = {};
-
-        usersSnap.forEach(docSnap => {
-          if (docSnap.id === currentUserUid) return;
-          const data = docSnap.data() as { username?: unknown; email?: unknown };
-          const username = typeof data.username === 'string' ? data.username.trim() : '';
-          const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
-          nextMap[docSnap.id] = { username, email };
-        });
-
+        const nextMap = new Map<string, RecipientOption>();
         usernamesSnap.forEach(docSnap => {
           const data = docSnap.data() as { uid?: string; displayName?: string };
-          if (!data.uid || data.uid === currentUserUid) return;
-          if (!nextMap[data.uid]) {
-            nextMap[data.uid] = { username: '', email: '' };
-          }
-          if (!nextMap[data.uid].username) {
-            nextMap[data.uid].username = (data.displayName && data.displayName.trim()) || docSnap.id;
-          }
+          const uid = typeof data.uid === 'string' ? data.uid : '';
+          if (!uid || uid === currentUserUid) return;
+          const displayName = (typeof data.displayName === 'string' && data.displayName.trim())
+            ? data.displayName.trim()
+            : docSnap.id;
+          nextMap.set(uid, {
+            uid,
+            username: displayName,
+            label: displayName,
+          });
+        });
+
+        profilesSnap.forEach(docSnap => {
+          const data = docSnap.data() as { uid?: string; username?: string; emailLower?: string };
+          const uid = typeof data.uid === 'string' ? data.uid : docSnap.id;
+          if (!uid || uid === currentUserUid) return;
+          const existing = nextMap.get(uid);
+          const username = (typeof data.username === 'string' && data.username.trim())
+            ? data.username.trim()
+            : (existing?.username || '');
+          const email = (typeof data.emailLower === 'string' && data.emailLower.trim())
+            ? data.emailLower.trim().toLowerCase()
+            : '';
+
+          nextMap.set(uid, {
+            uid,
+            username: username || undefined,
+            email: email || undefined,
+            label: existing?.label || username || email || uid,
+          });
         });
 
         if (!isCancelled) {
-          setRecipientDirectory(nextMap);
+          setSearchResults(Array.from(nextMap.values()));
         }
       } catch {
         if (!isCancelled) {
-          setRecipientDirectory({});
+          setSearchResults([]);
         }
       } finally {
         if (!isCancelled) {
-          setLoadingRecipients(false);
+          setSearchingRecipients(false);
         }
       }
     };
 
-    loadRecipients();
+    searchRecipients();
     return () => { isCancelled = true; };
-  }, [currentUserUid, isOpen]);
+  }, [currentUserUid, isOpen, recipientSearch]);
 
   useEffect(() => {
     if (!isOpen || !currentUserUid) return;
@@ -334,8 +357,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
         const peerUid = senderUid === currentUserUid ? receiverUid : senderUid;
         if (!peerUid) return;
 
-        const recipientInfo = recipientDirectory[peerUid];
-        const fallbackLabel = recipientInfo?.username || recipientInfo?.email || peerUid;
+        const fallbackLabel = peerUid;
         const peerLabel = senderUid === currentUserUid
           ? ((data.receiverDisplay && data.receiverDisplay.trim()) || fallbackLabel)
           : ((data.senderDisplay && data.senderDisplay.trim()) || fallbackLabel);
@@ -359,7 +381,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     });
 
     return () => unsubscribe();
-  }, [currentUserUid, isOpen, recipientDirectory]);
+  }, [currentUserUid, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -580,6 +602,22 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!currentUserUid || deletingMessageId) return;
+    const confirmed = window.confirm('Bu mesaji silmek istediginize emin misiniz?');
+    if (!confirmed) return;
+
+    setDeletingMessageId(messageId);
+    setSendError('');
+    try {
+      await deleteDoc(doc(db, 'messages', messageId));
+    } catch {
+      setSendError('Mesaj silinirken bir hata olustu. Lutfen tekrar deneyin.');
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   const canSendToSelected = !!selectedPeerUid && (!selectedPeerRestricted || isAdminUser);
 
   if (!isOpen) return null;
@@ -640,8 +678,8 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
             onClick={() => setMobilePanel(prev => prev === 'list' ? 'chat' : 'list')}
             className="md:hidden shrink-0 px-2 py-1 rounded-md border border-slate-700/50 bg-slate-800/70 text-slate-200 text-[10px] font-bold flex items-center gap-1"
           >
-            {mobilePanel === 'list' ? <MessageCircle size={11} /> : <Users size={11} />}
-            {mobilePanel === 'list' ? 'Sohbet' : 'Kisiler'}
+            {mobilePanel === 'list' ? <MessageCircle size={11} /> : <User size={11} />}
+            {mobilePanel === 'list' ? 'Mesaj' : 'Liste'}
           </button>
 
           {selectedPeer && mobilePanel === 'chat' && (
@@ -661,22 +699,26 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                   type="text"
                   value={recipientSearch}
                   onChange={(e) => setRecipientSearch(e.target.value)}
-                  placeholder="Email veya ad ara (min 4)"
+                  placeholder="Kullanici adi veya e-posta ara (min 3)"
                   className="flex-1 bg-transparent text-xs text-slate-200 outline-none placeholder-slate-500"
                 />
               </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto p-1.5 md:p-2 space-y-1 md:space-y-1.5">
-              {loadingRecipients && (
-                <div className="text-[11px] text-slate-500 px-2 py-1">Kullanicilar yukleniyor...</div>
+              {searchingRecipients && recipientSearch.trim().length >= 3 && (
+                <div className="text-[11px] text-slate-500 px-2 py-1">Kullanicilar araniyor...</div>
               )}
 
-              {!loadingRecipients && hasShortSearchText && (
-                <div className="text-[11px] text-slate-500 px-2 py-1">En az 4 karakter yazin.</div>
+              {recipientSearch.trim().length === 0 && conversationRecipients.length === 0 && (
+                <div className="text-[11px] text-slate-500 px-2 py-1">Henuz mesajlasma yok. Kullanici adi veya e-posta aratip mesaj gonderebilirsiniz.</div>
               )}
 
-              {!loadingRecipients && !hasShortSearchText && filteredRecipients.length === 0 && (
+              {hasShortSearchText && conversationRecipients.length === 0 && (
+                <div className="text-[11px] text-slate-500 px-2 py-1">Yeni kisi aramak icin en az 3 karakter yazin.</div>
+              )}
+
+              {!searchingRecipients && !hasShortSearchText && recipientSearch.trim().length > 0 && filteredRecipients.length === 0 && (
                 <div className="text-[11px] text-slate-500 px-2 py-1">Mesajlasilacak kullanici bulunamadi.</div>
               )}
 
@@ -707,7 +749,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                       <p className="text-[9px] text-cyan-300/70 truncate mt-0.5">{option.email}</p>
                     )}
                     <p className="text-[9px] md:text-[10px] text-slate-500 truncate mt-0 md:mt-0.5">
-                      {conversation ? `${lastFromMe ? 'Sen: ' : ''}${lastText}` : 'Mesajlasma baslat'}
+                      {conversation ? `${lastFromMe ? 'Sen: ' : ''}${lastText}` : 'Arama sonucu'}
                     </p>
                   </button>
                 );
@@ -736,7 +778,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                       onClick={() => setMobilePanel('list')}
                       className="md:hidden shrink-0 px-2.5 py-1 rounded-md border border-slate-700/50 bg-slate-800/80 text-[10px] text-slate-200 font-bold"
                     >
-                      Kisiler
+                      Sohbetler
                     </button>
                   </div>
                   {selectedPeerRestricted && (
@@ -760,6 +802,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
 
                   {messages.map(msg => {
                     const isMine = msg.senderUid === currentUserUid;
+                    const canDelete = isAdminUser || msg.senderUid === currentUserUid || msg.receiverUid === currentUserUid;
                     return (
                       <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[90%] md:max-w-[70%] rounded-xl border px-2.5 md:px-3 py-1.5 md:py-2 ${
@@ -768,9 +811,21 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                             : 'bg-slate-800/70 border-slate-700/50 text-slate-100'
                         }`}>
                           <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{msg.text}</p>
-                          <p className="text-[10px] mt-1 text-right text-slate-400">
-                            {new Date(msg.createdAt).toLocaleString('tr-TR')}
-                          </p>
+                          <div className="mt-1 flex items-center justify-end gap-1.5">
+                            <p className="text-[10px] text-slate-400">
+                              {new Date(msg.createdAt).toLocaleString('tr-TR')}
+                            </p>
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDeleteMessage(msg.id)}
+                                disabled={deletingMessageId === msg.id}
+                                title="Mesaji sil"
+                                className="p-1 rounded text-slate-400 hover:text-red-300 hover:bg-red-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
