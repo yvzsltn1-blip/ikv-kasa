@@ -7,8 +7,9 @@ import { ItemDetailModal } from './components/ItemDetailModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle } from 'lucide-react';
 import { AdminPanel } from './components/AdminPanel';
+import { MessagingModal } from './components/MessagingModal';
 
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase';
@@ -39,11 +40,25 @@ const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canGlobalSearch: true,
 };
 
+const DEFAULT_MESSAGE_SETTINGS = {
+  dailySendLimit: 5,
+};
+
 const normalizeUserPermissions = (raw: unknown): UserPermissions => {
   const fromDoc = (raw && typeof raw === 'object') ? raw as Partial<UserPermissions> : {};
   return {
     canDataEntry: typeof fromDoc.canDataEntry === 'boolean' ? fromDoc.canDataEntry : true,
     canGlobalSearch: typeof fromDoc.canGlobalSearch === 'boolean' ? fromDoc.canGlobalSearch : true,
+  };
+};
+
+const normalizeMessageSettings = (raw: unknown) => {
+  const fromDoc = (raw && typeof raw === 'object') ? raw as { dailySendLimit?: unknown } : {};
+  const limit = fromDoc.dailySendLimit;
+  return {
+    dailySendLimit: (typeof limit === 'number' && Number.isFinite(limit) && limit > 0)
+      ? Math.floor(limit)
+      : DEFAULT_MESSAGE_SETTINGS.dailySendLimit,
   };
 };
 
@@ -93,6 +108,7 @@ export default function App() {
   const [currentViewIndex, setCurrentViewIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
+  const [isMessagingOpen, setIsMessagingOpen] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
   const [isMobileAccountMenuOpen, setIsMobileAccountMenuOpen] = useState(false);
@@ -192,6 +208,7 @@ export default function App() {
             const rawAccounts = data.accounts || [];
             const loadedAccounts = rawAccounts.map(migrateAccount);
             const resolvedPermissions = normalizeUserPermissions(data.permissions);
+            const resolvedMessageSettings = normalizeMessageSettings(data.messageSettings);
             setUserPermissions(resolvedPermissions);
 
             // Load username
@@ -219,6 +236,15 @@ export default function App() {
               typeof data.permissions.canGlobalSearch !== 'boolean'
             ) {
               setDoc(userDocRef, { permissions: resolvedPermissions }, { merge: true }).catch(() => {});
+            }
+
+            if (
+              !data.messageSettings ||
+              typeof data.messageSettings.dailySendLimit !== 'number' ||
+              !Number.isFinite(data.messageSettings.dailySendLimit) ||
+              data.messageSettings.dailySendLimit <= 0
+            ) {
+              setDoc(userDocRef, { messageSettings: resolvedMessageSettings }, { merge: true }).catch(() => {});
             }
 
             if (loadedAccounts.length > 0) {
@@ -300,6 +326,7 @@ export default function App() {
       email: user?.email || '',
       createdAt: Date.now(),
       permissions: DEFAULT_USER_PERMISSIONS,
+      messageSettings: DEFAULT_MESSAGE_SETTINGS,
     });
 
     setAccounts(initialAccounts);
@@ -694,6 +721,7 @@ export default function App() {
         setTooltip(null);
         setIsSearchOpen(false);
         setIsRecipeBookOpen(false);
+        setIsMessagingOpen(false);
         setModalOpen(false);
     } catch (error) {
         console.error("Çıkış hatası:", error);
@@ -1299,6 +1327,7 @@ export default function App() {
 
               <div className="h-9 flex items-center bg-slate-900/55 rounded-xl px-1 border border-slate-700/35 gap-1 shrink-0">
                 <button onClick={handleOpenSearch} className="h-7 w-7 flex items-center justify-center text-yellow-400 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={14} /></button>
+                <button onClick={() => setIsMessagingOpen(true)} className="h-7 w-7 flex items-center justify-center text-cyan-400 active:bg-cyan-700/20 rounded-lg transition-colors" title="Mesajlar"><MessageCircle size={14} /></button>
                 <button onClick={handleExportExcel} className="h-7 w-7 flex items-center justify-center text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={14} /></button>
                 <div className="relative">
                   <button onClick={saveData} disabled={!canEditData} className={`h-7 w-7 flex items-center justify-center rounded-lg transition-colors ${!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 ring-1 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20')}`}><Save size={14} /></button>
@@ -1401,6 +1430,7 @@ export default function App() {
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-1.5">
               <button onClick={handleOpenSearch} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all"><Search size={13} /><span>Ara</span></button>
+              <button onClick={() => setIsMessagingOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-cyan-700 text-cyan-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-cyan-500 transition-all"><MessageCircle size={13} /><span>Mesaj</span></button>
               <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all"><FileSpreadsheet size={13} /><span>Excel</span></button>
               <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`}><Save size={13} /><span>Kaydet</span></button>
               {userRole === 'admin' && (
@@ -1911,6 +1941,15 @@ export default function App() {
         currentUserUid={auth.currentUser?.uid || ''}
         currentUserRole={userRole}
         canUseGlobalSearch={canUseGlobalSearch}
+      />
+
+      <MessagingModal
+        isOpen={isMessagingOpen}
+        onClose={() => setIsMessagingOpen(false)}
+        currentUserUid={auth.currentUser?.uid || ''}
+        currentUserRole={userRole}
+        currentUsername={username}
+        currentUserEmail={auth.currentUser?.email || ''}
       />
 
       <RecipeBookModal

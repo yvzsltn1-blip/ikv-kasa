@@ -97,6 +97,20 @@ export interface UserPermissions {
   canGlobalSearch: boolean;
 }
 
+export interface UserMessageSettings {
+  dailySendLimit: number;
+}
+
+export interface MessageQuotaEntry {
+  day: string;
+  used: number;
+  updatedAt?: number;
+}
+
+export interface UserMessageQuota {
+  direct?: MessageQuotaEntry;
+}
+
 export interface AdminUserInfo {
   uid: string;
   email: string;
@@ -108,6 +122,7 @@ export interface AdminUserInfo {
   createdAt?: number;
   accounts: Account[];
   permissions: UserPermissions;
+  messageSettings: UserMessageSettings;
 }
 
 export interface SearchLimitsConfig {

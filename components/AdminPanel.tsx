@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions } from '../types';
+import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserMessageSettings } from '../types';
 import { CATEGORY_OPTIONS } from '../types';
 import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock } from 'lucide-react';
 import { db } from '../firebase';
@@ -14,6 +14,10 @@ type TabType = 'dashboard' | 'users' | 'settings';
 const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canDataEntry: true,
   canGlobalSearch: true,
+};
+
+const DEFAULT_MESSAGE_SETTINGS: UserMessageSettings = {
+  dailySendLimit: 5,
 };
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
@@ -46,6 +50,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [deleting, setDeleting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [permissionSaving, setPermissionSaving] = useState<Record<string, boolean>>({});
+  const [messageLimitInputs, setMessageLimitInputs] = useState<Record<string, string>>({});
+  const [messageLimitSaving, setMessageLimitSaving] = useState<Record<string, boolean>>({});
 
   // Fetch all data on mount
   useEffect(() => {
@@ -94,6 +100,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             canDataEntry: typeof rawPermissions.canDataEntry === 'boolean' ? rawPermissions.canDataEntry : DEFAULT_USER_PERMISSIONS.canDataEntry,
             canGlobalSearch: typeof rawPermissions.canGlobalSearch === 'boolean' ? rawPermissions.canGlobalSearch : DEFAULT_USER_PERMISSIONS.canGlobalSearch,
           };
+          const rawMessageSettings = (data.messageSettings && typeof data.messageSettings === 'object')
+            ? data.messageSettings as Partial<UserMessageSettings>
+            : {};
+          const messageSettings: UserMessageSettings = {
+            dailySendLimit: (typeof rawMessageSettings.dailySendLimit === 'number' && Number.isFinite(rawMessageSettings.dailySendLimit) && rawMessageSettings.dailySendLimit > 0)
+              ? Math.floor(rawMessageSettings.dailySendLimit)
+              : DEFAULT_MESSAGE_SETTINGS.dailySendLimit,
+          };
 
           let totalItems = 0;
           let totalRecipes = 0;
@@ -126,6 +140,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             createdAt,
             accounts,
             permissions,
+            messageSettings,
           });
         } catch (userError) {
           console.warn("Kullanici parse atlaniyor:", docSnap.id, userError);
@@ -133,6 +148,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       });
 
       setAllUsers(users);
+      setMessageLimitInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
+        acc[userInfo.uid] = String(userInfo.messageSettings.dailySendLimit);
+        return acc;
+      }, {}));
 
       // Fetch global items stats
       const globalSnap = await getDocs(collection(db, "globalItems"));
@@ -301,6 +320,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       // 3. Delete user doc
       batch.delete(doc(db, "users", user.uid));
 
+      // 4. Delete message preference doc
+      batch.delete(doc(db, "messagePrefs", user.uid));
+
       await batch.commit();
 
       // Update local state
@@ -366,6 +388,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       alert("Kullanici yetkisi guncellenirken hata olustu.");
     } finally {
       setPermissionSaving(prev => ({ ...prev, [user.uid]: false }));
+    }
+  };
+
+  const handleSaveUserMessageLimit = async (user: AdminUserInfo) => {
+    const rawValue = (messageLimitInputs[user.uid] ?? String(user.messageSettings.dailySendLimit)).trim();
+    const nextLimit = parseInt(rawValue, 10);
+    if (Number.isNaN(nextLimit) || nextLimit < 1) {
+      alert("Mesaj limiti en az 1 olmalidir.");
+      return;
+    }
+
+    setMessageLimitSaving(prev => ({ ...prev, [user.uid]: true }));
+    try {
+      const nextSettings: UserMessageSettings = {
+        ...DEFAULT_MESSAGE_SETTINGS,
+        ...(user.messageSettings || DEFAULT_MESSAGE_SETTINGS),
+        dailySendLimit: nextLimit,
+      };
+
+      await setDoc(doc(db, "users", user.uid), { messageSettings: nextSettings }, { merge: true });
+
+      setAllUsers(prev => prev.map(u => (
+        u.uid === user.uid
+          ? { ...u, messageSettings: nextSettings }
+          : u
+      )));
+      setMessageLimitInputs(prev => ({ ...prev, [user.uid]: String(nextLimit) }));
+    } catch (error) {
+      console.error("Mesaj limiti guncelleme hatasi:", error);
+      alert("Mesaj limiti guncellenirken hata olustu.");
+    } finally {
+      setMessageLimitSaving(prev => ({ ...prev, [user.uid]: false }));
     }
   };
 
@@ -669,6 +723,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         <span className="text-[10px] text-slate-300 font-bold">
                           {searchLimits.userOverrides[user.uid] !== undefined ? searchLimits.userOverrides[user.uid] : `Varsayılan (${searchLimits.defaultLimit})`}
                         </span>
+                      </div>
+
+                      <div className="mt-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[11px]">
+                            <p className="text-slate-200 font-semibold">Gunluk Mesaj Limiti</p>
+                            <p className="text-[10px] text-slate-500">Kullanici basina gonderim hakki</p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="1"
+                              value={messageLimitInputs[user.uid] ?? String(user.messageSettings.dailySendLimit)}
+                              onChange={e => setMessageLimitInputs(prev => ({ ...prev, [user.uid]: e.target.value }))}
+                              className="w-20 bg-slate-950/80 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-cyan-500/50"
+                            />
+                            <button
+                              onClick={() => handleSaveUserMessageLimit(user)}
+                              disabled={deleting || resetting || !!messageLimitSaving[user.uid]}
+                              className="px-2.5 py-1.5 rounded-md text-[10px] font-bold border border-cyan-700/50 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/40 disabled:opacity-50"
+                            >
+                              {messageLimitSaving[user.uid] ? 'Kayit...' : 'Kaydet'}
+                            </button>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="mt-2 space-y-1.5">
