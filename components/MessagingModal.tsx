@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Lock, MessageCircle, Search, Send, Shield, User, X } from 'lucide-react';
+import { AlertTriangle, Lock, MessageCircle, Search, Send, Shield, User, Users, X } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, doc, getDoc, getDocs, onSnapshot, query, runTransaction, setDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot, query, runTransaction, setDoc, where, writeBatch } from 'firebase/firestore';
 import { UserRole } from '../types';
 
 interface MessagingModalProps {
@@ -16,6 +16,13 @@ interface MessagingModalProps {
 interface RecipientOption {
   uid: string;
   label: string;
+  username?: string;
+  email?: string;
+}
+
+interface RecipientDirectoryEntry {
+  username: string;
+  email: string;
 }
 
 interface ConversationSummary {
@@ -32,6 +39,7 @@ interface ChatMessage {
   receiverUid: string;
   text: string;
   createdAt: number;
+  readBy: string[];
 }
 
 const DEFAULT_DAILY_MESSAGE_LIMIT = 5;
@@ -78,7 +86,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
   currentUserEmail,
 }) => {
   const isAdminUser = currentUserRole === 'admin';
-  const [usernamesByUid, setUsernamesByUid] = useState<Record<string, string>>({});
+  const [recipientDirectory, setRecipientDirectory] = useState<Record<string, RecipientDirectoryEntry>>({});
   const [recipientSearch, setRecipientSearch] = useState('');
   const [selectedPeerUid, setSelectedPeerUid] = useState<string | null>(null);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -90,6 +98,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
   const [receiveOnlyFromAdmin, setReceiveOnlyFromAdmin] = useState(false);
   const [preferenceSaving, setPreferenceSaving] = useState(false);
   const [selectedPeerRestricted, setSelectedPeerRestricted] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<'list' | 'chat'>('list');
 
   const [messageLimitTotal, setMessageLimitTotal] = useState(DEFAULT_DAILY_MESSAGE_LIMIT);
   const [messageLimitUsed, setMessageLimitUsed] = useState(0);
@@ -115,6 +124,14 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
 
   const refreshQuota = useCallback(async () => {
     if (!currentUserUid) return;
+    if (isAdminUser) {
+      setMessageLimitTotal(0);
+      setMessageLimitUsed(0);
+      setMessageLimitReached(false);
+      setMessageResetAt(null);
+      setMessageResetCountdown('');
+      return;
+    }
     try {
       const userRef = doc(db, 'users', currentUserUid);
       const userSnap = await getDoc(userRef);
@@ -127,33 +144,52 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     } catch {
       updateQuotaState(DEFAULT_DAILY_MESSAGE_LIMIT, 0);
     }
-  }, [currentUserUid, updateQuotaState]);
+  }, [currentUserUid, isAdminUser, updateQuotaState]);
 
   const allRecipients = useMemo<RecipientOption[]>(() => {
-    const map = new Map<string, string>();
-    (Object.entries(usernamesByUid) as Array<[string, string]>).forEach(([uid, name]) => {
-      map.set(uid, name);
-    });
-    conversations.forEach(conv => {
-      if (!map.has(conv.peerUid)) {
-        map.set(conv.peerUid, conv.peerLabel || conv.peerUid);
-      }
+    const map = new Map<string, RecipientOption>();
+
+    (Object.entries(recipientDirectory) as Array<[string, RecipientDirectoryEntry]>).forEach(([uid, info]) => {
+      const normalizedUsername = info.username.trim();
+      const normalizedEmail = info.email.trim().toLowerCase();
+      map.set(uid, {
+        uid,
+        username: normalizedUsername || undefined,
+        email: normalizedEmail || undefined,
+        label: normalizedUsername || normalizedEmail || uid,
+      });
     });
 
-    return Array.from(map.entries())
-      .map(([uid, label]) => ({ uid, label }))
+    conversations.forEach(conv => {
+      const existing = map.get(conv.peerUid);
+      const username = existing?.username || '';
+      const email = existing?.email || '';
+      map.set(conv.peerUid, {
+        uid: conv.peerUid,
+        username: username || undefined,
+        email: email || undefined,
+        label: (conv.peerLabel && conv.peerLabel.trim()) || username || email || conv.peerUid,
+      });
+    });
+
+    return Array.from(map.values())
       .filter(option => option.uid !== currentUserUid)
       .sort((a, b) => a.label.localeCompare(b.label, 'tr'));
-  }, [conversations, currentUserUid, usernamesByUid]);
+  }, [conversations, currentUserUid, recipientDirectory]);
 
   const filteredRecipients = useMemo(() => {
-    if (!recipientSearch.trim()) return allRecipients;
-    const queryText = recipientSearch.toLocaleLowerCase('tr');
+    const queryText = recipientSearch.trim().toLocaleLowerCase('tr');
+    if (!queryText) return allRecipients;
+    if (queryText.length < 4) return [];
     return allRecipients.filter(option =>
       option.label.toLocaleLowerCase('tr').includes(queryText) ||
-      option.uid.toLocaleLowerCase('tr').includes(queryText)
+      option.uid.toLocaleLowerCase('tr').includes(queryText) ||
+      (option.username || '').toLocaleLowerCase('tr').includes(queryText) ||
+      (option.email || '').toLocaleLowerCase('tr').includes(queryText)
     );
   }, [allRecipients, recipientSearch]);
+
+  const hasShortSearchText = recipientSearch.trim().length > 0 && recipientSearch.trim().length < 4;
 
   const selectedPeer = useMemo(
     () => allRecipients.find(option => option.uid === selectedPeerUid) || null,
@@ -181,6 +217,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
       setSendError('');
       setSelectedPeerRestricted(false);
       setMessageResetCountdown('');
+      setMobilePanel('list');
     }
   }, [isOpen]);
 
@@ -191,19 +228,38 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     const loadRecipients = async () => {
       setLoadingRecipients(true);
       try {
-        const usernameSnap = await getDocs(collection(db, 'usernames'));
-        const nextMap: Record<string, string> = {};
-        usernameSnap.forEach(docSnap => {
+        const [usersSnap, usernamesSnap] = await Promise.all([
+          getDocs(collection(db, 'users')),
+          getDocs(collection(db, 'usernames')),
+        ]);
+
+        const nextMap: Record<string, RecipientDirectoryEntry> = {};
+
+        usersSnap.forEach(docSnap => {
+          if (docSnap.id === currentUserUid) return;
+          const data = docSnap.data() as { username?: unknown; email?: unknown };
+          const username = typeof data.username === 'string' ? data.username.trim() : '';
+          const email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
+          nextMap[docSnap.id] = { username, email };
+        });
+
+        usernamesSnap.forEach(docSnap => {
           const data = docSnap.data() as { uid?: string; displayName?: string };
           if (!data.uid || data.uid === currentUserUid) return;
-          nextMap[data.uid] = (data.displayName && data.displayName.trim()) || docSnap.id;
+          if (!nextMap[data.uid]) {
+            nextMap[data.uid] = { username: '', email: '' };
+          }
+          if (!nextMap[data.uid].username) {
+            nextMap[data.uid].username = (data.displayName && data.displayName.trim()) || docSnap.id;
+          }
         });
+
         if (!isCancelled) {
-          setUsernamesByUid(nextMap);
+          setRecipientDirectory(nextMap);
         }
       } catch {
         if (!isCancelled) {
-          setUsernamesByUid({});
+          setRecipientDirectory({});
         }
       } finally {
         if (!isCancelled) {
@@ -278,7 +334,8 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
         const peerUid = senderUid === currentUserUid ? receiverUid : senderUid;
         if (!peerUid) return;
 
-        const fallbackLabel = usernamesByUid[peerUid] || peerUid;
+        const recipientInfo = recipientDirectory[peerUid];
+        const fallbackLabel = recipientInfo?.username || recipientInfo?.email || peerUid;
         const peerLabel = senderUid === currentUserUid
           ? ((data.receiverDisplay && data.receiverDisplay.trim()) || fallbackLabel)
           : ((data.senderDisplay && data.senderDisplay.trim()) || fallbackLabel);
@@ -302,13 +359,18 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     });
 
     return () => unsubscribe();
-  }, [currentUserUid, isOpen, usernamesByUid]);
+  }, [currentUserUid, isOpen, recipientDirectory]);
 
   useEffect(() => {
     if (!isOpen) return;
     if (selectedPeerUid && allRecipients.some(option => option.uid === selectedPeerUid)) return;
     setSelectedPeerUid(allRecipients.length > 0 ? allRecipients[0].uid : null);
   }, [allRecipients, isOpen, selectedPeerUid]);
+
+  useEffect(() => {
+    if (!isOpen || !selectedPeerUid) return;
+    setMobilePanel('chat');
+  }, [isOpen, selectedPeerUid]);
 
   useEffect(() => {
     if (!isOpen || !selectedPeerUid) {
@@ -354,6 +416,9 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
           receiverUid: data.receiverUid,
           text: data.text || '',
           createdAt: typeof data.createdAt === 'number' ? data.createdAt : 0,
+          readBy: Array.isArray((data as { readBy?: unknown }).readBy)
+            ? (data as { readBy: unknown[] }).readBy.filter((value): value is string => typeof value === 'string')
+            : [],
         });
       });
 
@@ -363,6 +428,36 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
 
     return () => unsubscribe();
   }, [currentUserUid, isOpen, selectedPeerUid]);
+
+  useEffect(() => {
+    if (!isOpen || !currentUserUid || !selectedPeerUid) return;
+    const unreadIncoming = messages.filter(msg =>
+      msg.receiverUid === currentUserUid &&
+      !msg.readBy.includes(currentUserUid)
+    );
+    if (unreadIncoming.length === 0) return;
+
+    const markAsRead = async () => {
+      const batch = writeBatch(db);
+      const now = Date.now();
+
+      unreadIncoming.forEach(msg => {
+        const nextReadBy = Array.from(new Set([...msg.readBy, currentUserUid]));
+        batch.update(doc(db, 'messages', msg.id), {
+          readBy: nextReadBy,
+          readAt: now,
+        });
+      });
+
+      try {
+        await batch.commit();
+      } catch {
+        // Ignore read receipt errors to avoid blocking chat usage.
+      }
+    };
+
+    markAsRead();
+  }, [currentUserUid, isOpen, messages, selectedPeerUid]);
 
   const handleToggleReceiveMode = async () => {
     if (!currentUserUid || preferenceSaving) return;
@@ -387,7 +482,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
       return;
     }
 
-    if (messageLimitReached) {
+    if (!isAdminUser && messageLimitReached) {
       setSendError('Bugunku mesaj hakkiniz bitti. Limit gece yarisi yenilenir.');
       return;
     }
@@ -400,6 +495,27 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     setSendError('');
 
     try {
+      if (isAdminUser) {
+        const now = Date.now();
+        const messageRef = doc(collection(db, 'messages'));
+        const conversationId = buildConversationId(currentUserUid, selectedPeerUid);
+
+        await setDoc(messageRef, {
+          conversationId,
+          participants: [currentUserUid, selectedPeerUid].sort(),
+          senderUid: currentUserUid,
+          receiverUid: selectedPeerUid,
+          senderDisplay: currentUserDisplay,
+          receiverDisplay: selectedLabel,
+          text: trimmed,
+          createdAt: now,
+          readBy: [currentUserUid],
+        });
+
+        setMessageInput('');
+        return;
+      }
+
       const txResult = await runTransaction(db, async (transaction) => {
         const senderSnap = await transaction.get(senderRef);
         const senderData = senderSnap.exists() ? senderSnap.data() : {};
@@ -443,6 +559,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
           receiverDisplay: selectedLabel,
           text: trimmed,
           createdAt: now,
+          readBy: [currentUserUid],
         });
 
         return { messageLimit, nextUsed };
@@ -468,19 +585,19 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[130] bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 md:p-5" onClick={onClose}>
+    <div className="fixed inset-0 z-[130] bg-black/65 backdrop-blur-sm flex items-center justify-center p-1.5 md:p-5" onClick={onClose}>
       <div
-        className="w-full max-w-6xl h-[88vh] bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-600/50 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-6xl h-[94vh] md:h-[88vh] bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-600/50 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-4 md:px-5 py-3 border-b border-slate-700/60 bg-slate-900/45 flex items-center justify-between gap-3">
+        <div className="px-3 md:px-5 py-2.5 md:py-3 border-b border-slate-700/60 bg-slate-900/45 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl border border-cyan-700/40 bg-cyan-900/25">
+            <div className="p-1.5 md:p-2 rounded-xl border border-cyan-700/40 bg-cyan-900/25">
               <MessageCircle size={18} className="text-cyan-300" />
             </div>
             <div>
               <h3 className="text-sm md:text-base font-bold text-white">Kullanicilar Arasi Mesajlasma</h3>
-              <p className="text-[11px] text-slate-400">Gunluk mesaj hakki ve alici tercihlerine gore calisir.</p>
+              <p className="hidden md:block text-[11px] text-slate-400">Gunluk mesaj hakki ve alici tercihlerine gore calisir.</p>
             </div>
           </div>
           <button
@@ -492,51 +609,74 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
           </button>
         </div>
 
-        <div className="px-4 md:px-5 py-3 border-b border-slate-700/40 bg-slate-900/30 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-          <div className={`rounded-lg border px-3 py-2 ${messageLimitReached ? 'bg-red-950/30 border-red-800/45' : 'bg-emerald-950/20 border-emerald-800/45'}`}>
-            <p className={`text-xs font-bold ${messageLimitReached ? 'text-red-300' : 'text-emerald-300'}`}>
-              {messageLimitReached ? 'Bugun mesaj hakkin bitti' : `Mesaj Hakkin: ${messageLimitRemaining}/${messageLimitTotal}`}
-            </p>
-            <p className="text-[11px] text-slate-300 mt-0.5">
-              Kullanilan: {messageLimitUsed}/{messageLimitTotal} • Yenilenme: {messageResetCountdown || '-'}
-            </p>
+        <div className="px-2.5 md:px-5 py-2 border-b border-slate-700/40 bg-slate-900/30 flex items-center gap-1.5 overflow-x-auto">
+          <div className={`shrink-0 rounded-md border px-2 py-1 flex items-center gap-1 ${messageLimitReached ? 'bg-red-950/30 border-red-800/45 text-red-300' : 'bg-emerald-950/20 border-emerald-800/45 text-emerald-300'}`}>
+            {isAdminUser ? <Shield size={11} /> : <MessageCircle size={11} />}
+            <span className="text-[10px] font-bold">
+              {isAdminUser ? 'Sinirsiz' : `${messageLimitRemaining}/${messageLimitTotal}`}
+            </span>
           </div>
+
+          {!isAdminUser && (
+            <div className="md:hidden shrink-0 rounded-md border border-slate-700/50 bg-slate-800/70 text-slate-300 px-2 py-1 text-[10px] font-semibold">
+              {messageResetCountdown || '--'}
+            </div>
+          )}
 
           <button
             onClick={handleToggleReceiveMode}
             disabled={preferenceSaving}
-            className={`px-3 py-2 rounded-lg border text-xs font-bold transition-colors flex items-center gap-1.5 ${
+            className={`shrink-0 px-2 py-1 rounded-md border text-[10px] md:text-xs font-bold transition-colors flex items-center gap-1 ${
               receiveOnlyFromAdmin
                 ? 'bg-amber-950/35 border-amber-800/45 text-amber-300 hover:bg-amber-900/35'
                 : 'bg-slate-800/70 border-slate-700/50 text-slate-300 hover:bg-slate-700/70'
             } disabled:opacity-60`}
           >
-            {receiveOnlyFromAdmin ? <Shield size={14} /> : <User size={14} />}
-            {receiveOnlyFromAdmin ? 'Sadece Yonetici Mesaji Al' : 'Herkesten Mesaj Al'}
+            {receiveOnlyFromAdmin ? <Shield size={11} /> : <User size={11} />}
+            {receiveOnlyFromAdmin ? 'Yonetici' : 'Herkes'}
           </button>
+
+          <button
+            onClick={() => setMobilePanel(prev => prev === 'list' ? 'chat' : 'list')}
+            className="md:hidden shrink-0 px-2 py-1 rounded-md border border-slate-700/50 bg-slate-800/70 text-slate-200 text-[10px] font-bold flex items-center gap-1"
+          >
+            {mobilePanel === 'list' ? <MessageCircle size={11} /> : <Users size={11} />}
+            {mobilePanel === 'list' ? 'Sohbet' : 'Kisiler'}
+          </button>
+
+          {selectedPeer && mobilePanel === 'chat' && (
+            <div className="md:hidden shrink-0 max-w-[40vw] truncate rounded-md border border-slate-700/50 bg-slate-800/70 px-2 py-1 text-[10px] text-slate-300 flex items-center gap-1">
+              <User size={11} className="shrink-0" />
+              <span className="truncate">{selectedPeer.label}</span>
+            </div>
+          )}
         </div>
 
-        <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-          <div className="w-full md:w-[300px] border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/30 flex flex-col min-h-0">
-            <div className="p-3 border-b border-slate-700/50">
+        <div className="flex-1 min-h-0 flex md:flex-row">
+          <div className={`${mobilePanel === 'list' ? 'flex' : 'hidden'} md:flex w-full md:w-[300px] border-b md:border-b-0 md:border-r border-slate-700/50 bg-slate-900/30 flex-col min-h-0`}>
+            <div className="p-2.5 border-b border-slate-700/50">
               <div className="flex items-center gap-2 bg-slate-800/65 border border-slate-700/60 rounded-lg px-2.5 py-2">
                 <Search size={14} className="text-slate-500 shrink-0" />
                 <input
                   type="text"
                   value={recipientSearch}
                   onChange={(e) => setRecipientSearch(e.target.value)}
-                  placeholder="Kullanici ara..."
+                  placeholder="Email veya ad ara (min 4)"
                   className="flex-1 bg-transparent text-xs text-slate-200 outline-none placeholder-slate-500"
                 />
               </div>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5">
+            <div className="flex-1 min-h-0 overflow-y-auto p-1.5 md:p-2 space-y-1 md:space-y-1.5">
               {loadingRecipients && (
                 <div className="text-[11px] text-slate-500 px-2 py-1">Kullanicilar yukleniyor...</div>
               )}
 
-              {!loadingRecipients && filteredRecipients.length === 0 && (
+              {!loadingRecipients && hasShortSearchText && (
+                <div className="text-[11px] text-slate-500 px-2 py-1">En az 4 karakter yazin.</div>
+              )}
+
+              {!loadingRecipients && !hasShortSearchText && filteredRecipients.length === 0 && (
                 <div className="text-[11px] text-slate-500 px-2 py-1">Mesajlasilacak kullanici bulunamadi.</div>
               )}
 
@@ -552,18 +692,21 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                 return (
                   <button
                     key={option.uid}
-                    onClick={() => { setSelectedPeerUid(option.uid); setSendError(''); }}
-                    className={`w-full text-left rounded-lg border px-2.5 py-2 transition-colors ${
+                    onClick={() => { setSelectedPeerUid(option.uid); setSendError(''); setMobilePanel('chat'); }}
+                    className={`w-full text-left rounded-md md:rounded-lg border px-2 py-1.5 md:px-2.5 md:py-2 transition-colors ${
                       isActive
                         ? 'bg-cyan-900/30 border-cyan-700/45'
                         : 'bg-slate-800/50 border-slate-700/45 hover:bg-slate-700/60'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`text-xs font-semibold truncate ${isActive ? 'text-cyan-200' : 'text-slate-200'}`}>{option.label}</span>
-                      {lastTime && <span className="text-[10px] text-slate-500">{lastTime}</span>}
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className={`text-[11px] md:text-xs font-semibold truncate ${isActive ? 'text-cyan-200' : 'text-slate-200'}`}>{option.label}</span>
+                      {lastTime && <span className="text-[9px] md:text-[10px] text-slate-500">{lastTime}</span>}
                     </div>
-                    <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                    {option.email && (
+                      <p className="text-[9px] text-cyan-300/70 truncate mt-0.5">{option.email}</p>
+                    )}
+                    <p className="text-[9px] md:text-[10px] text-slate-500 truncate mt-0 md:mt-0.5">
                       {conversation ? `${lastFromMe ? 'Sen: ' : ''}${lastText}` : 'Mesajlasma baslat'}
                     </p>
                   </button>
@@ -572,20 +715,32 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
             </div>
           </div>
 
-          <div className="flex-1 min-h-0 flex flex-col">
+          <div className={`${mobilePanel === 'chat' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 flex-col`}>
             {!selectedPeerUid ? (
               <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
-                Mesajlasmak icin soldan bir kullanici secin.
+                Mesajlasmak icin bir kullanici secin.
               </div>
             ) : (
               <>
-                <div className="px-4 py-2.5 border-b border-slate-700/50 bg-slate-900/25 flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-bold text-white">{selectedPeer?.label || selectedPeerUid}</p>
-                    <p className="text-[11px] text-slate-500 font-mono">{selectedPeerUid}</p>
+                <div className="px-3 md:px-4 py-2 border-b border-slate-700/50 bg-slate-900/25">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-white truncate">{selectedPeer?.label || selectedPeerUid}</p>
+                      {selectedPeer?.email ? (
+                        <p className="text-[10px] text-cyan-300/70 truncate">{selectedPeer.email}</p>
+                      ) : (
+                        <p className="hidden md:block text-[11px] text-slate-500 font-mono">{selectedPeerUid}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setMobilePanel('list')}
+                      className="md:hidden shrink-0 px-2.5 py-1 rounded-md border border-slate-700/50 bg-slate-800/80 text-[10px] text-slate-200 font-bold"
+                    >
+                      Kisiler
+                    </button>
                   </div>
                   {selectedPeerRestricted && (
-                    <div className={`px-2.5 py-1 rounded-md border text-[10px] font-bold flex items-center gap-1 ${
+                    <div className={`mt-2 px-2 py-1 rounded-md border text-[10px] font-bold flex items-center gap-1 w-fit ${
                       isAdminUser
                         ? 'bg-amber-950/30 border-amber-800/45 text-amber-300'
                         : 'bg-red-950/30 border-red-800/45 text-red-300'
@@ -596,7 +751,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                   )}
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4 space-y-2 bg-slate-900/20">
+                <div className="flex-1 min-h-0 overflow-y-auto p-2.5 md:p-4 space-y-2 bg-slate-900/20">
                   {messages.length === 0 && (
                     <div className="text-[12px] text-slate-500 text-center py-6">
                       Bu gorusmede henuz mesaj yok.
@@ -607,12 +762,12 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                     const isMine = msg.senderUid === currentUserUid;
                     return (
                       <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] md:max-w-[70%] rounded-xl border px-3 py-2 ${
+                        <div className={`max-w-[90%] md:max-w-[70%] rounded-xl border px-2.5 md:px-3 py-1.5 md:py-2 ${
                           isMine
                             ? 'bg-cyan-900/30 border-cyan-700/45 text-cyan-50'
                             : 'bg-slate-800/70 border-slate-700/50 text-slate-100'
                         }`}>
-                          <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                          <p className="text-[13px] md:text-sm whitespace-pre-wrap break-words">{msg.text}</p>
                           <p className="text-[10px] mt-1 text-right text-slate-400">
                             {new Date(msg.createdAt).toLocaleString('tr-TR')}
                           </p>
@@ -623,7 +778,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                   <div ref={bottomRef} />
                 </div>
 
-                <div className="border-t border-slate-700/50 p-3 bg-slate-900/35">
+                <div className="border-t border-slate-700/50 p-2.5 md:p-3 bg-slate-900/35">
                   {sendError && (
                     <div className="mb-2 rounded-lg border border-red-900/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-300 flex items-start gap-1.5">
                       <AlertTriangle size={14} className="shrink-0 mt-0.5" />
@@ -631,19 +786,19 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-end gap-2">
+                  <div className="flex items-end gap-1.5 md:gap-2">
                     <textarea
                       value={messageInput}
                       onChange={(e) => setMessageInput(e.target.value)}
                       placeholder={canSendToSelected ? 'Mesajini yaz...' : 'Bu kullaniciya mesaj gonderemezsin'}
-                      className="flex-1 min-h-[44px] max-h-32 resize-y bg-slate-950/80 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50 placeholder-slate-600"
+                      className="flex-1 min-h-[40px] max-h-28 resize-y bg-slate-950/80 border border-slate-700/60 rounded-lg px-2.5 py-2 text-[13px] md:text-sm text-slate-200 outline-none focus:border-cyan-500/50 placeholder-slate-600"
                       disabled={!canSendToSelected || sending}
                       maxLength={1200}
                     />
                     <button
                       onClick={handleSendMessage}
                       disabled={!canSendToSelected || sending || !messageInput.trim()}
-                      className="h-[44px] px-3.5 rounded-lg border border-cyan-700/45 bg-cyan-800/80 text-cyan-50 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 text-xs font-bold"
+                      className="h-[40px] md:h-[44px] px-3 md:px-3.5 rounded-lg border border-cyan-700/45 bg-cyan-800/80 text-cyan-50 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 text-[11px] md:text-xs font-bold"
                     >
                       <Send size={13} />
                       {sending ? 'Gonderiliyor' : 'Gonder'}

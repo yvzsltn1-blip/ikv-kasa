@@ -14,7 +14,7 @@ import { MessagingModal } from './components/MessagingModal';
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, where, getDocs, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, where, getDocs, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 
 // View sequence
 const VIEW_ORDER = ['bank1', 'bank2', 'bag'] as const;
@@ -109,6 +109,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
   const [isMessagingOpen, setIsMessagingOpen] = useState(false);
+  const [unreadMessageSenderCount, setUnreadMessageSenderCount] = useState(0);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
   const [isMobileAccountMenuOpen, setIsMobileAccountMenuOpen] = useState(false);
@@ -308,12 +309,43 @@ export default function App() {
         setSocialLink('');
         setGlobalEnchantments([]);
         setUserPermissions(DEFAULT_USER_PERMISSIONS);
+        setUnreadMessageSenderCount(0);
         setLoading(false);
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      setUnreadMessageSenderCount(0);
+      return;
+    }
+
+    const unreadQuery = query(collection(db, "messages"), where("receiverUid", "==", uid));
+    const unsubscribe = onSnapshot(unreadQuery, (snapshot) => {
+      const senderSet = new Set<string>();
+
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data() as { senderUid?: string; readBy?: unknown };
+        if (!data.senderUid || data.senderUid === uid) return;
+
+        const readBy = Array.isArray(data.readBy)
+          ? data.readBy.filter((value): value is string => typeof value === 'string')
+          : [];
+
+        if (!readBy.includes(uid)) {
+          senderSet.add(data.senderUid);
+        }
+      });
+
+      setUnreadMessageSenderCount(senderSet.size);
+    });
+
+    return () => unsubscribe();
+  }, [userRole]);
 
   const initializeDefault = async (docRef: any) => {
     const newId = crypto.randomUUID();
@@ -722,6 +754,7 @@ export default function App() {
         setIsSearchOpen(false);
         setIsRecipeBookOpen(false);
         setIsMessagingOpen(false);
+        setUnreadMessageSenderCount(0);
         setModalOpen(false);
     } catch (error) {
         console.error("Çıkış hatası:", error);
@@ -1327,7 +1360,14 @@ export default function App() {
 
               <div className="h-9 flex items-center bg-slate-900/55 rounded-xl px-1 border border-slate-700/35 gap-1 shrink-0">
                 <button onClick={handleOpenSearch} className="h-7 w-7 flex items-center justify-center text-yellow-400 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={14} /></button>
-                <button onClick={() => setIsMessagingOpen(true)} className="h-7 w-7 flex items-center justify-center text-cyan-400 active:bg-cyan-700/20 rounded-lg transition-colors" title="Mesajlar"><MessageCircle size={14} /></button>
+                <button onClick={() => setIsMessagingOpen(true)} className="relative h-7 w-7 flex items-center justify-center text-cyan-400 active:bg-cyan-700/20 rounded-lg transition-colors" title="Mesajlar">
+                  <MessageCircle size={14} />
+                  {unreadMessageSenderCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] leading-4 font-bold text-center border border-red-300/60 shadow">
+                      {unreadMessageSenderCount > 99 ? '99+' : unreadMessageSenderCount}
+                    </span>
+                  )}
+                </button>
                 <button onClick={handleExportExcel} className="h-7 w-7 flex items-center justify-center text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={14} /></button>
                 <div className="relative">
                   <button onClick={saveData} disabled={!canEditData} className={`h-7 w-7 flex items-center justify-center rounded-lg transition-colors ${!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 ring-1 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20')}`}><Save size={14} /></button>
@@ -1430,7 +1470,15 @@ export default function App() {
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-1.5">
               <button onClick={handleOpenSearch} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all"><Search size={13} /><span>Ara</span></button>
-              <button onClick={() => setIsMessagingOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-cyan-700 text-cyan-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-cyan-500 transition-all"><MessageCircle size={13} /><span>Mesaj</span></button>
+              <button onClick={() => setIsMessagingOpen(true)} className="relative flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-cyan-700 text-cyan-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-cyan-500 transition-all">
+                <MessageCircle size={13} />
+                <span>Mesaj</span>
+                {unreadMessageSenderCount > 0 && (
+                  <span className="ml-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] leading-4 font-bold text-center border border-red-300/60 shadow">
+                    {unreadMessageSenderCount > 99 ? '99+' : unreadMessageSenderCount}
+                  </span>
+                )}
+              </button>
               <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all"><FileSpreadsheet size={13} /><span>Excel</span></button>
               <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`}><Save size={13} /><span>Kaydet</span></button>
               {userRole === 'admin' && (
