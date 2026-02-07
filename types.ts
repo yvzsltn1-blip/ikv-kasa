@@ -91,3 +91,20 @@ export interface GlobalSetInfo {
   count: number;
   categories: Set<string>;
 }
+
+export interface AdminUserInfo {
+  uid: string;
+  email: string;
+  username: string | null;
+  socialLink: string;
+  accountCount: number;
+  totalItemCount: number;
+  totalRecipeCount: number;
+  createdAt?: number;
+  accounts: Account[];
+}
+
+export interface SearchLimitsConfig {
+  defaultLimit: number;
+  userOverrides: Record<string, number>;
+}

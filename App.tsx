@@ -7,7 +7,8 @@ import { ItemDetailModal } from './components/ItemDetailModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2 } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown } from 'lucide-react';
+import { AdminPanel } from './components/AdminPanel';
 
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase';
@@ -64,6 +65,7 @@ export default function App() {
   const [currentViewIndex, setCurrentViewIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   // Input State (Temporary states for name editing)
   const [tempAccountName, setTempAccountName] = useState('');
@@ -130,6 +132,11 @@ export default function App() {
               setSocialLink('');
             }
 
+            // Mevcut kullanıcılara email alanı yoksa ekle
+            if (!data.email && user.email) {
+              setDoc(userDocRef, { email: user.email }, { merge: true }).catch(() => {});
+            }
+
             if (loadedAccounts.length > 0) {
               // Check if migration happened and auto-save
               const needsMigration = rawAccounts.some((acc: any) => !acc.servers || acc.servers.length === 0);
@@ -147,12 +154,21 @@ export default function App() {
             await initializeDefault(userDocRef);
           }
 
+          // Admin kontrolü: hardcoded email + Firestore metadata/admins
           const adminEmail = "yvzsltn61@gmail.com";
-          if (user.email === adminEmail) {
-             setUserRole('admin');
-          } else {
-             setUserRole('user');
+          let isAdmin = user.email === adminEmail;
+          if (!isAdmin) {
+            try {
+              const adminsDoc = await getDoc(doc(db, "metadata", "admins"));
+              if (adminsDoc.exists()) {
+                const emails: string[] = adminsDoc.data().emails || [];
+                if (user.email && emails.includes(user.email.toLowerCase())) {
+                  isAdmin = true;
+                }
+              }
+            } catch { /* admins doc may not exist */ }
           }
+          setUserRole(isAdmin ? 'admin' : 'user');
 
           // Global efsun önerilerini yükle
           try {
@@ -188,7 +204,12 @@ export default function App() {
     const defaultAccount = createAccount(newId, 'Hesap 1');
     const initialAccounts = [defaultAccount];
 
-    await setDoc(docRef, { accounts: initialAccounts });
+    const user = auth.currentUser;
+    await setDoc(docRef, {
+      accounts: initialAccounts,
+      email: user?.email || '',
+      createdAt: Date.now(),
+    });
 
     setAccounts(initialAccounts);
     setSelectedAccountId(newId);
@@ -980,6 +1001,10 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
+  if (showAdminPanel && userRole === 'admin') {
+    return <AdminPanel onBack={() => setShowAdminPanel(false)} />;
+  }
+
   if (!activeAccount || !activeServer || !activeChar) return <div className="text-white p-10">Hesap verisi yüklenemedi. Lütfen sayfayı yenileyin.</div>;
 
   const currentView = VIEW_ORDER[currentViewIndex];
@@ -1060,6 +1085,12 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                {userRole === 'admin' && (
+                  <>
+                    <div className="w-px h-4 bg-slate-600/40 mx-0.5"></div>
+                    <button onClick={() => setShowAdminPanel(true)} className="p-1.5 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><Crown size={15} /></button>
+                  </>
+                )}
                 <div className="w-px h-4 bg-slate-600/40 mx-0.5"></div>
                 <button onClick={handleLogout} className="p-1.5 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={15} /></button>
               </div>
@@ -1151,6 +1182,9 @@ export default function App() {
               <button onClick={() => setIsSearchOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all"><Search size={13} /><span>Ara</span></button>
               <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all"><FileSpreadsheet size={13} /><span>Excel</span></button>
               <button onClick={saveData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500'}`}><Save size={13} /><span>Kaydet</span></button>
+              {userRole === 'admin' && (
+                <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all"><Crown size={13} /><span>Admin</span></button>
+              )}
               <div className="w-px h-6 bg-slate-600/30 mx-1"></div>
               <button onClick={handleLogout} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-md border border-transparent hover:border-red-800/30 transition-all" title="Çıkış"><LogOut size={14} /></button>
             </div>
@@ -1495,6 +1529,7 @@ export default function App() {
         onNavigate={handleSearchResultNavigate}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
+        currentUserUid={auth.currentUser?.uid || ''}
       />
 
       <RecipeBookModal

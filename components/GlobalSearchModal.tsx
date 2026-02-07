@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo } from '../types';
-import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers } from 'lucide-react';
+import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers, AlertTriangle } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { SetDetailModal } from './SetDetailModal';
 import { db } from '../firebase';
-import { collection, getDocs, query as fsQuery, where, limit, QueryConstraint } from 'firebase/firestore';
+import { collection, getDocs, query as fsQuery, where, limit, QueryConstraint, doc, getDoc } from 'firebase/firestore';
 
 interface SearchResult {
   accountId: string;
@@ -41,9 +41,10 @@ interface GlobalSearchModalProps {
   onNavigate: (accountId: string, serverIndex: number, charIndex: number, viewIndex: number, openBook?: boolean) => void;
   globalSetLookup: Map<string, GlobalSetInfo>;
   globalSetMap: Map<string, SetItemLocation[]>;
+  currentUserUid?: string;
 }
 
-export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap }) => {
+export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap, currentUserUid }) => {
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchMode, setSearchMode] = useState<'local' | 'global'>('local');
@@ -63,6 +64,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   const [filterMaxLevel, setFilterMaxLevel] = useState<string>('');
   const [filterType, setFilterType] = useState<'All' | 'Item' | 'Recipe'>('All');
   const [filterRecipeStatus, setFilterRecipeStatus] = useState<'All' | 'Read' | 'Unread'>('All');
+
+  // Search limit states
+  const [searchLimitReached, setSearchLimitReached] = useState(false);
+  const [searchLimitMessage, setSearchLimitMessage] = useState('');
 
   // Debounce search input
   useEffect(() => {
@@ -105,6 +110,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       setGlobalItems([]);
       setShowSetDetail(false);
       setSetDetailKey(null);
+      setSearchLimitReached(false);
+      setSearchLimitMessage('');
       resetFilters();
     }
   }, [isOpen]);
@@ -129,6 +136,34 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     if (serverKey === globalCacheKey && (Date.now() - globalCacheTime) < 300000) return;
 
     const doFetch = async () => {
+      // Check daily search limit
+      if (currentUserUid) {
+        try {
+          const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
+          if (limitsDoc.exists()) {
+            const limitsData = limitsDoc.data();
+            const defaultLimit = limitsData.defaultLimit || 50;
+            const userOverrides = limitsData.userOverrides || {};
+            const userLimit = userOverrides[currentUserUid] !== undefined ? userOverrides[currentUserUid] : defaultLimit;
+
+            const today = new Date().toISOString().split('T')[0];
+            const storageKey = `globalSearch_${currentUserUid}_${today}`;
+            const currentCount = parseInt(localStorage.getItem(storageKey) || '0', 10);
+
+            if (currentCount >= userLimit) {
+              setSearchLimitReached(true);
+              setSearchLimitMessage(`Günlük global arama limitinize ulaştınız (${userLimit}/${userLimit}). Yarın tekrar deneyin.`);
+              return;
+            }
+
+            // Increment counter
+            localStorage.setItem(storageKey, String(currentCount + 1));
+            setSearchLimitReached(false);
+            setSearchLimitMessage('');
+          }
+        } catch { /* no limits doc, proceed */ }
+      }
+
       setGlobalLoading(true);
       try {
         const constraints: QueryConstraint[] = [];
@@ -704,27 +739,35 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           {/* GLOBAL MODE */}
           {searchMode === 'global' && (
             <>
-              {globalLoading && (
+              {searchLimitReached && (
+                <div className="text-center p-6 text-red-400">
+                  <AlertTriangle size={48} className="mx-auto mb-4 opacity-60" />
+                  <p className="font-bold text-sm mb-1">Arama Limiti</p>
+                  <p className="text-xs text-red-300/80">{searchLimitMessage}</p>
+                </div>
+              )}
+
+              {!searchLimitReached && globalLoading && (
                 <div className="text-center p-10 text-slate-500">
                   <Loader2 size={48} className="mx-auto mb-4 opacity-40 animate-spin" />
                   <p>Global eşyalar yükleniyor...</p>
                 </div>
               )}
 
-              {!globalLoading && (!debouncedQuery || debouncedQuery.length < 2) && !hasActiveFilters && (
+              {!searchLimitReached && !globalLoading && (!debouncedQuery || debouncedQuery.length < 2) && !hasActiveFilters && (
                 <div className="text-center p-10 text-slate-500">
                   <Globe size={48} className="mx-auto mb-4 opacity-20" />
                   <p>Global arama yapmak için metin giriniz veya filtre seçiniz.</p>
                 </div>
               )}
 
-              {!globalLoading && globalResults.length === 0 && ((debouncedQuery.length >= 2) || hasActiveFilters) && (
+              {!searchLimitReached && !globalLoading && globalResults.length === 0 && ((debouncedQuery.length >= 2) || hasActiveFilters) && (
                 <div className="text-center p-10 text-slate-500">
                   <p>Kriterlere uygun global sonuç bulunamadı.</p>
                 </div>
               )}
 
-              {!globalLoading && globalResults.map((gItem, idx) => (
+              {!searchLimitReached && !globalLoading && globalResults.map((gItem, idx) => (
                 <div
                   key={`global-${gItem.item.id}-${idx}`}
                   className="w-full text-left bg-slate-800/50 border border-emerald-900/40 p-3 rounded flex items-center gap-4"

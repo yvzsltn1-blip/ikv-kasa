@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { Shield, Lock, AlertCircle, Mail, UserPlus, LogIn, Chrome } from 'lucide-react';
 import { UserRole } from '../types';
-import { auth } from '../firebase'; 
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signInWithPopup, 
+import { auth, db } from '../firebase';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
   GoogleAuthProvider,
   sendEmailVerification,
   sendPasswordResetEmail,
-  signOut // Çıkış yapma fonksiyonunu ekledik
+  signOut
 } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
@@ -64,7 +65,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       }
 
       // Her şey yolundaysa rolü kontrol et
-      checkUserRole(user);
+      await checkUserRole(user);
 
     } catch (err: any) {
       let msg = "Bir hata oluştu. Lütfen tekrar deneyin.";
@@ -110,7 +111,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     try {
       const result = await signInWithPopup(auth, provider);
       // Google hesapları doğrulandı sayılır, ekstra kontrole gerek yok
-      checkUserRole(result.user);
+      await checkUserRole(result.user);
     } catch (err: any) {
       const msg = err.code === 'auth/popup-closed-by-user' ? "Giriş penceresi kapatıldı." : `Google ile giriş sırasında bir hata oluştu. (${err.code})`;
       setError(msg);
@@ -119,16 +120,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   };
 
   // Rol Kontrolü (Ortak Fonksiyon)
-  const checkUserRole = (user: any) => {
+  const checkUserRole = async (user: any) => {
     if (user) {
-      // BURAYA KENDİ E-POSTA ADRESİNİ YAZMAYI UNUTMA
-      const adminEmail = "yvzsltn61@gmail.com"; 
+      const adminEmail = "yvzsltn61@gmail.com";
+      let isAdmin = user.email === adminEmail;
 
-      if (user.email === adminEmail) {
-        onLogin('admin');
-      } else {
-        onLogin('user');
+      if (!isAdmin) {
+        try {
+          const adminsDoc = await getDoc(doc(db, "metadata", "admins"));
+          if (adminsDoc.exists()) {
+            const emails: string[] = adminsDoc.data().emails || [];
+            if (user.email && emails.includes(user.email.toLowerCase())) {
+              isAdmin = true;
+            }
+          }
+        } catch { /* admins doc may not exist */ }
       }
+
+      onLogin(isAdmin ? 'admin' : 'user');
     }
   };
 
