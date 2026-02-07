@@ -35,6 +35,13 @@ components/
 users/{uid}
   username: string (1 kerelik, opsiyonel)
   socialLink: string (sosyal medya profil linki)
+  permissions: {
+    canDataEntry: boolean (admin kapatirsa kullanici salt-okunur moda duser)
+    canGlobalSearch: boolean (admin kapatirsa global arama sekmesi devre disi)
+  }
+  searchQuota: {
+    global: { day: string, used: number, updatedAt: number }
+  }
   accounts: [
     {
       id, name,
@@ -99,6 +106,7 @@ metadata/enchantments
 ### Global Ozellikler
 - **Global gorunurluk**: ItemData.isGlobal alani, esya eklerken "Globalde Goster" / "Sadece Kendim" toggle, globalItems Firestore koleksiyonu
 - **Global arama**: GlobalSearchModal'da "Hesaplarim" / "Globalde Ara" sekmeleri, diger kullanicilarin paylastigi esyalari gorme
+- **Kullanici yetki kontrolu**: Admin panelinden kullanici bazli `canDataEntry` ve `canGlobalSearch` ac/kapat. Veri girisi kapaliysa uygulama salt-okunur; global arama kapaliysa global sekme kilitli
 - **Sosyal medya linki**: Kullanicilar profil linki (Facebook/Instagram/Twitter) kaydedebilir, global aramada diger kullanicilara gosterilir
 - **Arama detaylari**: Sonuclarda silah cinsi (weaponType) ve maden/iksir adedi gosterilir, weaponType ile aranabilir
 - **Kelime bazli arama**: Arama metni boslukla ayrilir, her kelime ayri ayri aranir (AND mantigi). Orn: "Alman Dis" -> enchantment1'de "alman", enchantment2'de "dis" bulunur -> eslesir
@@ -119,8 +127,14 @@ metadata/enchantments
 
 ## Son Guncelleme
 - **Tarih**: 2026-02-07
-- **Versiyon**: v4.6
+- **Versiyon**: v4.7
 - **Son yapilanlar**:
+  - Admin paneli > Kullanicilar sekmesine "Veri Girisi" ve "Global Arama" yetki toggle'lari eklendi
+  - `users/{uid}.permissions` modeli eklendi (`canDataEntry`, `canGlobalSearch`) ve eski kayitlar icin default tamamlama yapildi
+  - Veri girisi kapali kullanicilar icin hesap/esya/recete islemleri ve kaydetme akislari uygulama tarafinda kilitlendi (salt-okunur mod)
+  - Global arama yetkisi kapali kullanicilar icin GlobalSearchModal'da global sekme devre disi birakildi
+  - Firestore kurallari yetki bazli guncellendi: globalItems ve metadata/enchantments yazma/okuma kontrolleri, users permissions alaninin kullanici tarafindan degistirilememesi
+  - Yetki ve sistem mesajlari `alert` yerine tasarimli modal pencerelere tasindi (App + GlobalSearchModal)
   - Tilsim duplikasyon uyarisi eklendi (I ve II kademe, 3+ adet, renkli glow efekti)
   - Detay penceresinde tilsim duplikasyon konum bilgisi (K1 3X8 formati)
   - Cinsiyet/sinif secim kurallari yeniden duzenlendi (kategoriye gore farkli secenekler)

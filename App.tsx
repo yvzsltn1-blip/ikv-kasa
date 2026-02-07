@@ -54,6 +54,13 @@ type AccessAlert = {
   hint?: string;
 };
 
+type SystemAlert = {
+  tone: 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+  hint?: string;
+};
+
 export default function App() {
   // --- Auth & Loading State ---
   const [userRole, setUserRole] = useState<UserRole>(null);
@@ -109,6 +116,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [accessAlert, setAccessAlert] = useState<AccessAlert | null>(null);
+  const [systemAlert, setSystemAlert] = useState<SystemAlert | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string) => {
@@ -140,6 +148,10 @@ export default function App() {
     });
   };
 
+  const showSystemAlert = (alert: SystemAlert) => {
+    setSystemAlert(alert);
+  };
+
   const ensureCanEditData = () => {
     if (canEditData) return true;
     showAccessAlert('dataEntry');
@@ -147,9 +159,6 @@ export default function App() {
   };
 
   const handleOpenSearch = () => {
-    if (!canUseGlobalSearch) {
-      showAccessAlert('globalSearch');
-    }
     setIsSearchOpen(true);
   };
 
@@ -158,7 +167,12 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         if (!user.emailVerified) {
-            alert("Giriş yapabilmek için lütfen e-posta adresinizi doğrulayın. (Spam kutusunu kontrol etmeyi unutmayın)");
+            showSystemAlert({
+              tone: 'warning',
+              title: 'E-posta Dogrulamasi Gerekli',
+              message: 'Giris yapabilmek icin once e-posta adresinizi dogrulamaniz gerekiyor.',
+              hint: 'Spam kutunuzu da kontrol edin.',
+            });
             await signOut(auth);
             setLoading(false);
             return;
@@ -248,7 +262,12 @@ export default function App() {
           }
 
         } catch (error) {
-          alert("Veriler yüklenirken bir hata oluştu. İnternet bağlantınızı kontrol edin.");
+          showSystemAlert({
+            tone: 'error',
+            title: 'Veriler Yuklenemedi',
+            message: 'Veriler yuklenirken bir hata olustu. Lutfen internet baglantinizi kontrol edin.',
+            hint: 'Sorun devam ederse tekrar giris yapmayi deneyin.',
+          });
         } finally {
           setLoading(false);
         }
@@ -367,7 +386,11 @@ export default function App() {
     if (isSaving) return;
     const user = auth.currentUser;
     if (!user) {
-        alert("Oturum süresi dolmuş, lütfen sayfayı yenileyip tekrar giriş yapın.");
+        showSystemAlert({
+          tone: 'warning',
+          title: 'Oturum Suresi Doldu',
+          message: 'Lutfen sayfayi yenileyip tekrar giris yapin.',
+        });
         return;
     }
 
@@ -615,7 +638,11 @@ export default function App() {
   const handleDeleteAccount = () => {
     if (!ensureCanEditData()) return;
     if (accounts.length <= 1) {
-      alert("En az bir hesap kalmalıdır.");
+      showSystemAlert({
+        tone: 'info',
+        title: 'Islem Yapilamadi',
+        message: 'En az bir hesap kalmalidir.',
+      });
       return;
     }
     const confirmDelete = window.confirm("Bu hesabı silmek istediğinize emin misiniz?");
@@ -1475,6 +1502,95 @@ export default function App() {
           </div>
         )}
 
+        {/* System Alert Modal */}
+        {systemAlert && (
+          <div className="fixed inset-0 z-[119] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSystemAlert(null)}>
+            <div
+              className="relative mx-4 w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl animate-in zoom-in-95 fade-in duration-200"
+              style={{
+                background: systemAlert.tone === 'error'
+                  ? 'linear-gradient(145deg, rgba(69,10,10,0.95) 0%, rgba(30,41,59,0.95) 100%)'
+                  : systemAlert.tone === 'warning'
+                    ? 'linear-gradient(145deg, rgba(69,26,3,0.95) 0%, rgba(30,41,59,0.95) 100%)'
+                    : 'linear-gradient(145deg, rgba(8,47,73,0.95) 0%, rgba(30,41,59,0.95) 100%)',
+                borderColor: systemAlert.tone === 'error'
+                  ? 'rgba(248,113,113,0.35)'
+                  : systemAlert.tone === 'warning'
+                    ? 'rgba(251,191,36,0.35)'
+                    : 'rgba(56,189,248,0.35)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={`px-5 py-4 border-b ${
+                systemAlert.tone === 'error'
+                  ? 'bg-red-950/35 border-red-800/40'
+                  : systemAlert.tone === 'warning'
+                    ? 'bg-amber-950/30 border-amber-800/40'
+                    : 'bg-sky-950/30 border-sky-800/40'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-xl border ${
+                    systemAlert.tone === 'error'
+                      ? 'bg-red-900/30 border-red-700/50'
+                      : systemAlert.tone === 'warning'
+                        ? 'bg-amber-900/30 border-amber-700/50'
+                        : 'bg-sky-900/30 border-sky-700/50'
+                  }`}>
+                    <AlertTriangle size={18} className={
+                      systemAlert.tone === 'error'
+                        ? 'text-red-300'
+                        : systemAlert.tone === 'warning'
+                          ? 'text-amber-300'
+                          : 'text-sky-300'
+                    } />
+                  </div>
+                  <div>
+                    <h3 className="text-white text-sm font-bold tracking-wide">{systemAlert.title}</h3>
+                    <p className={`text-[10px] mt-0.5 ${
+                      systemAlert.tone === 'error'
+                        ? 'text-red-200/80'
+                        : systemAlert.tone === 'warning'
+                          ? 'text-amber-200/80'
+                          : 'text-sky-200/80'
+                    }`}>
+                      Sistem bilgilendirmesi
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-4">
+                <p className="text-slate-100 text-sm leading-relaxed">{systemAlert.message}</p>
+                {systemAlert.hint && (
+                  <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                    systemAlert.tone === 'error'
+                      ? 'bg-red-950/25 border-red-900/50 text-red-100/90'
+                      : systemAlert.tone === 'warning'
+                        ? 'bg-amber-950/25 border-amber-900/50 text-amber-100/90'
+                        : 'bg-sky-950/25 border-sky-900/50 text-sky-100/90'
+                  }`}>
+                    {systemAlert.hint}
+                  </div>
+                )}
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={() => setSystemAlert(null)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors border ${
+                      systemAlert.tone === 'error'
+                        ? 'bg-red-700/70 hover:bg-red-600 text-white border-red-500/40'
+                        : systemAlert.tone === 'warning'
+                          ? 'bg-amber-700/70 hover:bg-amber-600 text-black border-amber-500/40'
+                          : 'bg-sky-700/70 hover:bg-sky-600 text-white border-sky-500/40'
+                    }`}
+                  >
+                    Tamam
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Access Alert Modal */}
         {accessAlert && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setAccessAlert(null)}>
@@ -1757,3 +1873,4 @@ export default function App() {
     </div>
   );
 }
+

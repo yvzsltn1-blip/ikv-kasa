@@ -47,6 +47,11 @@ interface GlobalSearchModalProps {
   canUseGlobalSearch?: boolean;
 }
 
+type GlobalModalAlert = {
+  title: string;
+  message: string;
+};
+
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap, currentUserUid, currentUserRole, canUseGlobalSearch = true }) => {
   const MIN_GLOBAL_SEARCH_CHARS = 4;
   const SAME_RESULTS_FREE_WINDOW_MS = 300000;
@@ -77,6 +82,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   const [searchResetCountdown, setSearchResetCountdown] = useState('');
   const globalSearchChargeCacheRef = useRef<Map<string, { signature: string; expiresAt: number }>>(new Map());
   const globalSearchEnabled = canUseGlobalSearch;
+  const [modalAlert, setModalAlert] = useState<GlobalModalAlert | null>(null);
 
   const getLocalDayKey = () => {
     const now = new Date();
@@ -248,6 +254,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       setShowFilters(false);
       setSearchMode('local');
       setGlobalItems([]);
+      setModalAlert(null);
       setShowSetDetail(false);
       setSetDetailKey(null);
       setSearchLimitReached(false);
@@ -579,7 +586,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 // --- EXCEL ÇIKTISI ALMA FONKSİYONU (GÜNCELLENMİŞ) ---
   const handleExportSearchResults = () => {
     if (results.length === 0) {
-        alert("İndirilecek sonuç bulunamadı!");
+        setModalAlert({
+          title: 'Indirilecek Sonuc Yok',
+          message: 'Lutfen once bir arama yapip sonuc listesi olusturun.',
+        });
         return;
     }
 
@@ -1076,6 +1086,33 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         </div>
       </div>
 
+      {modalAlert && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setModalAlert(null)}>
+          <div
+            className="mx-4 w-full max-w-sm overflow-hidden rounded-2xl border border-amber-700/40 bg-gradient-to-b from-amber-950/80 to-slate-900 shadow-2xl animate-in zoom-in-95 fade-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-amber-800/40 bg-amber-950/35 flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg border border-amber-700/50 bg-amber-900/35">
+                <AlertTriangle size={16} className="text-amber-300" />
+              </div>
+              <h3 className="text-[13px] font-bold text-amber-100">{modalAlert.title}</h3>
+            </div>
+            <div className="px-4 py-4">
+              <p className="text-sm text-slate-200 leading-relaxed">{modalAlert.message}</p>
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={() => setModalAlert(null)}
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold text-black bg-amber-500 hover:bg-amber-400 transition-colors"
+                >
+                  Tamam
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SetDetailModal
         isOpen={showSetDetail}
         onClose={() => { setShowSetDetail(false); setSetDetailKey(null); }}
@@ -1085,6 +1122,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     </div>
   );
 };
+
 
 
 
