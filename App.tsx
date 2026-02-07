@@ -322,7 +322,9 @@ export default function App() {
     [activeChar.bank1, activeChar.bank2, activeChar.bag].forEach(container => {
       container.slots.forEach(slot => {
         if (slot.item && slot.item.category === 'Tılsım' && slot.item.enchantment1?.trim()) {
-          const key = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${(slot.item.enchantment2 || '').toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
+          const ench2 = (slot.item.enchantment2 || '').trim();
+          if (ench2 === 'III') return; // 3. kademe hariç
+          const key = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${ench2.toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
           countMap.set(key, (countMap.get(key) || 0) + 1);
         }
       });
