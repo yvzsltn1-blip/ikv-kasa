@@ -1530,6 +1530,7 @@ export default function App() {
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
         currentUserUid={auth.currentUser?.uid || ''}
+        currentUserRole={userRole}
       />
 
       <RecipeBookModal

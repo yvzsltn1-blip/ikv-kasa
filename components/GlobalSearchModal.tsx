@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo } from '../types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole } from '../types';
 import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers, AlertTriangle } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { SetDetailModal } from './SetDetailModal';
@@ -23,6 +23,7 @@ interface SearchResult {
 }
 
 interface GlobalItemDoc {
+  docId?: string;
   uid: string;
   username: string;
   accountName: string;
@@ -42,10 +43,12 @@ interface GlobalSearchModalProps {
   globalSetLookup: Map<string, GlobalSetInfo>;
   globalSetMap: Map<string, SetItemLocation[]>;
   currentUserUid?: string;
+  currentUserRole?: UserRole;
 }
 
-export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap, currentUserUid }) => {
+export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap, currentUserUid, currentUserRole }) => {
   const MIN_GLOBAL_SEARCH_CHARS = 4;
+  const SAME_RESULTS_FREE_WINDOW_MS = 300000;
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchMode, setSearchMode] = useState<'local' | 'global'>('local');
@@ -53,8 +56,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   // Global search states
   const [globalItems, setGlobalItems] = useState<GlobalItemDoc[]>([]);
   const [globalLoading, setGlobalLoading] = useState(false);
-  const [globalCacheKey, setGlobalCacheKey] = useState('');
-  const [globalCacheTime, setGlobalCacheTime] = useState(0);
 
   // Filter States
   const [showFilters, setShowFilters] = useState(false);
@@ -73,6 +74,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   const [searchLimitUsed, setSearchLimitUsed] = useState(0);
   const [searchResetAt, setSearchResetAt] = useState<number | null>(null);
   const [searchResetCountdown, setSearchResetCountdown] = useState('');
+  const globalSearchChargeCacheRef = useRef<Map<string, { signature: string; expiresAt: number }>>(new Map());
 
   const getLocalDayKey = () => {
     const now = new Date();
@@ -114,6 +116,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   };
 
   const refreshQuota = async (consumeOne: boolean) => {
+    if (currentUserRole === 'admin') {
+      setSearchLimitReached(false);
+      setSearchLimitMessage('');
+      setSearchLimitTotal(null);
+      setSearchLimitUsed(0);
+      setSearchResetAt(null);
+      setSearchResetCountdown('');
+      return { allowed: true };
+    }
+
     if (!currentUserUid) return { allowed: true };
 
     let resolvedLimit = 50;
@@ -216,8 +228,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       setDebouncedQuery('');
       setShowFilters(false);
       setSearchMode('local');
-      setGlobalCacheKey('');
-      setGlobalCacheTime(0);
       setGlobalItems([]);
       setShowSetDetail(false);
       setSetDetailKey(null);
@@ -234,7 +244,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   useEffect(() => {
     if (!isOpen || searchMode !== 'global') return;
     refreshQuota(false);
-  }, [isOpen, searchMode, currentUserUid]);
+  }, [isOpen, searchMode, currentUserUid, currentUserRole]);
 
   useEffect(() => {
     if (!isOpen || searchMode !== 'global' || !searchResetAt) return;
@@ -250,9 +260,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     updateCountdown();
     const timer = setInterval(updateCountdown, 1000);
     return () => clearInterval(timer);
-  }, [isOpen, searchMode, searchResetAt, currentUserUid]);
+  }, [isOpen, searchMode, searchResetAt, currentUserUid, currentUserRole]);
 
-  // Fetch global items with targeted query (max 50 docs per search, 5 min cache)
+  // Fetch global items and consume quota only when needed.
   useEffect(() => {
     if (searchMode !== 'global') return;
     if (globalLoading) return;
@@ -260,21 +270,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     const hasSearchCriteria = (debouncedQuery && debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) || hasActiveFilters;
     if (!hasSearchCriteria) {
       setGlobalItems([]);
-      setGlobalCacheKey('');
-      setGlobalCacheTime(0);
       return;
     }
 
-    // Server-side filter key: only category goes to Firestore (most selective, single-field index)
-    const serverKey = filterCategory || '__all__';
-
-    // Use cache if same server filter and younger than 5 min
-    if (serverKey === globalCacheKey && (Date.now() - globalCacheTime) < 300000) return;
-
     const doFetch = async () => {
-      const quota = await refreshQuota(true);
-      if (!quota.allowed) return;
-
       setGlobalLoading(true);
       try {
         const constraints: QueryConstraint[] = [];
@@ -288,11 +287,75 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         const q = fsQuery(collection(db, "globalItems"), ...constraints);
         const snapshot = await getDocs(q);
         const items: GlobalItemDoc[] = [];
-        snapshot.forEach(d => items.push(d.data() as GlobalItemDoc));
+        snapshot.forEach(d => items.push({ ...(d.data() as GlobalItemDoc), docId: d.id }));
+
+        const lowerQuery = debouncedQuery.toLocaleLowerCase('tr');
+        const matchedItems = items.filter(gItem => {
+          const item = gItem.item;
+          let match = true;
+
+          if (debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) {
+            const textToSearch = `
+              ${item.category}
+              ${item.enchantment1}
+              ${item.enchantment2}
+              ${item.heroClass}
+              ${item.weaponType || ''}
+              ${item.type === 'Recipe' ? 'reÃ§ete recipe' : ''}
+              lv${item.level}
+            `.toLocaleLowerCase('tr');
+            const searchWords = lowerQuery.split(/\s+/).filter(w => w.length > 0);
+            if (!searchWords.every(word => textToSearch.includes(word))) match = false;
+          }
+
+          if (match && hasActiveFilters) {
+            if (filterCategory && item.category !== filterCategory) match = false;
+            if (filterClass && filterClass !== 'TÃ¼m SÄ±nÄ±flar' && item.heroClass !== filterClass) match = false;
+            if (filterGender && filterGender !== 'TÃ¼m Cinsiyetler' && item.gender !== filterGender) match = false;
+            if (filterMinLevel && item.level < parseInt(filterMinLevel)) match = false;
+            if (filterMaxLevel && item.level > parseInt(filterMaxLevel)) match = false;
+            if (filterType === 'Recipe' && item.type !== 'Recipe') match = false;
+            if (filterType === 'Item' && item.type !== 'Item') match = false;
+          }
+
+          return match;
+        });
+
+        const searchKey = JSON.stringify({
+          q: debouncedQuery.trim().toLocaleLowerCase('tr'),
+          category: filterCategory || '',
+          heroClass: filterClass || '',
+          gender: filterGender || '',
+          minLevel: filterMinLevel || '',
+          maxLevel: filterMaxLevel || '',
+          type: filterType || 'All',
+        });
+
+        const resultSignature = matchedItems
+          .map(gItem => `${gItem.docId || ''}:${gItem.updatedAt || 0}:${gItem.item?.id || ''}`)
+          .sort()
+          .join('|');
+
+        let shouldConsumeQuota = matchedItems.length > 0;
+        if (shouldConsumeQuota) {
+          const now = Date.now();
+          const cached = globalSearchChargeCacheRef.current.get(searchKey);
+          if (cached && cached.expiresAt > now && cached.signature === resultSignature) {
+            shouldConsumeQuota = false;
+          } else {
+            const quota = await refreshQuota(true);
+            if (!quota.allowed) {
+              setGlobalItems([]);
+              return;
+            }
+            globalSearchChargeCacheRef.current.set(searchKey, {
+              signature: resultSignature,
+              expiresAt: now + SAME_RESULTS_FREE_WINDOW_MS,
+            });
+          }
+        }
 
         setGlobalItems(items);
-        setGlobalCacheKey(serverKey);
-        setGlobalCacheTime(Date.now());
       } catch (error) {
         console.error("Global items fetch error:", error);
       } finally {
@@ -300,7 +363,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       }
     };
     doFetch();
-  }, [searchMode, debouncedQuery, hasActiveFilters, filterCategory]);
+  }, [searchMode, debouncedQuery, hasActiveFilters, filterCategory, filterClass, filterGender, filterMinLevel, filterMaxLevel, filterType]);
 
   const results = useMemo(() => {
     // If no text query AND no filters active, show nothing
