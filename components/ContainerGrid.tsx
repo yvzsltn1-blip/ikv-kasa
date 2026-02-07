@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Container, SlotData, ItemData } from '../types';
 import { SlotItem } from './SlotItem';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Maximize2, Minimize2 } from 'lucide-react';
 
 interface ContainerGridProps {
   container: Container;
@@ -11,13 +11,14 @@ interface ContainerGridProps {
   searchQuery: string;
   onNext?: () => void;
   talismanDuplicates?: Map<string, { count: number; color: string }>;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates }) => {
-  const isMd = typeof window !== 'undefined' && window.innerWidth >= 768;
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates, isFullscreen = false, onToggleFullscreen }) => {
   const gridStyle = {
     gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
-    gridTemplateRows: `repeat(${container.rows}, minmax(${isMd ? '72px' : '52px'}, 1fr))`,
+    gridTemplateRows: `repeat(${container.rows}, minmax(0, 1fr))`,
   };
 
   // Touch drag visual state (for floating item indicator)
@@ -181,7 +182,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   };
 
   return (
-    <div className="flex flex-col md:h-full w-full">
+    <div className="flex flex-col h-full min-h-0 w-full">
       {/* Container Header */}
       <div className="bg-slate-800 border-t-2 border-l-2 border-r-2 border-slate-600 p-1 px-2 flex justify-between items-center rounded-t-md select-none shrink-0">
         <div className="flex items-center gap-2">
@@ -191,26 +192,38 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
           </div>
         </div>
 
-        {onNext && (
-          <button
-            onClick={onNext}
-            className="group flex items-center gap-1 text-slate-400 hover:text-white bg-slate-700 hover:bg-blue-600 px-3 py-1 rounded transition-all text-xs font-bold"
-            title="Sonraki Depo"
-          >
-            <span>SONRAKİ</span>
-            <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-          </button>
-        )}
+        <div className="flex items-center gap-1.5">
+          {onToggleFullscreen && (
+            <button
+              onClick={onToggleFullscreen}
+              className="group flex items-center gap-1 text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 px-2.5 py-1 rounded transition-all text-xs font-bold"
+              title={isFullscreen ? 'Tam Ekrandan Cik' : 'Tam Ekran'}
+            >
+              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              <span className="hidden sm:inline">{isFullscreen ? 'CIK' : 'TAM EKRAN'}</span>
+            </button>
+          )}
+          {onNext && (
+            <button
+              onClick={onNext}
+              className="group flex items-center gap-1 text-slate-400 hover:text-white bg-slate-700 hover:bg-blue-600 px-3 py-1 rounded transition-all text-xs font-bold"
+              title="Sonraki Depo"
+            >
+              <span>SONRAKİ</span>
+              <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Grid Area */}
       <div
         ref={gridRef}
-        className="relative bg-slate-900 border-2 border-slate-600 p-0.5 md:p-1 rounded-b-md shadow-inner metal-pattern md:flex-1 flex flex-col justify-center md:min-h-0 overflow-auto"
+        className="relative bg-slate-900 border-2 border-slate-600 p-0.5 md:p-1 rounded-b-md shadow-inner metal-pattern flex-1 flex flex-col min-h-0 overflow-hidden"
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
-        <div className="grid gap-0.5 md:gap-1 w-full md:h-full" style={gridStyle}>
+        <div className="grid gap-0.5 md:gap-1 w-full h-full" style={gridStyle}>
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;

@@ -94,6 +94,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
 
   // Input State (Temporary states for name editing)
   const [tempAccountName, setTempAccountName] = useState('');
@@ -1128,6 +1129,19 @@ export default function App() {
     setCurrentViewIndex((prev) => (prev + 1) % VIEW_ORDER.length);
   };
 
+  const toggleContainerFullscreen = () => {
+    setIsContainerFullscreen((prev) => !prev);
+  };
+
+  useEffect(() => {
+    if (!isContainerFullscreen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsContainerFullscreen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isContainerFullscreen]);
+
   // --- RENDER MANTIĞI ---
 
   if (loading) {
@@ -1154,10 +1168,12 @@ export default function App() {
   const activeContainer = activeChar[currentView];
 
   return (
-    <div className="min-h-screen w-screen bg-slate-950 md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 flex md:items-center md:justify-center md:h-screen md:overflow-hidden">
+    <div className={`h-[100dvh] w-screen bg-slate-950 flex overflow-hidden ${isContainerFullscreen ? '' : 'md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 md:items-center md:justify-center'}`}>
 
-<div className="w-full md:w-[98vw] min-h-screen md:min-h-0 md:h-[98vh] bg-slate-900/95 border-0 md:border-2 md:border-slate-700 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(0,0,0,0.9)] md:overflow-hidden flex flex-col relative">
+<div className={`w-full h-full bg-slate-900/95 flex flex-col relative overflow-hidden ${isContainerFullscreen ? 'border-0 rounded-none shadow-none' : 'md:w-[98vw] md:h-[98vh] border-0 md:border-2 md:border-slate-700 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(0,0,0,0.9)]'}`}>
 
+        {!isContainerFullscreen && (
+        <>
         {/* === HEADER === */}
         <div className="flex flex-col border-b-2 border-slate-700 shrink-0">
 
@@ -1444,13 +1460,15 @@ export default function App() {
             {!canUseGlobalSearch && <span className="bg-amber-900/30 border border-amber-800/40 rounded px-2 py-0.5 text-amber-200">Global arama yetkisi kapali</span>}
           </div>
         )}
+        </>
+        )}
 
         {/* Content Area */}
-        <div className="p-1 bg-slate-800/50 md:flex-1 flex flex-col md:min-h-0">
-           <div className="md:flex-1 w-full md:h-full">
+        <div className={`bg-slate-800/50 flex-1 flex flex-col min-h-0 ${isContainerFullscreen ? 'p-0' : 'p-1'}`}>
+           <div className="flex-1 w-full h-full min-h-0">
               {currentView === 'bag' ? (
-                 <div className="w-full md:h-full flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                    <div className="w-full md:h-full max-w-[90%] md:max-h-[80%] bg-[#1a1510] p-1 rounded-xl border-4 border-[#3e3428] shadow-2xl relative flex flex-col">
+                 <div className="w-full h-full min-h-0 flex items-center justify-center animate-in fade-in zoom-in duration-300">
+                    <div className={`w-full h-full min-h-0 bg-[#1a1510] p-1 rounded-xl shadow-2xl relative flex flex-col ${isContainerFullscreen ? 'border-0 rounded-none' : 'max-w-[90%] md:max-h-[80%] border-4 border-[#3e3428]'}`}>
                         <ContainerGrid
                             container={activeContainer}
                             onSlotClick={handleSlotClick}
@@ -1459,11 +1477,13 @@ export default function App() {
                             searchQuery={""}
                             onNext={handleNextView}
                             talismanDuplicates={talismanDuplicates}
+                            isFullscreen={isContainerFullscreen}
+                            onToggleFullscreen={toggleContainerFullscreen}
                         />
                     </div>
                  </div>
               ) : (
-                  <div className="w-full md:h-full animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <div className="w-full h-full min-h-0 animate-in fade-in slide-in-from-bottom-4 duration-300">
                      <ContainerGrid
                         container={activeContainer}
                         onSlotClick={handleSlotClick}
@@ -1472,6 +1492,8 @@ export default function App() {
                         searchQuery={""}
                         onNext={handleNextView}
                         talismanDuplicates={talismanDuplicates}
+                        isFullscreen={isContainerFullscreen}
+                        onToggleFullscreen={toggleContainerFullscreen}
                     />
                   </div>
               )}
@@ -1664,10 +1686,14 @@ export default function App() {
           </div>
         )}
 
+        {!isContainerFullscreen && (
+          <>
         {/* Footer */}
         <div className="bg-slate-900 p-0.5 flex justify-between items-center text-[8px] md:text-[9px] text-slate-600 border-t border-slate-700 shrink-0">
            <span className="w-full text-center">IKV KASA YÖNETİM SİSTEMİ v4.0 • {activeServer.name} • {activeChar.name} • {username ? `@${username}` : auth.currentUser?.email} • {userRole === 'admin' ? 'Yönetici' : 'Kullanıcı'}</span>
         </div>
+          </>
+        )}
       </div>
 
       {/* Username Modal */}
