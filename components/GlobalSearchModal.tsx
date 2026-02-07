@@ -45,6 +45,7 @@ interface GlobalSearchModalProps {
 }
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, onClose, accounts, onNavigate, globalSetLookup, globalSetMap, currentUserUid }) => {
+  const MIN_GLOBAL_SEARCH_CHARS = 4;
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchMode, setSearchMode] = useState<'local' | 'global'>('local');
@@ -256,7 +257,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     if (searchMode !== 'global') return;
     if (globalLoading) return;
 
-    const hasSearchCriteria = (debouncedQuery && debouncedQuery.length >= 2) || hasActiveFilters;
+    const hasSearchCriteria = (debouncedQuery && debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) || hasActiveFilters;
     if (!hasSearchCriteria) {
       setGlobalItems([]);
       setGlobalCacheKey('');
@@ -454,7 +455,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
   // Global search results
   const globalResults = useMemo(() => {
     if (searchMode !== 'global') return [];
-    if ((!debouncedQuery || debouncedQuery.length < 2) && !hasActiveFilters) return [];
+    if ((!debouncedQuery || debouncedQuery.length < MIN_GLOBAL_SEARCH_CHARS) && !hasActiveFilters) return [];
 
     const lowerQuery = debouncedQuery.toLocaleLowerCase('tr');
 
@@ -463,7 +464,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
       let match = true;
 
       // Text search (word-based AND: her kelime ayrı ayrı aranır)
-      if (debouncedQuery.length >= 2) {
+      if (debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) {
         const textToSearch = `
           ${item.category}
           ${item.enchantment1}
@@ -889,14 +890,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                 </div>
               )}
 
-              {!searchLimitReached && !globalLoading && (!debouncedQuery || debouncedQuery.length < 2) && !hasActiveFilters && (
+              {!searchLimitReached && !globalLoading && (!debouncedQuery || debouncedQuery.length < MIN_GLOBAL_SEARCH_CHARS) && !hasActiveFilters && (
                 <div className="text-center p-10 text-slate-500">
                   <Globe size={48} className="mx-auto mb-4 opacity-20" />
-                  <p>Global arama yapmak için metin giriniz veya filtre seçiniz.</p>
+                  <p>Global arama için en az 4 karakter giriniz veya filtre seçiniz.</p>
                 </div>
               )}
 
-              {!searchLimitReached && !globalLoading && globalResults.length === 0 && ((debouncedQuery.length >= 2) || hasActiveFilters) && (
+              {!searchLimitReached && !globalLoading && globalResults.length === 0 && ((debouncedQuery.length >= MIN_GLOBAL_SEARCH_CHARS) || hasActiveFilters) && (
                 <div className="text-center p-10 text-slate-500">
                   <p>Kriterlere uygun global sonuç bulunamadı.</p>
                 </div>
