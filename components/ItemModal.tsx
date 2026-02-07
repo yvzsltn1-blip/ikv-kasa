@@ -132,10 +132,10 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="bg-slate-800 border-2 md:border-4 border-slate-600 rounded-xl shadow-2xl w-[93vw] md:w-96 max-h-[92vh] text-slate-200 relative overflow-y-auto">
-        
+
         {/* Header */}
-        <div className="bg-slate-900 p-3 border-b border-slate-700 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-yellow-500 uppercase tracking-wider">
+        <div className="bg-slate-900 p-2 md:p-3 border-b border-slate-700 flex justify-between items-center">
+          <h2 className="text-sm md:text-lg font-bold text-yellow-500 uppercase tracking-wider">
             {existingItem ? 'Eşya Düzenle' : 'Yeni Eşya Ekle'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
@@ -144,8 +144,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
         </div>
 
         {/* Content */}
-        <div className="p-6">
-          
+        <div className="p-3 md:p-6">
+
           {/* STEP 1: Type Selection */}
           {step === 1 && (
             <div className="space-y-4">
@@ -228,7 +228,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
 
           {/* STEP 3: Details Form */}
           {step === 3 && (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-2 md:space-y-4">
               <div className="bg-slate-900/50 px-2.5 py-1.5 rounded border border-slate-700 mb-2 flex items-center justify-center gap-3">
                  <div className="flex items-center gap-1">
                    <span className="text-[10px] text-slate-500">Tür:</span>
@@ -271,58 +271,59 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                 </div>
               )}
 
-              {/* Gender */}
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-400">Cinsiyet</label>
-                <div className="flex bg-slate-900 rounded p-1 gap-1">
-                  {isGenderless ? (
-                    <div className="flex-1 text-xs py-1 rounded bg-indigo-600 text-white text-center">Tüm Cinsiyetler</div>
-                  ) : (
-                    GENDER_OPTIONS.filter(g => isWeapon || g !== 'Tüm Cinsiyetler').map(g => {
-                      const activeColor = g === 'Erkek' ? 'bg-blue-600 text-white' : g === 'Kadın' ? 'bg-pink-600 text-white' : 'bg-indigo-600 text-white';
-                      return (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setFormData({...formData, gender: g as any})}
-                          className={`flex-1 text-xs py-1 rounded transition-colors ${formData.gender === g ? activeColor : 'text-slate-500 hover:text-slate-300'}`}
-                        >
-                          {g}
-                        </button>
-                      );
-                    })
-                  )}
+              {/* Gender & Hero Class - side by side on mobile */}
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] md:text-xs font-bold mb-1 text-slate-400">Cinsiyet</label>
+                  <div className="flex bg-slate-900 rounded p-0.5 md:p-1 gap-0.5 md:gap-1">
+                    {isGenderless ? (
+                      <div className="flex-1 text-[10px] md:text-xs py-1 rounded bg-indigo-600 text-white text-center">Tüm Cins.</div>
+                    ) : (
+                      GENDER_OPTIONS.filter(g => isWeapon || g !== 'Tüm Cinsiyetler').map(g => {
+                        const activeColor = g === 'Erkek' ? 'bg-blue-600 text-white' : g === 'Kadın' ? 'bg-pink-600 text-white' : 'bg-indigo-600 text-white';
+                        return (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setFormData({...formData, gender: g as any})}
+                            className={`flex-1 text-[10px] md:text-xs py-1 rounded transition-colors ${formData.gender === g ? activeColor : 'text-slate-500 hover:text-slate-300'}`}
+                          >
+                            {g === 'Tüm Cinsiyetler' ? 'Tümü' : g}
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Hero Class */}
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-400">Karakter Sınıfı</label>
-                <div className="flex flex-wrap gap-1 bg-slate-900 rounded p-1">
-                  {isClassless ? (
-                    <div className="px-2 py-1 text-xs rounded bg-blue-600 text-white flex-grow text-center">Tüm Sınıflar</div>
-                  ) : (
-                    HERO_CLASSES.filter(cls => cls !== 'Tüm Sınıflar').map(cls => {
-                      const activeColor = cls === 'Savaşçı' ? 'bg-blue-600 text-white' : cls === 'Büyücü' ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
-                      return (
-                      <button
-                        key={cls}
-                        type="button"
-                        onClick={() => setFormData({...formData, heroClass: cls})}
-                        className={`px-2 py-1 text-xs rounded transition-colors flex-grow ${formData.heroClass === cls ? activeColor : 'text-slate-500 hover:text-slate-300'}`}
-                      >
-                        {cls}
-                      </button>
-                      );
-                    })
-                  )}
+                <div className="flex-1">
+                  <label className="block text-[10px] md:text-xs font-bold mb-1 text-slate-400">Sınıf</label>
+                  <div className="flex gap-0.5 md:gap-1 bg-slate-900 rounded p-0.5 md:p-1">
+                    {isClassless ? (
+                      <div className="px-2 py-1 text-[10px] md:text-xs rounded bg-blue-600 text-white flex-grow text-center">Tüm Sınıflar</div>
+                    ) : (
+                      HERO_CLASSES.filter(cls => cls !== 'Tüm Sınıflar').map(cls => {
+                        const activeColor = cls === 'Savaşçı' ? 'bg-blue-600 text-white' : cls === 'Büyücü' ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
+                        return (
+                        <button
+                          key={cls}
+                          type="button"
+                          onClick={() => setFormData({...formData, heroClass: cls})}
+                          className={`px-1 md:px-2 py-1 text-[10px] md:text-xs rounded transition-colors flex-grow ${formData.heroClass === cls ? activeColor : 'text-slate-500 hover:text-slate-300'}`}
+                        >
+                          {cls}
+                        </button>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Level & Count Row */}
-              <div className="flex gap-3">
+              <div className="flex gap-2 md:gap-3">
                   <div className="flex-1">
-                    <label className="block text-xs font-bold mb-1 text-slate-400">Seviye (Level)</label>
+                    <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-slate-400">Seviye</label>
                     <input
                       type="number"
                       min="1"
@@ -337,7 +338,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   {/* Count Input - Only for Maden & İksir */}
                   {isStackable && (
                       <div className="flex-1 animate-in fade-in slide-in-from-right-4">
-                        <label className="block text-xs font-bold mb-1 text-emerald-400 flex items-center gap-1">
+                        <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-emerald-400 flex items-center gap-1">
                            <Layers size={12} /> Adet
                         </label>
                         <input
@@ -372,22 +373,22 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
 
               {/* Global Visibility Toggle */}
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-400">Görünürlük</label>
-                <div className="flex bg-slate-900 rounded p-1 gap-1">
+                <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-slate-400">Görünürlük</label>
+                <div className="flex bg-slate-900 rounded p-0.5 md:p-1 gap-0.5 md:gap-1">
                   <button
                     type="button"
                     onClick={() => setFormData({...formData, isGlobal: false})}
-                    className={`flex-1 text-xs py-1.5 rounded transition-colors flex items-center justify-center gap-1.5 ${!formData.isGlobal ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                    className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors flex items-center justify-center gap-1 ${!formData.isGlobal ? 'bg-slate-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
                   >
-                    <Lock size={12} />
+                    <Lock size={11} />
                     Sadece Kendim
                   </button>
                   <button
                     type="button"
                     onClick={() => setFormData({...formData, isGlobal: true})}
-                    className={`flex-1 text-xs py-1.5 rounded transition-colors flex items-center justify-center gap-1.5 ${formData.isGlobal ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                    className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors flex items-center justify-center gap-1 ${formData.isGlobal ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
                   >
-                    <Globe size={12} />
+                    <Globe size={11} />
                     Globalde Göster
                   </button>
                 </div>
@@ -455,8 +456,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       </div>
                     )}
                   </div>
-                  <label className="block text-xs font-bold text-purple-400 mt-2">Kademe</label>
-                  <div className="flex bg-slate-900 rounded p-1 gap-1">
+                  <label className="block text-[10px] md:text-xs font-bold text-purple-400 mt-1 md:mt-2">Kademe</label>
+                  <div className="flex bg-slate-900 rounded p-0.5 md:p-1 gap-0.5 md:gap-1">
                     {['I', 'II', 'III'].map(tier => (
                       <button
                         key={tier}
@@ -529,7 +530,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                 </div>
               )}
 
-              <div className="flex gap-2 mt-6 pt-4 border-t border-slate-700 flex-wrap">
+              <div className="flex gap-2 mt-3 md:mt-6 pt-2 md:pt-4 border-t border-slate-700 flex-wrap">
                 {existingItem && (
                   <button 
                     type="button" 
