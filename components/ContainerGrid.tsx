@@ -10,9 +10,10 @@ interface ContainerGridProps {
   onMoveItem: (containerId: string, fromSlotId: number, toSlotId: number) => void;
   searchQuery: string;
   onNext?: () => void;
+  talismanDuplicates?: Map<string, { count: number; color: string }>;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext }) => {
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates }) => {
   const isMd = typeof window !== 'undefined' && window.innerWidth >= 768;
   const gridStyle = {
     gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
@@ -213,6 +214,10 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
+            const talismanKey = slot.item?.category === 'Tılsım' && slot.item.enchantment1?.trim()
+              ? `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${(slot.item.enchantment2 || '').toLocaleLowerCase('tr')}|${slot.item.heroClass}`
+              : null;
+            const glowInfo = talismanKey ? talismanDuplicates?.get(talismanKey) : undefined;
             return (
               <div
                 key={slot.id}
@@ -232,7 +237,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                   ${isBeingDragged ? 'opacity-30 border-yellow-500 border-2' : ''}
                 `}
               >
-                {slot.item && <SlotItem item={slot.item} highlight={highlight} />}
+                {slot.item && <SlotItem item={slot.item} highlight={highlight} talismanGlowColor={glowInfo?.color} />}
               </div>
             );
           })}

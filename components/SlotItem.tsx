@@ -6,9 +6,10 @@ import { Shield, Sword, Gem, Component, Scroll, Hand, Footprints, Shirt, Glasses
 interface SlotItemProps {
   item: ItemData;
   highlight?: boolean;
+  talismanGlowColor?: string;
 }
 
-export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight }) => {
+export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlowColor }) => {
   const colorClass = CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
   const classStripColor = CLASS_STRIP_COLORS[item.heroClass] || 'bg-gray-400';
 
@@ -92,9 +93,11 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight }) => {
         w-full h-full rounded-md md:rounded-lg border-2 flex flex-col items-center justify-center relative overflow-hidden
         ${colorClass}
         ${highlight ? 'ring-2 ring-yellow-400/80 brightness-110' : ''}
+        ${talismanGlowColor ? 'talisman-glow' : ''}
         transition-all duration-200
         shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]
       `}
+      style={talismanGlowColor ? { '--glow-color': talismanGlowColor } as React.CSSProperties : undefined}
     >
       {/* Premium top shine */}
       <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/[0.1] to-transparent pointer-events-none z-0" />

@@ -1,12 +1,19 @@
 import React from 'react';
 import { ItemData } from '../types';
 import { CATEGORY_COLORS, CLASS_COLORS } from '../constants';
-import { X, Pencil, Scroll, Shield, Sword, Gem, Component, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe, Globe } from 'lucide-react';
+import { X, Pencil, Scroll, Shield, Sword, Gem, Component, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe, Globe, AlertTriangle } from 'lucide-react';
+
+interface TalismanLocation {
+  containerName: string;
+  row: number;
+  col: number;
+}
 
 interface ItemDetailModalProps {
   item: ItemData | null;
   onClose: () => void;
   onEdit: () => void;
+  talismanLocations?: TalismanLocation[] | null;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -27,7 +34,7 @@ const getCategoryIcon = (category: string) => {
   }
 };
 
-export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit }) => {
+export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit, talismanLocations }) => {
   if (!item) return null;
 
   const colorClass = CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
@@ -134,6 +141,26 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
             <div className="text-emerald-400 text-xs flex items-center gap-1">
               <Globe size={12} className="inline" />
               Globalde Görünür
+            </div>
+          )}
+
+          {/* Talisman duplicate locations */}
+          {talismanLocations && talismanLocations.length > 0 && (
+            <div className="bg-amber-950/40 border border-amber-700/40 rounded-lg px-2.5 py-2 space-y-1">
+              <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                <AlertTriangle size={10} />
+                {talismanLocations.length}x Duplikasyon
+              </div>
+              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                {talismanLocations.map((loc, i) => {
+                  const abbr = loc.containerName === 'Kasa 1' ? 'K1' : loc.containerName === 'Kasa 2' ? 'K2' : 'Ç';
+                  return (
+                    <span key={i} className="text-amber-200/70 text-[10px]">
+                      {abbr} {loc.row}X{loc.col}{i < talismanLocations.length - 1 ? ' -' : ''}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

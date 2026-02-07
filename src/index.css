@@ -28,3 +28,16 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Talisman duplicate glow animation */
+@keyframes talisman-pulse {
+  0%, 100% {
+    box-shadow: 0 0 4px var(--glow-color), inset 0 0 2px var(--glow-color);
+  }
+  50% {
+    box-shadow: 0 0 12px var(--glow-color), 0 0 20px var(--glow-color), inset 0 0 6px var(--glow-color);
+  }
+}
+.talisman-glow {
+  animation: talisman-pulse 1.8s ease-in-out infinite;
+}

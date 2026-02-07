@@ -303,6 +303,63 @@ export default function App() {
   const activeServer = activeAccount?.servers[selectedServerIndex];
   const activeChar = activeServer?.characters[activeCharIndex];
 
+  // Tılsım duplikasyon tespiti: aynı karakter içinde 3+ aynı tılsım varsa glow efekti
+  const TALISMAN_GLOW_COLORS = [
+    '#06b6d4', '#ef4444', '#84cc16', '#8b5cf6', '#f59e0b',
+    '#ec4899', '#0ea5e9', '#10b981', '#f43f5e', '#f97316',
+  ];
+  const getTalismanColor = (name: string): string => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = ((hash << 5) - hash) + name.charCodeAt(i);
+      hash |= 0;
+    }
+    return TALISMAN_GLOW_COLORS[Math.abs(hash) % TALISMAN_GLOW_COLORS.length];
+  };
+  const talismanDuplicates = useMemo(() => {
+    if (!activeChar) return new Map<string, { count: number; color: string }>();
+    const countMap = new Map<string, number>();
+    [activeChar.bank1, activeChar.bank2, activeChar.bag].forEach(container => {
+      container.slots.forEach(slot => {
+        if (slot.item && slot.item.category === 'Tılsım' && slot.item.enchantment1?.trim()) {
+          const key = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${(slot.item.enchantment2 || '').toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
+          countMap.set(key, (countMap.get(key) || 0) + 1);
+        }
+      });
+    });
+    const result = new Map<string, { count: number; color: string }>();
+    countMap.forEach((count, key) => {
+      if (count >= 3) {
+        const name = key.split('|')[0];
+        result.set(key, { count, color: getTalismanColor(name) });
+      }
+    });
+    return result;
+  }, [activeChar]);
+
+  // Detay modalında gösterilecek tılsım duplikasyon konumları
+  const talismanLocations = useMemo(() => {
+    if (!detailItem || !activeChar || detailItem.category !== 'Tılsım' || !detailItem.enchantment1?.trim()) return null;
+    const key = `${detailItem.enchantment1.toLocaleLowerCase('tr')}|${(detailItem.enchantment2 || '').toLocaleLowerCase('tr')}|${detailItem.heroClass}`;
+    if (!talismanDuplicates.has(key)) return null;
+    const locations: { containerName: string; row: number; col: number }[] = [];
+    [
+      { data: activeChar.bank1, name: 'Kasa 1' },
+      { data: activeChar.bank2, name: 'Kasa 2' },
+      { data: activeChar.bag, name: 'Çanta' },
+    ].forEach(({ data, name }) => {
+      data.slots.forEach(slot => {
+        if (slot.item && slot.item.category === 'Tılsım' && slot.item.enchantment1?.trim()) {
+          const slotKey = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${(slot.item.enchantment2 || '').toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
+          if (slotKey === key) {
+            locations.push({ containerName: name, row: Math.floor(slot.id / data.cols) + 1, col: (slot.id % data.cols) + 1 });
+          }
+        }
+      });
+    });
+    return locations.length >= 3 ? locations : null;
+  }, [detailItem, activeChar, talismanDuplicates]);
+
   const enchantmentSuggestions = useMemo(() => {
     const set = new Set<string>();
     // Lokal: kullanıcının kendi itemlerinden
@@ -1209,6 +1266,7 @@ export default function App() {
                             onMoveItem={handleMoveItem}
                             searchQuery={""}
                             onNext={handleNextView}
+                            talismanDuplicates={talismanDuplicates}
                         />
                     </div>
                  </div>
@@ -1221,6 +1279,7 @@ export default function App() {
                         onMoveItem={handleMoveItem}
                         searchQuery={""}
                         onNext={handleNextView}
+                        talismanDuplicates={talismanDuplicates}
                     />
                   </div>
               )}
@@ -1412,6 +1471,7 @@ export default function App() {
         item={detailItem}
         onClose={() => { setDetailItem(null); setDetailSlot(null); }}
         onEdit={handleEditFromDetail}
+        talismanLocations={talismanLocations}
       />
 
       <ItemModal
