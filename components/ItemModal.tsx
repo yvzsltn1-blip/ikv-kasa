@@ -111,7 +111,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   };
 
   // Determine if the item supports stacking (Count)
-  const isStackable = formData.category === 'Maden' || formData.category === 'İksir';
+  const isStackable = formData.category === 'Maden' || formData.category === 'İksir' || formData.category === 'Diğer';
   // Determine if item is a Weapon
   const isWeapon = formData.category === 'Silah';
   // Categories that don't have gender selection
