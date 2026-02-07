@@ -13,9 +13,10 @@ interface ContainerGridProps {
 }
 
 export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext }) => {
+  const isMd = typeof window !== 'undefined' && window.innerWidth >= 768;
   const gridStyle = {
     gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
-    gridTemplateRows: `repeat(${container.rows}, minmax(56px, 1fr))`,
+    gridTemplateRows: `repeat(${container.rows}, minmax(${isMd ? '72px' : '52px'}, 1fr))`,
   };
 
   // Touch drag visual state (for floating item indicator)
