@@ -14,6 +14,7 @@ type TabType = 'dashboard' | 'users' | 'settings';
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Data
   const [allUsers, setAllUsers] = useState<AdminUserInfo[]>([]);
@@ -43,46 +44,78 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     fetchAllData();
   }, []);
 
+  const normalizeAccounts = (raw: unknown): Account[] => {
+    if (Array.isArray(raw)) return raw as Account[];
+    if (raw && typeof raw === 'object') {
+      return Object.values(raw).filter((value): value is Account => !!value && typeof value === 'object');
+    }
+    return [];
+  };
+
+  const toMillis = (value: unknown): number | undefined => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (value instanceof Date) return value.getTime();
+    if (value && typeof value === 'object' && 'toMillis' in value) {
+      const fn = (value as { toMillis?: unknown }).toMillis;
+      if (typeof fn === 'function') {
+        try {
+          return (fn as () => number)();
+        } catch {
+          return undefined;
+        }
+      }
+    }
+    return undefined;
+  };
+
   const fetchAllData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // Fetch all users
       const usersSnap = await getDocs(collection(db, "users"));
       const users: AdminUserInfo[] = [];
 
       usersSnap.forEach(docSnap => {
-        const data = docSnap.data();
-        const accounts: Account[] = data.accounts || [];
+        try {
+          const data = docSnap.data();
+          const accounts = normalizeAccounts(data.accounts);
+          const createdAt = toMillis(data.createdAt);
 
-        let totalItems = 0;
-        let totalRecipes = 0;
+          let totalItems = 0;
+          let totalRecipes = 0;
 
-        accounts.forEach(acc => {
-          (acc.servers || []).forEach(server => {
-            (server.characters || []).forEach(char => {
-              [char.bank1, char.bank2, char.bag].forEach(container => {
-                if (container?.slots) {
-                  container.slots.forEach(slot => {
-                    if (slot.item) totalItems++;
-                  });
-                }
+          accounts.forEach(acc => {
+            const servers = Array.isArray(acc?.servers) ? acc.servers : [];
+            servers.forEach(server => {
+              const characters = Array.isArray(server?.characters) ? server.characters : [];
+              characters.forEach(char => {
+                [char?.bank1, char?.bank2, char?.bag].forEach(container => {
+                  if (Array.isArray(container?.slots)) {
+                    container.slots.forEach(slot => {
+                      if (slot?.item) totalItems++;
+                    });
+                  }
+                });
+                totalRecipes += Array.isArray(char?.learnedRecipes) ? char.learnedRecipes.length : 0;
               });
-              totalRecipes += (char.learnedRecipes || []).length;
             });
           });
-        });
 
-        users.push({
-          uid: docSnap.id,
-          email: data.email || '',
-          username: data.username || null,
-          socialLink: data.socialLink || '',
-          accountCount: accounts.length,
-          totalItemCount: totalItems,
-          totalRecipeCount: totalRecipes,
-          createdAt: data.createdAt,
-          accounts,
-        });
+          users.push({
+            uid: docSnap.id,
+            email: data.email || '',
+            username: data.username || null,
+            socialLink: data.socialLink || '',
+            accountCount: accounts.length,
+            totalItemCount: totalItems,
+            totalRecipeCount: totalRecipes,
+            createdAt,
+            accounts,
+          });
+        } catch (userError) {
+          console.warn("Kullanici parse atlaniyor:", docSnap.id, userError);
+        }
       });
 
       setAllUsers(users);
@@ -98,9 +131,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       globalSnap.forEach(d => {
         const item = d.data().item;
         if (item) {
-          catCount[item.category] = (catCount[item.category] || 0) + 1;
-          classCount[item.heroClass] = (classCount[item.heroClass] || 0) + 1;
-          genderCount[item.gender] = (genderCount[item.gender] || 0) + 1;
+          const category = typeof item.category === 'string' && item.category ? item.category : 'Bilinmiyor';
+          const heroClass = typeof item.heroClass === 'string' && item.heroClass ? item.heroClass : 'Bilinmiyor';
+          const gender = typeof item.gender === 'string' && item.gender ? item.gender : 'Bilinmiyor';
+          catCount[category] = (catCount[category] || 0) + 1;
+          classCount[heroClass] = (classCount[heroClass] || 0) + 1;
+          genderCount[gender] = (genderCount[gender] || 0) + 1;
         }
       });
 
@@ -130,6 +166,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       } catch { /* no limits doc yet */ }
 
     } catch (error) {
+      setLoadError("Veriler yuklenirken hata olustu. Firestore izinlerini ve kullanici kayit verilerini kontrol edin.");
       console.error("Admin veri yükleme hatası:", error);
     } finally {
       setLoading(false);
@@ -148,13 +185,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const allItemCategoryDist = useMemo(() => {
     const dist: Record<string, number> = {};
     allUsers.forEach(u => {
-      u.accounts.forEach(acc => {
-        (acc.servers || []).forEach(server => {
-          (server.characters || []).forEach(char => {
-            [char.bank1, char.bank2, char.bag].forEach(container => {
-              if (container?.slots) {
+      const accounts = Array.isArray(u.accounts) ? u.accounts : [];
+      accounts.forEach(acc => {
+        const servers = Array.isArray(acc?.servers) ? acc.servers : [];
+        servers.forEach(server => {
+          const characters = Array.isArray(server?.characters) ? server.characters : [];
+          characters.forEach(char => {
+            [char?.bank1, char?.bank2, char?.bag].forEach(container => {
+              if (Array.isArray(container?.slots)) {
                 container.slots.forEach(slot => {
-                  if (slot.item) {
+                  if (slot?.item?.category) {
                     dist[slot.item.category] = (dist[slot.item.category] || 0) + 1;
                   }
                 });
@@ -170,13 +210,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const allItemClassDist = useMemo(() => {
     const dist: Record<string, number> = {};
     allUsers.forEach(u => {
-      u.accounts.forEach(acc => {
-        (acc.servers || []).forEach(server => {
-          (server.characters || []).forEach(char => {
-            [char.bank1, char.bank2, char.bag].forEach(container => {
-              if (container?.slots) {
+      const accounts = Array.isArray(u.accounts) ? u.accounts : [];
+      accounts.forEach(acc => {
+        const servers = Array.isArray(acc?.servers) ? acc.servers : [];
+        servers.forEach(server => {
+          const characters = Array.isArray(server?.characters) ? server.characters : [];
+          characters.forEach(char => {
+            [char?.bank1, char?.bank2, char?.bag].forEach(container => {
+              if (Array.isArray(container?.slots)) {
                 container.slots.forEach(slot => {
-                  if (slot.item) {
+                  if (slot?.item?.heroClass) {
                     dist[slot.item.heroClass] = (dist[slot.item.heroClass] || 0) + 1;
                   }
                 });
@@ -192,13 +235,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const allItemGenderDist = useMemo(() => {
     const dist: Record<string, number> = {};
     allUsers.forEach(u => {
-      u.accounts.forEach(acc => {
-        (acc.servers || []).forEach(server => {
-          (server.characters || []).forEach(char => {
-            [char.bank1, char.bank2, char.bag].forEach(container => {
-              if (container?.slots) {
+      const accounts = Array.isArray(u.accounts) ? u.accounts : [];
+      accounts.forEach(acc => {
+        const servers = Array.isArray(acc?.servers) ? acc.servers : [];
+        servers.forEach(server => {
+          const characters = Array.isArray(server?.characters) ? server.characters : [];
+          characters.forEach(char => {
+            [char?.bank1, char?.bank2, char?.bag].forEach(container => {
+              if (Array.isArray(container?.slots)) {
                 container.slots.forEach(slot => {
-                  if (slot.item) {
+                  if (slot?.item?.gender) {
                     dist[slot.item.gender] = (dist[slot.item.gender] || 0) + 1;
                   }
                 });
@@ -336,7 +382,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   // Bar chart helper
   const BarChart: React.FC<{ data: Record<string, number>; color: string }> = ({ data, color }) => {
-    const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
+    const entries = Object.entries(data) as Array<[string, number]>;
+    entries.sort((a, b) => b[1] - a[1]);
     const max = Math.max(...entries.map(e => e[1]), 1);
     return (
       <div className="space-y-1">
@@ -412,6 +459,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
             <div className="space-y-4 max-w-4xl mx-auto">
+              {loadError && (
+                <div className="bg-red-950/30 border border-red-800/40 text-red-300 text-xs rounded-xl px-3 py-2">
+                  {loadError}
+                </div>
+              )}
               {/* Stat Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <StatCard label="Toplam Kullanıcı" value={allUsers.length} color="text-cyan-400" bg="from-cyan-950/40 to-cyan-900/20" />
@@ -447,6 +499,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           {/* USERS TAB */}
           {activeTab === 'users' && (
             <div className="space-y-3 max-w-4xl mx-auto">
+              {loadError && (
+                <div className="bg-red-950/30 border border-red-800/40 text-red-300 text-xs rounded-xl px-3 py-2">
+                  {loadError}
+                </div>
+              )}
               {/* Search */}
               <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-2">
                 <Search size={16} className="text-slate-500" />
@@ -504,17 +561,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       {/* Account/Server/Char breakdown */}
                       <div className="mt-2 space-y-1">
                         <span className="text-[10px] text-slate-500 font-bold tracking-wider">HESAP DETAYLARI</span>
-                        {user.accounts.map((acc, aIdx) => (
+                        {(Array.isArray(user.accounts) ? user.accounts : []).map((acc, aIdx) => (
                           <div key={aIdx} className="bg-slate-800/50 rounded-lg p-2 text-[10px]">
                             <span className="text-yellow-400 font-bold">{acc.name}</span>
                             <div className="ml-2 mt-1 space-y-0.5">
                               {(acc.servers || []).map((srv, sIdx) => {
-                                const charItems = (srv.characters || []).map(c => {
+                                const charItems = (Array.isArray(srv.characters) ? srv.characters : []).map(c => {
                                   let cnt = 0;
-                                  [c.bank1, c.bank2, c.bag].forEach(cont => {
-                                    if (cont?.slots) cont.slots.forEach(s => { if (s.item) cnt++; });
+                                  [c?.bank1, c?.bank2, c?.bag].forEach(cont => {
+                                    if (Array.isArray(cont?.slots)) cont.slots.forEach(s => { if (s?.item) cnt++; });
                                   });
-                                  return { name: c.name, items: cnt, recipes: (c.learnedRecipes || []).length };
+                                  const recipes = Array.isArray(c?.learnedRecipes) ? c.learnedRecipes.length : 0;
+                                  return { name: c?.name || 'Isimsiz', items: cnt, recipes };
                                 });
                                 const totalSrvItems = charItems.reduce((s, c) => s + c.items, 0);
                                 if (totalSrvItems === 0 && charItems.every(c => c.recipes === 0)) return null;
