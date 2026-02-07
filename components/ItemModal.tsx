@@ -115,7 +115,9 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   // Determine if item is a Weapon
   const isWeapon = formData.category === 'Silah';
   // Categories that don't have gender selection
-  const isGenderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden'].includes(formData.category || '');
+  const isGenderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden', 'Diğer'].includes(formData.category || '');
+  // Categories that don't have class selection
+  const isClassless = ['Yüzük', 'Kolye', 'İksir', 'Maden', 'Diğer'].includes(formData.category || '');
 
   const handleFieldBlur = () => {
     blurTimeout.current = setTimeout(() => setActiveField(null), 150);
@@ -201,11 +203,13 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                    <button
                     key={cat}
                     onClick={() => {
-                      const genderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden'].includes(cat);
+                      const genderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden', 'Diğer'].includes(cat);
+                      const classless = ['Yüzük', 'Kolye', 'İksir', 'Maden', 'Diğer'].includes(cat);
                       setFormData({
                         ...formData,
                         category: cat,
                         gender: genderless ? 'Tüm Cinsiyetler' : formData.gender,
+                        heroClass: classless ? 'Tüm Sınıflar' : formData.heroClass,
                         // Reset enchantments when switching category
                         enchantment1: '',
                         enchantment2: '',
@@ -285,7 +289,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
               </div>
               )}
 
-              {/* Hero Class */}
+              {/* Hero Class - hidden for classless categories */}
+              {!isClassless && (
               <div>
                 <label className="block text-xs font-bold mb-1 text-slate-400">Karakter Sınıfı</label>
                 <div className="flex flex-wrap gap-1 bg-slate-900 rounded p-1">
@@ -301,16 +306,18 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Level & Count Row */}
               <div className="flex gap-3">
                   <div className="flex-1">
                     <label className="block text-xs font-bold mb-1 text-slate-400">Seviye (Level)</label>
-                    <input 
-                      type="number" 
-                      min="1" 
+                    <input
+                      type="number"
+                      min="1"
                       max="999"
                       value={formData.level}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => setFormData({...formData, level: Math.min(999, Math.max(1, parseInt(e.target.value) || 1))})}
                       className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-sm focus:border-yellow-500 focus:outline-none"
                     />
@@ -322,12 +329,13 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                         <label className="block text-xs font-bold mb-1 text-emerald-400 flex items-center gap-1">
                            <Layers size={12} /> Adet
                         </label>
-                        <input 
-                          type="number" 
-                          min="1" 
-                          max="9999"
+                        <input
+                          type="number"
+                          min="1"
+                          max="100000000"
                           value={formData.count || 1}
-                          onChange={(e) => setFormData({...formData, count: Math.min(9999, Math.max(1, parseInt(e.target.value) || 1))})}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => setFormData({...formData, count: Math.min(100000000, Math.max(1, parseInt(e.target.value) || 1))})}
                           className="w-full bg-slate-900 border border-emerald-700/50 rounded px-2 py-1 text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
                         />
                       </div>

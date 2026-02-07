@@ -132,7 +132,7 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight }) => {
       {/* Stack Count Badge */}
       {item.count && item.count > 1 && (
         <div className="absolute bottom-2.5 md:bottom-4 right-0.5 md:right-1 bg-black/80 text-[7px] md:text-[10px] px-0.5 md:px-1.5 rounded-sm border border-white/10 text-white font-mono font-bold z-20 shadow-lg">
-          {item.count}
+          {item.count >= 1_000_000 ? `${Math.floor(item.count / 1_000_000)}M` : item.count >= 1_000 ? `${Math.floor(item.count / 1_000)}K` : item.count}
         </div>
       )}
 

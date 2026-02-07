@@ -12,12 +12,13 @@ export enum ItemCategory {
   Mine = 'Maden',
   Potion = 'İksir',
   Talisman = 'Tılsım',
-  Glasses = 'Gözlük'
+  Glasses = 'Gözlük',
+  Other = 'Diğer'
 }
 
 export const CATEGORY_OPTIONS = [
-  'Silah', 'Ceket', 'Pantolon', 'Eldiven', 'Ayakkabı', 
-  'Gözlük', 'Zırh', 'Yüzük', 'Kolye', 'Maden', 'İksir', 'Tılsım'
+  'Silah', 'Ceket', 'Pantolon', 'Eldiven', 'Ayakkabı',
+  'Gözlük', 'Zırh', 'Yüzük', 'Kolye', 'Maden', 'İksir', 'Tılsım', 'Diğer'
 ];
 
 export type HeroClass = 'Savaşçı' | 'Şifacı' | 'Büyücü' | 'Tüm Sınıflar';

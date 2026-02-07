@@ -31,6 +31,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Maden': 'bg-stone-700 border-stone-500',
   'İksir': 'bg-emerald-600 border-emerald-400',
   'Tılsım': 'bg-orange-800 border-orange-600',
+  'Diğer': 'bg-gray-700 border-gray-500',
 };
 
 // Initial state generators
