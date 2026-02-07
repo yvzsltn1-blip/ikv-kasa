@@ -141,9 +141,9 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight }) => {
         {renderContent()}
       </div>
 
-      {/* Bottom bar: Full Category name */}
+      {/* Bottom bar: Full Category name - right aligned */}
       <div className="absolute bottom-0 left-0 right-0 z-10">
-        <div className="text-center text-[5.5px] md:text-[10px] bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white truncate px-0.5 md:px-1 pt-0.5 md:pt-2 pb-px md:pb-0.5 font-semibold tracking-wide">
+        <div className="text-right md:text-center text-[5.5px] md:text-[10px] bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white truncate px-1 md:px-1.5 pt-0.5 md:pt-2 pb-px md:pb-0.5 font-semibold tracking-wide">
           {item.category}
         </div>
       </div>
