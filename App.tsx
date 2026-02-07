@@ -95,6 +95,8 @@ export default function App() {
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
+  const [isMobileAccountMenuOpen, setIsMobileAccountMenuOpen] = useState(false);
+  const mobileAccountMenuRef = React.useRef<HTMLDivElement | null>(null);
 
   // Input State (Temporary states for name editing)
   const [tempAccountName, setTempAccountName] = useState('');
@@ -1142,6 +1144,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isContainerFullscreen]);
 
+  useEffect(() => {
+    if (!isMobileAccountMenuOpen) return;
+
+    const handleOutside = (event: MouseEvent | TouchEvent) => {
+      if (!mobileAccountMenuRef.current) return;
+      if (mobileAccountMenuRef.current.contains(event.target as Node)) return;
+      setIsMobileAccountMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [isMobileAccountMenuOpen]);
+
   // --- RENDER MANTIĞI ---
 
   if (loading) {
@@ -1210,36 +1229,79 @@ export default function App() {
               </button>
             </div>
 
-            <div className="px-2 pb-1.5 flex items-center justify-between gap-1.5">
-              <div className="flex items-center gap-1 min-w-0 flex-shrink">
-                <div className="relative">
-                  <select
-                    value={selectedAccountId}
-                    onChange={(e) => {
-                      setSelectedAccountId(e.target.value);
-                      setSelectedServerIndex(0);
-                      setActiveCharIndex(0);
-                      setCurrentViewIndex(0);
-                    }}
-                    className="appearance-none bg-slate-900/50 text-slate-300 text-[11px] py-1.5 pl-2 pr-5 rounded-lg border border-slate-600/40 focus:outline-none cursor-pointer"
+            <div className="px-2 pb-1.5 flex items-stretch gap-2">
+              <div ref={mobileAccountMenuRef} className="relative flex-1 min-w-0">
+                <div className="flex items-stretch gap-1.5">
+                  <button
+                    onClick={() => setIsMobileAccountMenuOpen((prev) => !prev)}
+                    className="h-9 flex-1 min-w-0 bg-slate-900/55 text-slate-200 rounded-xl border border-slate-600/40 px-3 flex items-center justify-between gap-2 active:bg-slate-800/90 transition-colors"
+                    title="Hesap Sec"
                   >
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>{acc.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
+                    <div className="min-w-0 text-left">
+                      <div className="text-[9px] text-slate-500 leading-none">HESAPLAR</div>
+                      <div className="text-[11px] font-semibold truncate leading-tight mt-0.5">{activeAccount.name}</div>
+                    </div>
+                    <ChevronDown size={12} className={`shrink-0 text-slate-400 transition-transform ${isMobileAccountMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  <button
+                    onClick={handleAddAccount}
+                    disabled={!canEditData}
+                    className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${canEditData ? 'text-green-400 border-green-700/40 bg-green-900/15 active:bg-green-900/35' : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'}`}
+                    title="Hesap Ekle"
+                  >
+                    <Plus size={15} />
+                  </button>
+                  {accounts.length > 1 && (
+                    <button
+                      onClick={handleDeleteAccount}
+                      disabled={!canEditData}
+                      className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${canEditData ? 'text-red-400 border-red-800/40 bg-red-900/15 active:bg-red-900/35' : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'}`}
+                      title="Hesap Sil"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
                 </div>
-                <button onClick={handleAddAccount} disabled={!canEditData} className={`p-1 rounded-lg shrink-0 ${canEditData ? 'text-green-500 active:text-green-400 active:bg-green-900/30' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Ekle"><Plus size={15} /></button>
-                {accounts.length > 1 && (
-                  <button onClick={handleDeleteAccount} disabled={!canEditData} className={`p-1 rounded-lg shrink-0 ${canEditData ? 'text-red-800 active:text-red-500 active:bg-red-900/30' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Sil"><Trash2 size={15} /></button>
+
+                {isMobileAccountMenuOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1.5 z-[85] bg-slate-900/95 backdrop-blur rounded-xl border border-slate-600/40 p-1.5 shadow-2xl">
+                    <div className="max-h-56 overflow-y-auto space-y-1 no-scrollbar">
+                      {accounts.map((acc) => {
+                        const isActive = selectedAccountId === acc.id;
+                        return (
+                          <button
+                            key={acc.id}
+                            onClick={() => {
+                              setSelectedAccountId(acc.id);
+                              setSelectedServerIndex(0);
+                              setActiveCharIndex(0);
+                              setCurrentViewIndex(0);
+                              setIsMobileAccountMenuOpen(false);
+                            }}
+                            className={`w-full rounded-lg border px-3 py-2 text-left transition-colors flex items-center justify-between gap-2 ${
+                              isActive
+                                ? 'bg-emerald-900/35 border-emerald-600/40'
+                                : 'bg-slate-800/70 border-slate-700/40 active:bg-slate-700/80'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className={`text-[11px] font-semibold truncate ${isActive ? 'text-emerald-200' : 'text-slate-200'}`}>{acc.name}</div>
+                              <div className="text-[9px] text-slate-500 mt-0.5">{acc.servers.length} sunucu</div>
+                            </div>
+                            {isActive && <Check size={13} className="text-emerald-300 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
 
-              <div className="flex items-center bg-slate-900/40 rounded-xl p-0.5 border border-slate-700/30 gap-0.5 shrink-0">
-                <button onClick={handleOpenSearch} className="p-1.5 text-yellow-500 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={15} /></button>
-                <button onClick={handleExportExcel} className="p-1.5 text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={15} /></button>
+              <div className="h-9 flex items-center bg-slate-900/55 rounded-xl px-1 border border-slate-700/35 gap-1 shrink-0">
+                <button onClick={handleOpenSearch} className="h-7 w-7 flex items-center justify-center text-yellow-400 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={14} /></button>
+                <button onClick={handleExportExcel} className="h-7 w-7 flex items-center justify-center text-emerald-400 active:bg-emerald-600/20 rounded-lg transition-colors"><FileSpreadsheet size={14} /></button>
                 <div className="relative">
-                  <button onClick={saveData} disabled={!canEditData} className={`p-1.5 rounded-lg transition-colors ${!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 animate-pulse ring-2 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20')}`}><Save size={15} /></button>
+                  <button onClick={saveData} disabled={!canEditData} className={`h-7 w-7 flex items-center justify-center rounded-lg transition-colors ${!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 ring-1 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20')}`}><Save size={14} /></button>
                   {hasUnsavedChanges && (
                     <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap shadow-lg animate-bounce">
                       Kaydet!
@@ -1247,13 +1309,9 @@ export default function App() {
                   )}
                 </div>
                 {userRole === 'admin' && (
-                  <>
-                    <div className="w-px h-4 bg-slate-600/40 mx-0.5"></div>
-                    <button onClick={() => setShowAdminPanel(true)} className="p-1.5 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><Crown size={15} /></button>
-                  </>
+                  <button onClick={() => setShowAdminPanel(true)} className="h-7 w-7 flex items-center justify-center text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><Crown size={14} /></button>
                 )}
-                <div className="w-px h-4 bg-slate-600/40 mx-0.5"></div>
-                <button onClick={handleLogout} className="p-1.5 text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={15} /></button>
+                <button onClick={handleLogout} className="h-7 w-7 flex items-center justify-center text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><LogOut size={14} /></button>
               </div>
             </div>
 
