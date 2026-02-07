@@ -39,6 +39,14 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly(['searchQuota']);
     }
 
+    function ownerUsernameWriteAllowed() {
+      return !('username' in resource.data) ||
+        (
+          ('username' in request.resource.data) &&
+          request.resource.data.username == resource.data.username
+        );
+    }
+
     // Users: owner can read; writes are controlled by permission flags
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
@@ -48,6 +56,7 @@ service cloud.firestore {
         (
           request.auth.uid == userId &&
           userPermissionsUnchanged() &&
+          ownerUsernameWriteAllowed() &&
           (canDataEntry() || isSearchQuotaOnlyUpdate())
         )
       );
@@ -57,7 +66,16 @@ service cloud.firestore {
     // Username reservation
     match /usernames/{username} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null && (
+        isAdmin() ||
+        (
+          request.resource.data.uid == request.auth.uid &&
+          (
+            !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+            !('username' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data)
+          )
+        )
+      );
       allow update: if false;
       allow delete: if isAdmin();
     }

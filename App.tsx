@@ -304,10 +304,23 @@ export default function App() {
     setUserPermissions(DEFAULT_USER_PERMISSIONS);
   };
 
+  const openUsernameModal = () => {
+    if (userRole !== 'admin' && username) return;
+    setUsernameInput(userRole === 'admin' && username ? username : '');
+    setUsernameError('');
+    setShowUsernameModal(true);
+  };
+
   // --- USERNAME SET ---
   const handleSetUsername = async () => {
     const user = auth.currentUser;
     if (!user || !usernameInput.trim()) return;
+
+    const isAdminUser = userRole === 'admin';
+    if (!isAdminUser && username) {
+      setUsernameError('Kullanici adi sadece 1 kez belirlenebilir.');
+      return;
+    }
 
     const trimmed = usernameInput.trim();
 
@@ -321,13 +334,23 @@ export default function App() {
 
     try {
       const usernameLower = trimmed.toLowerCase();
+      const currentUsernameLower = username ? username.toLowerCase() : null;
 
       await runTransaction(db, async (transaction) => {
+        if (isAdminUser && currentUsernameLower && currentUsernameLower === usernameLower) {
+          transaction.set(doc(db, "users", user.uid), { username: trimmed }, { merge: true });
+          return;
+        }
+
         const usernameDocRef = doc(db, "usernames", usernameLower);
         const usernameSnap = await transaction.get(usernameDocRef);
 
         if (usernameSnap.exists()) {
           throw new Error("USERNAME_TAKEN");
+        }
+
+        if (isAdminUser && currentUsernameLower && currentUsernameLower !== usernameLower) {
+          transaction.delete(doc(db, "usernames", currentUsernameLower));
         }
 
         transaction.set(usernameDocRef, { uid: user.uid, displayName: trimmed });
@@ -1157,9 +1180,9 @@ export default function App() {
                 <Edit3 size={10} className="text-yellow-400 shrink-0" />
               </div>
               {username ? (
-                <span className="text-[9px] text-cyan-400 bg-cyan-900/30 border border-cyan-700/40 rounded-full px-2 py-0.5 shrink-0 truncate max-w-[80px]">@{username}</span>
+                <span onClick={userRole === 'admin' ? openUsernameModal : undefined} className={`text-[9px] text-cyan-400 bg-cyan-900/30 border border-cyan-700/40 rounded-full px-2 py-0.5 shrink-0 truncate max-w-[80px] ${userRole === 'admin' ? 'cursor-pointer hover:bg-cyan-900/45 transition-colors' : ''}`} title={userRole === 'admin' ? 'Kullanici adini degistir' : undefined}>@{username}</span>
               ) : (
-                <button onClick={() => setShowUsernameModal(true)} className="text-[9px] text-amber-400 bg-amber-900/30 border border-amber-700/40 rounded-full px-2 py-0.5 shrink-0 animate-pulse">Ad Belirle</button>
+                <button onClick={openUsernameModal} className="text-[9px] text-amber-400 bg-amber-900/30 border border-amber-700/40 rounded-full px-2 py-0.5 shrink-0 animate-pulse">Ad Belirle</button>
               )}
               <button
                 onClick={() => { setSocialLinkInput(socialLink); setShowSocialLinkModal(true); }}
@@ -1260,9 +1283,9 @@ export default function App() {
                       <Edit3 size={11} className="text-yellow-400 shrink-0" />
                     </div>
                     {username ? (
-                      <span className="text-[9px] text-cyan-400 bg-cyan-900/25 border border-cyan-700/30 rounded-full px-2 py-0.5 tracking-wider">@{username}</span>
+                      <span onClick={userRole === 'admin' ? openUsernameModal : undefined} className={`text-[9px] text-cyan-400 bg-cyan-900/25 border border-cyan-700/30 rounded-full px-2 py-0.5 tracking-wider ${userRole === 'admin' ? 'cursor-pointer hover:bg-cyan-900/40 transition-colors' : ''}`} title={userRole === 'admin' ? 'Kullanici adini degistir' : undefined}>@{username}</span>
                     ) : (
-                      <button onClick={() => setShowUsernameModal(true)} className="text-[9px] text-amber-400 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider hover:bg-amber-900/40 transition-colors animate-pulse">Kullanıcı Adı Belirle</button>
+                      <button onClick={openUsernameModal} className="text-[9px] text-amber-400 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider hover:bg-amber-900/40 transition-colors animate-pulse">Kullanıcı Adı Belirle</button>
                     )}
                     <button
                       onClick={() => { setSocialLinkInput(socialLink); setShowSocialLinkModal(true); }}
@@ -1660,8 +1683,8 @@ export default function App() {
                   <AtSign size={20} className="text-cyan-400" />
                 </div>
                 <div>
-                  <h3 className="text-white font-bold text-sm">Kullanıcı Adı Belirle</h3>
-                  <p className="text-slate-400 text-[10px] mt-0.5">Bu işlem sadece 1 kez yapılabilir</p>
+                  <h3 className="text-white font-bold text-sm">{userRole === 'admin' && username ? 'Kullanıcı Adı Güncelle' : 'Kullanıcı Adı Belirle'}</h3>
+                  <p className="text-slate-400 text-[10px] mt-0.5">{userRole === 'admin' ? 'Admin hesaplari kullanıcı adını değiştirebilir.' : 'Bu işlem sadece 1 kez yapılabilir'}</p>
                 </div>
               </div>
             </div>
@@ -1705,7 +1728,7 @@ export default function App() {
                   ) : (
                     <>
                       <Check size={14} />
-                      Kaydet
+                      {userRole === 'admin' && username ? 'Guncelle' : 'Kaydet'}
                     </>
                   )}
                 </button>
