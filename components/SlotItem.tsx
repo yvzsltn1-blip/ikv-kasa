@@ -1,5 +1,5 @@
 import React from 'react';
-import { ItemData } from '../types';
+import { ItemData, shouldShowBoundMarker } from '../types';
 import { CATEGORY_COLORS, CLASS_STRIP_COLORS } from '../constants';
 import { Shield, Sword, Gem, Component, Scroll, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe } from 'lucide-react';
 
@@ -12,6 +12,7 @@ interface SlotItemProps {
 export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlowColor }) => {
   const colorClass = CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
   const classStripColor = CLASS_STRIP_COLORS[item.heroClass] || 'bg-gray-400';
+  const isBound = shouldShowBoundMarker(item);
 
   const getCategoryIcon = () => {
     switch (item.category) {
@@ -146,8 +147,8 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
 
       {/* Bottom bar: Full Category name - right aligned */}
       <div className="absolute bottom-0 left-0 right-0 z-10">
-        <div className="text-right md:text-center text-[5.5px] md:text-[10px] bg-gradient-to-t from-black/80 via-black/40 to-transparent text-white truncate px-1 md:px-1.5 pt-0.5 md:pt-2 pb-px md:pb-0.5 font-semibold tracking-wide">
-          {item.category}
+        <div className={`text-right md:text-center text-[5.5px] md:text-[10px] bg-gradient-to-t from-black/80 via-black/40 to-transparent truncate px-1 md:px-1.5 pt-0.5 md:pt-2 pb-px md:pb-0.5 font-semibold tracking-wide ${isBound ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]' : 'text-white'}`}>
+          {item.category}{isBound ? ' (^)' : ''}
         </div>
       </div>
     </div>

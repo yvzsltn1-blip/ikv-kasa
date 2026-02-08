@@ -1,5 +1,5 @@
 import React from 'react';
-import { ItemData } from '../types';
+import { ItemData, shouldShowBoundMarker } from '../types';
 import { CATEGORY_COLORS, CLASS_COLORS } from '../constants';
 import { X, Pencil, Scroll, Shield, Sword, Gem, Component, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe, Globe, AlertTriangle } from 'lucide-react';
 
@@ -39,6 +39,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
 
   const colorClass = CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
   const CategoryIcon = getCategoryIcon(item.category);
+  const isBound = shouldShowBoundMarker(item);
 
   const getGenderLabel = () => {
     if (item.gender === 'Erkek') return { text: 'Erkek', color: 'text-blue-400' };
@@ -71,9 +72,10 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-white text-base">
+            <div className={`font-bold text-base ${item.type === 'Recipe' ? 'text-white' : isBound ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]' : 'text-white'}`}>
               {item.category}
               {item.type === 'Recipe' && <span className="text-yellow-300 ml-1.5 text-sm">(Reçete)</span>}
+              {isBound && <span className="text-amber-200 ml-1.5 text-sm">(^)</span>}
             </div>
             {item.weaponType && (
               <div className="text-red-300 text-xs font-semibold">{item.weaponType}</div>

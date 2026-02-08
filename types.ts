@@ -73,7 +73,30 @@ export interface ItemData {
   count?: number; // New property for item quantity (stack size)
   weaponType?: string; // New property specifically for Weapon category
   isGlobal?: boolean; // Whether this item is visible in global search
+  isBound?: boolean; // Whether item is character-bound
 }
+
+export const BINDABLE_CATEGORIES = [
+  'Silah',
+  'Ceket',
+  'Pantolon',
+  'Eldiven',
+  'Ayakkabı',
+  'Zırh',
+  'Yüzük',
+  'Kolye',
+] as const;
+
+export const isBindableCategory = (category: string): boolean => {
+  return BINDABLE_CATEGORIES.includes(category as (typeof BINDABLE_CATEGORIES)[number]);
+};
+
+export const shouldShowBoundMarker = (
+  item: Pick<ItemData, 'type' | 'category' | 'isBound'> | null | undefined
+): boolean => {
+  if (!item) return false;
+  return item.type === 'Item' && isBindableCategory(item.category) && item.isBound === true;
+};
 
 export interface SlotData {
   id: number; // 0 to 63 or 0 to 23

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, DEFAULT_USER_CLASS, normalizeUserClass } from './types';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, DEFAULT_USER_CLASS, normalizeUserClass, isBindableCategory, shouldShowBoundMarker } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
@@ -1345,9 +1345,11 @@ export default function App() {
             : resolveListValue(GENDER_OPTIONS, genderRaw, defaultGender)
         ) as ItemData['gender'];
 
-        const level = parseImportPositiveInt(getImportField(parsedRow, ['seviye', 'level']), 1);
+        const level = Math.min(59, parseImportPositiveInt(getImportField(parsedRow, ['seviye', 'level']), 1));
         const count = parseImportPositiveInt(getImportField(parsedRow, ['adet', 'count']), 1);
         const weaponType = getImportField(parsedRow, ['silahcinsi', 'weapontype']).replace(/^-+$/, '').trim();
+        const boundRaw = getImportField(parsedRow, ['bagli', 'bağlı', 'baglimi', 'bağlımı', 'bound', 'characterbound']);
+        const isBound = !isRecipeType && isBindableCategory(category) ? parseImportBoolean(boundRaw) : false;
 
         const importedItem: ItemData = {
           id: crypto.randomUUID(),
@@ -1362,6 +1364,7 @@ export default function App() {
           weaponType,
           isRead: isRecipeType ? isRead || containerKey === 'learned' : false,
           isGlobal: false,
+          isBound,
         };
 
         const shouldStoreInRecipeBook = importedItem.type === 'Recipe' && (importedItem.isRead || containerKey === 'learned');
@@ -1483,7 +1486,7 @@ export default function App() {
     if (!activeAccount) return;
 
     const rows = [
-      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Tur", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Tur", "Silah Cinsi", "Bağlı", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
     activeAccount.servers.forEach(server => {
@@ -1499,6 +1502,7 @@ export default function App() {
                 slot.item.category,
                 slot.item.type || "Item",
                 slot.item.weaponType || "-",
+                shouldShowBoundMarker(slot.item) ? "Evet" : "Hayır",
                 slot.item.level.toString(), slot.item.gender || "-", slot.item.heroClass, "Hayır",
                 slot.item.count ? slot.item.count.toString() : "1"
               ]);
@@ -1513,6 +1517,7 @@ export default function App() {
               item.category,
               "Recipe",
               item.weaponType || "-",
+              "Hayır",
               item.level.toString(), item.gender || "-", item.heroClass, "Evet",
               item.count ? item.count.toString() : "1"
           ]);
@@ -2994,8 +2999,8 @@ export default function App() {
           }}
         >
           <div className="bg-slate-900 border-2 border-slate-500 rounded p-2 text-xs shadow-[0_0_15px_rgba(0,0,0,0.8)] text-left w-52">
-            <div className={`font-bold border-b border-slate-700 pb-1 mb-1 ${tooltip.item.type === 'Recipe' ? 'text-yellow-300' : 'text-white'}`}>
-              {tooltip.item.category} {tooltip.item.type === 'Recipe' ? '(Reçete)' : ''}
+            <div className={`font-bold border-b border-slate-700 pb-1 mb-1 ${tooltip.item.type === 'Recipe' ? 'text-yellow-300' : (shouldShowBoundMarker(tooltip.item) ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]' : 'text-white')}`}>
+              {tooltip.item.category} {tooltip.item.type === 'Recipe' ? '(Reçete)' : (shouldShowBoundMarker(tooltip.item) ? '(^)' : '')}
               {tooltip.item.count && tooltip.item.count > 1 && (
                   <span className="float-right text-emerald-400">x{tooltip.item.count}</span>
               )}

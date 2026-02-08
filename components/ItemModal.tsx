@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CATEGORY_OPTIONS, ItemData, SetItemLocation, GlobalSetInfo } from '../types';
+import { CATEGORY_OPTIONS, ItemData, SetItemLocation, GlobalSetInfo, isBindableCategory } from '../types';
 import { HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { X, BookOpen, CheckCircle, Circle, Layers, Sword, Globe, Lock } from 'lucide-react';
 import { SetDetailModal } from './SetDetailModal';
@@ -32,13 +32,14 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     count: 1,
     weaponType: '',
     isGlobal: false,
+    isBound: false,
   });
 
   useEffect(() => {
     if (isOpen) {
       setActiveField(null);
       if (existingItem) {
-        setFormData(existingItem);
+        setFormData({ ...existingItem, isBound: existingItem.isBound ?? false });
         setStep(3); // Jump to details if editing
       } else {
         setFormData({
@@ -53,6 +54,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
             count: 1,
             weaponType: '',
             isGlobal: false,
+            isBound: false,
         });
         setStep(1);
       }
@@ -99,10 +101,14 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     if (formData.category && formData.type) {
       const normalizedGender = isGenderless ? 'Tüm Cinsiyetler' : (formData.gender || 'Erkek');
       const normalizedHeroClass = isClassless ? 'Tüm Sınıflar' : (formData.heroClass || 'Savaşçı');
+      const normalizedLevel = Math.min(59, Math.max(1, Number(formData.level) || 1));
+      const normalizedBound = isBindableItemCategory ? Boolean(formData.isBound) : false;
       onSave({
         ...formData as ItemData,
         gender: normalizedGender,
         heroClass: normalizedHeroClass,
+        level: normalizedLevel,
+        isBound: normalizedBound,
         id: existingItem?.id || crypto.randomUUID(),
       });
       onClose();
@@ -126,6 +132,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   const selectableCategories = formData.type === 'Recipe'
     ? CATEGORY_OPTIONS.filter(cat => !recipeBlockedCategories.includes(cat))
     : CATEGORY_OPTIONS;
+  const isBindableItemCategory = formData.type === 'Item' && isBindableCategory(formData.category || '');
   // Categories that don't have gender selection
   const isGenderless = genderlessCategories.includes(formData.category || '');
   // Categories that don't have class selection
@@ -142,8 +149,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm sm:p-4">
-      <div className="bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-600/80 sm:border-2 md:border-4 rounded-none sm:rounded-xl shadow-[0_30px_80px_rgba(0,0,0,0.7)] w-screen sm:w-[93vw] md:w-[560px] h-[100dvh] sm:h-auto sm:max-h-[92vh] text-slate-200 relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4">
+      <div className="bg-gradient-to-b from-slate-800 to-slate-900 border border-slate-600/80 sm:border-2 md:border-4 rounded-xl shadow-[0_30px_80px_rgba(0,0,0,0.7)] w-[96vw] sm:w-[93vw] md:w-[560px] h-auto max-h-[92dvh] sm:max-h-[92vh] text-slate-200 relative overflow-hidden">
 
         {/* Header */}
         <div className="bg-slate-900/95 px-3 py-2 md:p-3 border-b border-slate-700 flex justify-between items-center">
@@ -156,7 +163,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
         </div>
 
         {/* Content */}
-        <div className="h-[calc(100dvh-53px)] sm:h-auto sm:max-h-[calc(92vh-56px)] p-2.5 sm:p-3 md:p-5 flex flex-col overflow-hidden">
+        <div className="max-h-[calc(92dvh-56px)] sm:max-h-[calc(92vh-56px)] p-2.5 sm:p-3 md:p-5 flex flex-col overflow-y-auto">
           <div className="-mt-0.5 mb-1.5 flex items-center gap-1.5 px-1">
             {[1, 2, 3].map((s) => (
               <div
@@ -172,14 +179,14 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
               <h3 className="text-center mb-4 font-semibold text-slate-300">Tür Seçiniz</h3>
               <div className="grid grid-cols-2 gap-2.5 sm:gap-4">
                 <button
-                  onClick={() => { setFormData({ ...formData, type: 'Item', isRead: false }); handleNext(); }}
+                  onClick={() => { setFormData({ ...formData, type: 'Item', isRead: false, isBound: false }); handleNext(); }}
                   className="p-3 sm:p-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-500 rounded-lg sm:rounded-xl flex flex-col items-center gap-2 transition-all hover:scale-[1.02] hover:border-yellow-500/70"
                 >
                   <span className="text-2xl">⚔️</span>
                   <span className="font-bold">İtem</span>
                 </button>
                 <button
-                  onClick={() => { setFormData({ ...formData, type: 'Recipe', isRead: false }); handleNext(); }}
+                  onClick={() => { setFormData({ ...formData, type: 'Recipe', isRead: false, isBound: false }); handleNext(); }}
                   className="p-3 sm:p-4 bg-slate-800/80 hover:bg-slate-700 border border-slate-500 rounded-lg sm:rounded-xl flex flex-col items-center gap-2 transition-all hover:scale-[1.02] hover:border-yellow-500/70"
                 >
                   <span className="text-2xl">📜</span>
@@ -225,15 +232,16 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                      onClick={() => {
                       const genderless = genderlessCategories.includes(cat);
                       const classless = classlessCategories.includes(cat);
-                      setFormData({
-                        ...formData,
-                        category: cat,
-                        gender: genderless ? 'Tüm Cinsiyetler' : (formData.gender === 'Tüm Cinsiyetler' ? 'Erkek' : formData.gender),
-                        heroClass: classless ? 'Tüm Sınıflar' : (formData.heroClass === 'Tüm Sınıflar' ? 'Savaşçı' : formData.heroClass),
-                        // Reset enchantments when switching category
-                        enchantment1: '',
-                        enchantment2: '',
-                      });
+                       setFormData({
+                         ...formData,
+                         category: cat,
+                         gender: genderless ? 'Tüm Cinsiyetler' : (formData.gender === 'Tüm Cinsiyetler' ? 'Erkek' : formData.gender),
+                         heroClass: classless ? 'Tüm Sınıflar' : (formData.heroClass === 'Tüm Sınıflar' ? 'Savaşçı' : formData.heroClass),
+                         isBound: formData.type === 'Item' && isBindableCategory(cat) ? Boolean(formData.isBound) : false,
+                         // Reset enchantments when switching category
+                         enchantment1: '',
+                         enchantment2: '',
+                       });
                       handleNext();
                     }}
                     className="p-1.5 sm:p-2 text-[11px] sm:text-xs font-bold bg-slate-800 hover:bg-yellow-600 hover:text-black border border-slate-600 rounded transition-colors"
@@ -248,7 +256,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
 
           {/* STEP 3: Details Form */}
           {step === 3 && (
-            <form onSubmit={handleSubmit} className="flex flex-1 min-h-0 flex-col gap-2 md:gap-3">
+            <form onSubmit={handleSubmit} className="flex flex-col gap-2 md:gap-3">
               <div className="space-y-2">
               <div className="bg-slate-900/60 px-2 py-1.5 rounded-lg border border-slate-700 flex items-center justify-center gap-2">
                  <div className="flex items-center gap-1">
@@ -341,24 +349,50 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                 </div>
               </div>
 
-              {/* Level & Count Row */}
-              <div className="flex gap-1.5 sm:gap-2 md:gap-3">
-                  <div className="flex-1">
+              {/* Level / Bound / Count Row */}
+              <div className={`grid gap-2 rounded-lg border border-slate-700/70 bg-slate-900/45 p-2 ${isStackable && isBindableItemCategory ? 'grid-cols-2 sm:grid-cols-[110px_1fr_1fr]' : isStackable || isBindableItemCategory ? 'grid-cols-2 sm:grid-cols-[110px_1fr]' : 'grid-cols-1 sm:grid-cols-[110px]'}`}>
+                  <div className="rounded-md border border-slate-700/80 bg-slate-950/45 p-1.5">
                     <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-slate-400">Seviye</label>
                     <input
                       type="number"
                       min="1"
-                      max="999"
+                      max="59"
                       value={formData.level}
                       onFocus={(e) => e.target.select()}
-                      onChange={(e) => setFormData({...formData, level: Math.min(999, Math.max(1, parseInt(e.target.value) || 1))})}
+                      onChange={(e) => setFormData({...formData, level: Math.min(59, Math.max(1, parseInt(e.target.value) || 1))})}
                       className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs sm:text-sm focus:border-yellow-500 focus:outline-none"
                     />
                   </div>
 
+                  {isBindableItemCategory && (
+                      <div className="rounded-md border border-amber-800/40 bg-amber-950/15 p-1.5 min-w-0">
+                        <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-amber-300/90">Bağlı mı (^)</label>
+                        <div className="flex bg-slate-900/80 rounded p-0.5 md:p-1 gap-0.5 md:gap-1 border border-slate-700/70">
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, isBound: false })}
+                            className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors ${!formData.isBound ? 'bg-red-600 text-white ring-1 ring-red-300/60' : 'bg-red-900/40 text-red-300 hover:bg-red-800/50'}`}
+                            title="Bağlı değil"
+                            aria-label="Bağlı değil"
+                          >
+                            <X size={11} className="mx-auto" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, isBound: true })}
+                            className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors ${formData.isBound ? 'bg-emerald-500 text-black font-bold shadow-[0_0_12px_rgba(16,185,129,0.45)] ring-1 ring-emerald-200/70' : 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/50'}`}
+                            title="Bağlı"
+                            aria-label="Bağlı"
+                          >
+                            <CheckCircle size={11} className="mx-auto" />
+                          </button>
+                        </div>
+                      </div>
+                  )}
+
                   {/* Count Input - Only for Maden & İksir */}
                   {isStackable && (
-                      <div className="flex-1 animate-in fade-in slide-in-from-right-4">
+                      <div className={`rounded-md border border-emerald-800/40 bg-emerald-950/15 p-1.5 animate-in fade-in slide-in-from-right-4 ${isBindableItemCategory ? 'col-span-2 sm:col-span-1' : ''}`}>
                         <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-emerald-400 flex items-center gap-1">
                            <Layers size={12} /> Adet
                         </label>
@@ -574,7 +608,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
               )}
               </div>
 
-              <div className="flex items-center gap-2 mt-auto pt-2 md:pt-3 border-t border-slate-700 flex-wrap">
+              <div className="flex items-center gap-2 pt-2 md:pt-3 border-t border-slate-700 flex-wrap">
                 {existingItem && (
                   <button 
                     type="button" 
@@ -626,3 +660,4 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     </>
   );
 };
+

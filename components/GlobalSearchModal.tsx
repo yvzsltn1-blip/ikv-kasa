@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, USER_CLASS_QUOTAS } from '../types';
+import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, USER_CLASS_QUOTAS, shouldShowBoundMarker } from '../types';
 import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers, AlertTriangle } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { SetDetailModal } from './SetDetailModal';
@@ -355,6 +355,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
               ${item.enchantment2}
               ${item.heroClass}
               ${item.weaponType || ''}
+              ${shouldShowBoundMarker(item) ? 'bağlı bagli bound ^' : ''}
               ${item.type === 'Recipe' ? 'reÃ§ete recipe' : ''}
               lv${item.level}
             `.toLocaleLowerCase('tr');
@@ -456,6 +457,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                     ${item.enchantment2}
                     ${item.heroClass}
                     ${item.weaponType || ''}
+                    ${shouldShowBoundMarker(item) ? 'bağlı bagli bound ^' : ''}
                     ${item.type === 'Recipe' ? 'reçete recipe' : ''}
                     lv${item.level}
                   `.toLocaleLowerCase('tr');
@@ -509,6 +511,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                         ${item.enchantment2}
                         ${item.heroClass}
                         ${item.weaponType || ''}
+                        ${shouldShowBoundMarker(item) ? 'bağlı bagli bound ^' : ''}
                         reçete recipe okunmuş read
                         lv${item.level}
                       `.toLocaleLowerCase('tr');
@@ -588,6 +591,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
           ${item.enchantment2}
           ${item.heroClass}
           ${item.weaponType || ''}
+          ${shouldShowBoundMarker(item) ? 'bağlı bagli bound ^' : ''}
           ${item.type === 'Recipe' ? 'reçete recipe' : ''}
           lv${item.level}
         `.toLocaleLowerCase('tr');
@@ -621,7 +625,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     }
 
     const rows = [
-      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Silah Cinsi", "Bağlı", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
     results.forEach(res => {
@@ -638,6 +642,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         res.item.enchantment2 || "-",
         res.item.category,
         res.item.weaponType || "-",
+        shouldShowBoundMarker(res.item) ? "Evet" : "Hayır",
         res.item.level.toString(),
         res.item.gender || "-",
         res.item.heroClass,
@@ -902,8 +907,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start gap-1">
-                        <h4 className={`font-bold text-sm truncate ${res.item.type === 'Recipe' ? 'text-yellow-300' : 'text-white'}`}>
-                            {res.item.category} {res.item.type === 'Recipe' ? '(Reçete)' : ''}
+                        <h4 className={`font-bold text-sm truncate ${res.item.type === 'Recipe' ? 'text-yellow-300' : (shouldShowBoundMarker(res.item) ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]' : 'text-white')}`}>
+                            {res.item.category} {res.item.type === 'Recipe' ? '(Reçete)' : (shouldShowBoundMarker(res.item) ? '(^)' : '')}
                             <span className="text-xs font-normal text-slate-400 ml-2">Lv.{res.item.level}</span>
                         </h4>
                         <div className="flex items-center gap-1 shrink-0">
@@ -1046,8 +1051,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                        <h4 className={`font-bold text-sm truncate ${gItem.item.type === 'Recipe' ? 'text-yellow-300' : 'text-white'}`}>
-                            {gItem.item.category} {gItem.item.type === 'Recipe' ? '(Reçete)' : ''}
+                        <h4 className={`font-bold text-sm truncate ${gItem.item.type === 'Recipe' ? 'text-yellow-300' : (shouldShowBoundMarker(gItem.item) ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(251,191,36,0.8)]' : 'text-white')}`}>
+                            {gItem.item.category} {gItem.item.type === 'Recipe' ? '(Reçete)' : (shouldShowBoundMarker(gItem.item) ? '(^)' : '')}
                             <span className="text-xs font-normal text-slate-400 ml-2">Lv.{gItem.item.level}</span>
                         </h4>
                         <span className={`text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 ${CLASS_COLORS[gItem.item.heroClass]}`}>
