@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId } from './types';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, DEFAULT_USER_CLASS, normalizeUserClass } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
@@ -266,6 +266,7 @@ export default function App() {
             const loadedAccounts = rawAccounts.map(migrateAccount);
             const resolvedPermissions = normalizeUserPermissions(data.permissions);
             const resolvedMessageSettings = normalizeMessageSettings(data.messageSettings);
+            const resolvedUserClass = normalizeUserClass(data.userClass);
             resolvedBlockInfo = normalizeUserBlockInfo(data.blockInfo);
             setUserPermissions(resolvedPermissions);
             setUserBlockInfo(resolvedBlockInfo);
@@ -306,6 +307,10 @@ export default function App() {
               data.messageSettings.dailySendLimit <= 0
             ) {
               setDoc(userDocRef, { messageSettings: resolvedMessageSettings }, { merge: true }).catch(() => {});
+            }
+
+            if (data.userClass !== resolvedUserClass) {
+              setDoc(userDocRef, { userClass: resolvedUserClass }, { merge: true }).catch(() => {});
             }
 
             if (
@@ -470,6 +475,7 @@ export default function App() {
       email: user?.email || '',
       createdAt: Date.now(),
       permissions: DEFAULT_USER_PERMISSIONS,
+      userClass: DEFAULT_USER_CLASS,
       messageSettings: DEFAULT_MESSAGE_SETTINGS,
       blockInfo: DEFAULT_USER_BLOCK_INFO,
     });

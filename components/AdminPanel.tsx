@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserMessageSettings, UserBlockInfo } from '../types';
-import { CATEGORY_OPTIONS } from '../types';
+import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserBlockInfo, UserClass, DEFAULT_USER_CLASS, normalizeUserClass, USER_CLASS_QUOTAS } from '../types';
 import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle, UserX, UserCheck, AtSign } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, query, where, writeBatch, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
@@ -14,10 +13,6 @@ type TabType = 'dashboard' | 'users' | 'settings';
 const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canDataEntry: true,
   canGlobalSearch: true,
-};
-
-const DEFAULT_MESSAGE_SETTINGS: UserMessageSettings = {
-  dailySendLimit: 5,
 };
 
 const DEFAULT_BLOCK_INFO: UserBlockInfo = {
@@ -49,8 +44,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [searchLimits, setSearchLimits] = useState<SearchLimitsConfig>({ defaultLimit: 50, userOverrides: {} });
   const [newLimitValue, setNewLimitValue] = useState('50');
   const [limitSaving, setLimitSaving] = useState(false);
-  const [newOverrideUid, setNewOverrideUid] = useState('');
-  const [newOverrideLimit, setNewOverrideLimit] = useState('');
   const [directMessagingEnabled, setDirectMessagingEnabled] = useState(true);
   const [messageSystemSaving, setMessageSystemSaving] = useState(false);
 
@@ -62,8 +55,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [deleting, setDeleting] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [permissionSaving, setPermissionSaving] = useState<Record<string, boolean>>({});
-  const [messageLimitInputs, setMessageLimitInputs] = useState<Record<string, string>>({});
-  const [messageLimitSaving, setMessageLimitSaving] = useState<Record<string, boolean>>({});
+  const [userClassSaving, setUserClassSaving] = useState<Record<string, boolean>>({});
+  const [userSearchOverrideInputs, setUserSearchOverrideInputs] = useState<Record<string, string>>({});
+  const [userSearchOverrideSaving, setUserSearchOverrideSaving] = useState<Record<string, boolean>>({});
   const [usernameInputs, setUsernameInputs] = useState<Record<string, string>>({});
   const [usernameSaving, setUsernameSaving] = useState<Record<string, boolean>>({});
   const [blockReasonInputs, setBlockReasonInputs] = useState<Record<string, string>>({});
@@ -116,14 +110,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             canDataEntry: typeof rawPermissions.canDataEntry === 'boolean' ? rawPermissions.canDataEntry : DEFAULT_USER_PERMISSIONS.canDataEntry,
             canGlobalSearch: typeof rawPermissions.canGlobalSearch === 'boolean' ? rawPermissions.canGlobalSearch : DEFAULT_USER_PERMISSIONS.canGlobalSearch,
           };
-          const rawMessageSettings = (data.messageSettings && typeof data.messageSettings === 'object')
-            ? data.messageSettings as Partial<UserMessageSettings>
-            : {};
-          const messageSettings: UserMessageSettings = {
-            dailySendLimit: (typeof rawMessageSettings.dailySendLimit === 'number' && Number.isFinite(rawMessageSettings.dailySendLimit) && rawMessageSettings.dailySendLimit > 0)
-              ? Math.floor(rawMessageSettings.dailySendLimit)
-              : DEFAULT_MESSAGE_SETTINGS.dailySendLimit,
-          };
+          const userClass = normalizeUserClass(data.userClass);
           const rawBlockInfo = (data.blockInfo && typeof data.blockInfo === 'object')
             ? data.blockInfo as Partial<UserBlockInfo>
             : {};
@@ -168,7 +155,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             createdAt,
             accounts,
             permissions,
-            messageSettings,
+            userClass,
             blockInfo,
           });
         } catch (userError) {
@@ -177,10 +164,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       });
 
       setAllUsers(users);
-      setMessageLimitInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
-        acc[userInfo.uid] = String(userInfo.messageSettings.dailySendLimit);
-        return acc;
-      }, {}));
       setUsernameInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
         acc[userInfo.uid] = userInfo.username || '';
         return acc;
@@ -227,13 +210,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
         if (limitsDoc.exists()) {
           const data = limitsDoc.data();
+          const resolvedDefaultLimit = (typeof data.defaultLimit === 'number' && Number.isFinite(data.defaultLimit) && data.defaultLimit > 0)
+            ? Math.floor(data.defaultLimit)
+            : 50;
+          const resolvedOverrides = (data.userOverrides && typeof data.userOverrides === 'object')
+            ? data.userOverrides as Record<string, number>
+            : {};
           setSearchLimits({
-            defaultLimit: data.defaultLimit || 50,
-            userOverrides: data.userOverrides || {},
+            defaultLimit: resolvedDefaultLimit,
+            userOverrides: resolvedOverrides,
           });
-          setNewLimitValue(String(data.defaultLimit || 50));
+          setNewLimitValue(String(resolvedDefaultLimit));
+          setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
+            const overrideValue = resolvedOverrides[userInfo.uid];
+            acc[userInfo.uid] = overrideValue !== undefined ? String(overrideValue) : '';
+            return acc;
+          }, {}));
+        } else {
+          setSearchLimits({ defaultLimit: 50, userOverrides: {} });
+          setNewLimitValue('50');
+          setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
+            acc[userInfo.uid] = '';
+            return acc;
+          }, {}));
         }
-      } catch { /* no limits doc yet */ }
+      } catch {
+        setSearchLimits({ defaultLimit: 50, userOverrides: {} });
+        setNewLimitValue('50');
+        setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
+          acc[userInfo.uid] = '';
+          return acc;
+        }, {}));
+      }
 
       // Fetch global messaging setting
       try {
@@ -441,35 +449,88 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  const handleSaveUserMessageLimit = async (user: AdminUserInfo) => {
-    const rawValue = (messageLimitInputs[user.uid] ?? String(user.messageSettings.dailySendLimit)).trim();
-    const nextLimit = parseInt(rawValue, 10);
-    if (Number.isNaN(nextLimit) || nextLimit < 1) {
-      alert("Mesaj limiti en az 1 olmalidir.");
+  const getUserClassLimits = (userClassValue: UserClass) => {
+    return USER_CLASS_QUOTAS[userClassValue] || USER_CLASS_QUOTAS[DEFAULT_USER_CLASS];
+  };
+
+  const getEffectiveGlobalSearchLimit = (user: AdminUserInfo) => {
+    const override = searchLimits.userOverrides[user.uid];
+    if (override !== undefined) return Math.max(1, Math.floor(override));
+    return getUserClassLimits(user.userClass).dailyGlobalSearchLimit;
+  };
+
+  const handleSaveUserClass = async (user: AdminUserInfo, nextClass: UserClass) => {
+    setUserClassSaving(prev => ({ ...prev, [user.uid]: true }));
+    try {
+      await setDoc(doc(db, "users", user.uid), { userClass: nextClass }, { merge: true });
+      setAllUsers(prev => prev.map(u => (
+        u.uid === user.uid
+          ? { ...u, userClass: nextClass }
+          : u
+      )));
+    } catch (error) {
+      console.error("Kullanici sinifi guncelleme hatasi:", error);
+      alert("Kullanici sinifi guncellenirken hata olustu.");
+    } finally {
+      setUserClassSaving(prev => ({ ...prev, [user.uid]: false }));
+    }
+  };
+
+  const handleSaveUserSearchOverride = async (user: AdminUserInfo) => {
+    const rawInput = (userSearchOverrideInputs[user.uid] || '').trim();
+    const shouldRemove = rawInput.length === 0;
+    const parsedLimit = shouldRemove ? null : parseInt(rawInput, 10);
+
+    if (!shouldRemove && (parsedLimit === null || Number.isNaN(parsedLimit) || parsedLimit < 1)) {
+      alert("Override limiti en az 1 olmalidir.");
       return;
     }
 
-    setMessageLimitSaving(prev => ({ ...prev, [user.uid]: true }));
+    setUserSearchOverrideSaving(prev => ({ ...prev, [user.uid]: true }));
     try {
-      const nextSettings: UserMessageSettings = {
-        ...DEFAULT_MESSAGE_SETTINGS,
-        ...(user.messageSettings || DEFAULT_MESSAGE_SETTINGS),
-        dailySendLimit: nextLimit,
-      };
+      const nextOverrides = { ...searchLimits.userOverrides };
+      if (shouldRemove) {
+        delete nextOverrides[user.uid];
+      } else {
+        nextOverrides[user.uid] = Math.floor(parsedLimit as number);
+      }
 
-      await setDoc(doc(db, "users", user.uid), { messageSettings: nextSettings }, { merge: true });
+      await setDoc(doc(db, "metadata", "searchLimits"), {
+        defaultLimit: searchLimits.defaultLimit,
+        userOverrides: nextOverrides,
+      }, { merge: true });
 
-      setAllUsers(prev => prev.map(u => (
-        u.uid === user.uid
-          ? { ...u, messageSettings: nextSettings }
-          : u
-      )));
-      setMessageLimitInputs(prev => ({ ...prev, [user.uid]: String(nextLimit) }));
+      setSearchLimits(prev => ({ ...prev, userOverrides: nextOverrides }));
+      setUserSearchOverrideInputs(prev => ({
+        ...prev,
+        [user.uid]: shouldRemove ? '' : String(nextOverrides[user.uid]),
+      }));
     } catch (error) {
-      console.error("Mesaj limiti guncelleme hatasi:", error);
-      alert("Mesaj limiti guncellenirken hata olustu.");
+      console.error("Kullanici override guncelleme hatasi:", error);
+      alert("Kullanici override kaydedilirken hata olustu.");
     } finally {
-      setMessageLimitSaving(prev => ({ ...prev, [user.uid]: false }));
+      setUserSearchOverrideSaving(prev => ({ ...prev, [user.uid]: false }));
+    }
+  };
+
+  const handleClearUserSearchOverride = async (user: AdminUserInfo) => {
+    setUserSearchOverrideSaving(prev => ({ ...prev, [user.uid]: true }));
+    try {
+      const nextOverrides = { ...searchLimits.userOverrides };
+      delete nextOverrides[user.uid];
+
+      await setDoc(doc(db, "metadata", "searchLimits"), {
+        defaultLimit: searchLimits.defaultLimit,
+        userOverrides: nextOverrides,
+      }, { merge: true });
+
+      setSearchLimits(prev => ({ ...prev, userOverrides: nextOverrides }));
+      setUserSearchOverrideInputs(prev => ({ ...prev, [user.uid]: '' }));
+    } catch (error) {
+      console.error("Kullanici override kaldirma hatasi:", error);
+      alert("Kullanici override kaldirilirken hata olustu.");
+    } finally {
+      setUserSearchOverrideSaving(prev => ({ ...prev, [user.uid]: false }));
     }
   };
 
@@ -612,39 +673,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       setSearchLimits(prev => ({ ...prev, defaultLimit: val }));
     } catch (error) {
       console.error("Limit kaydetme hatası:", error);
-    } finally {
-      setLimitSaving(false);
-    }
-  };
-
-  const handleAddOverride = async () => {
-    const uid = newOverrideUid.trim();
-    const lim = parseInt(newOverrideLimit);
-    if (!uid || isNaN(lim) || lim < 1) return;
-
-    setLimitSaving(true);
-    try {
-      const newOverrides = { ...searchLimits.userOverrides, [uid]: lim };
-      await setDoc(doc(db, "metadata", "searchLimits"), { defaultLimit: searchLimits.defaultLimit, userOverrides: newOverrides }, { merge: true });
-      setSearchLimits(prev => ({ ...prev, userOverrides: newOverrides }));
-      setNewOverrideUid('');
-      setNewOverrideLimit('');
-    } catch (error) {
-      console.error("Override ekleme hatası:", error);
-    } finally {
-      setLimitSaving(false);
-    }
-  };
-
-  const handleRemoveOverride = async (uid: string) => {
-    setLimitSaving(true);
-    try {
-      const newOverrides = { ...searchLimits.userOverrides };
-      delete newOverrides[uid];
-      await setDoc(doc(db, "metadata", "searchLimits"), { defaultLimit: searchLimits.defaultLimit, userOverrides: newOverrides });
-      setSearchLimits(prev => ({ ...prev, userOverrides: newOverrides }));
-    } catch (error) {
-      console.error("Override kaldırma hatası:", error);
     } finally {
       setLimitSaving(false);
     }
@@ -819,6 +847,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-white font-bold truncate">{user.username || '(İsimsiz)'}</span>
+                        <span className="text-[9px] text-cyan-200 bg-cyan-900/30 border border-cyan-700/40 rounded-full px-1.5 py-0.5 uppercase tracking-wider">
+                          {getUserClassLimits(user.userClass).label}
+                        </span>
                         {user.blockInfo?.isBlocked && (
                           <span className="text-[9px] text-red-300 bg-red-950/40 border border-red-800/50 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Engelli</span>
                         )}
@@ -950,36 +981,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         ))}
                       </div>
 
-                      {/* User-specific search limit */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[10px] text-slate-500">Arama Limiti:</span>
-                        <span className="text-[10px] text-slate-300 font-bold">
-                          {searchLimits.userOverrides[user.uid] !== undefined ? searchLimits.userOverrides[user.uid] : `Varsayılan (${searchLimits.defaultLimit})`}
-                        </span>
+                      {/* USER LIMITS */}
+                      <div className="mt-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[11px]">
+                            <p className="text-slate-200 font-semibold">Kullanici Sinifi</p>
+                            <p className="text-[10px] text-slate-500">Mesaj ve global arama limitleri sinifa gore otomatik atanir.</p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              value={user.userClass}
+                              onChange={e => handleSaveUserClass(user, e.target.value as UserClass)}
+                              disabled={deleting || resetting || !!userClassSaving[user.uid]}
+                              className="bg-slate-950/80 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-cyan-500/50 disabled:opacity-50"
+                            >
+                              <option value="user">Kullanici</option>
+                              <option value="premium">Premium</option>
+                              <option value="pro">Pro</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="mt-1 text-[10px] text-slate-400">
+                          Mesaj: <span className="text-cyan-300 font-semibold">{getUserClassLimits(user.userClass).dailyMessageLimit}/gun</span>
+                          {' • '}
+                          Global: <span className="text-emerald-300 font-semibold">{getUserClassLimits(user.userClass).dailyGlobalSearchLimit}/gun</span>
+                        </div>
                       </div>
 
                       <div className="mt-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-[11px]">
-                            <p className="text-slate-200 font-semibold">Gunluk Mesaj Limiti</p>
-                            <p className="text-[10px] text-slate-500">Kullanici basina gonderim hakki</p>
+                            <p className="text-slate-200 font-semibold">Kullanici Bazli Global Arama Override</p>
+                            <p className="text-[10px] text-slate-500">Bos birakirsan sinif limiti kullanilir.</p>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <input
                               type="number"
                               min="1"
-                              value={messageLimitInputs[user.uid] ?? String(user.messageSettings.dailySendLimit)}
-                              onChange={e => setMessageLimitInputs(prev => ({ ...prev, [user.uid]: e.target.value }))}
-                              className="w-20 bg-slate-950/80 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-cyan-500/50"
+                              value={userSearchOverrideInputs[user.uid] ?? ''}
+                              onChange={e => setUserSearchOverrideInputs(prev => ({ ...prev, [user.uid]: e.target.value }))}
+                              placeholder="Limit"
+                              className="w-20 bg-slate-950/80 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-emerald-500/50"
                             />
                             <button
-                              onClick={() => handleSaveUserMessageLimit(user)}
-                              disabled={deleting || resetting || !!messageLimitSaving[user.uid]}
-                              className="px-2.5 py-1.5 rounded-md text-[10px] font-bold border border-cyan-700/50 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/40 disabled:opacity-50"
+                              onClick={() => handleSaveUserSearchOverride(user)}
+                              disabled={deleting || resetting || !!userSearchOverrideSaving[user.uid]}
+                              className="px-2.5 py-1.5 rounded-md text-[10px] font-bold border border-emerald-700/50 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-800/40 disabled:opacity-50"
                             >
-                              {messageLimitSaving[user.uid] ? 'Kayit...' : 'Kaydet'}
+                              {userSearchOverrideSaving[user.uid] ? 'Kayit...' : 'Kaydet'}
+                            </button>
+                            <button
+                              onClick={() => handleClearUserSearchOverride(user)}
+                              disabled={deleting || resetting || !!userSearchOverrideSaving[user.uid] || searchLimits.userOverrides[user.uid] === undefined}
+                              className="px-2.5 py-1.5 rounded-md text-[10px] font-bold border border-slate-700/50 bg-slate-900/50 text-slate-300 hover:bg-slate-800/60 disabled:opacity-50"
+                            >
+                              Kaldir
                             </button>
                           </div>
+                        </div>
+                        <div className="mt-1 text-[10px] text-slate-400">
+                          Aktif limit: <span className="text-emerald-300 font-semibold">{getEffectiveGlobalSearchLimit(user)}/gun</span>
+                          {' • '}
+                          {searchLimits.userOverrides[user.uid] !== undefined
+                            ? <span className="text-amber-300">Override aktif</span>
+                            : <span>Sinif limiti aktif</span>}
                         </div>
                       </div>
 
@@ -1188,54 +1253,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   </div>
                 </div>
 
-                {/* User overrides */}
-                <div>
-                  <label className="text-[10px] text-slate-500 font-bold block mb-1">KULLANICI BAZLI OVERRIDE</label>
-
-                  {Object.entries(searchLimits.userOverrides).length > 0 && (
-                    <div className="space-y-1 mb-2">
-                      {Object.entries(searchLimits.userOverrides).map(([uid, lim]) => {
-                        const user = allUsers.find(u => u.uid === uid);
-                        return (
-                          <div key={uid} className="flex items-center gap-2 bg-slate-900/50 rounded-lg px-3 py-1.5 border border-slate-700/30 text-[11px]">
-                            <span className="text-slate-300 flex-1 truncate">{user?.username || user?.email || uid}</span>
-                            <span className="text-emerald-400 font-bold">{lim}/gün</span>
-                            <button onClick={() => handleRemoveOverride(uid)} className="text-red-500 hover:text-red-400 p-0.5" disabled={limitSaving}>
-                              <X size={12} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <select
-                      value={newOverrideUid}
-                      onChange={e => setNewOverrideUid(e.target.value)}
-                      className="flex-1 bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-2 text-[11px] text-slate-200 outline-none focus:border-emerald-500/50"
-                    >
-                      <option value="">Kullanıcı seç...</option>
-                      {allUsers.map(u => (
-                        <option key={u.uid} value={u.uid}>{u.username || u.email || u.uid}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      value={newOverrideLimit}
-                      onChange={e => setNewOverrideLimit(e.target.value)}
-                      placeholder="Limit"
-                      className="w-20 bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-2 text-[11px] text-slate-200 outline-none focus:border-emerald-500/50"
-                      min="1"
-                    />
-                    <button
-                      onClick={handleAddOverride}
-                      disabled={limitSaving || !newOverrideUid || !newOverrideLimit}
-                      className="px-3 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      Ekle
-                    </button>
-                  </div>
+                <div className="bg-slate-900/50 rounded-lg border border-slate-700/40 px-3 py-2 text-[11px] text-slate-400">
+                  Kullanici bazli global arama override ayarlari <span className="text-slate-200 font-semibold">Kullanicilar</span> sekmesine tasindi.
                 </div>
               </div>
             </div>

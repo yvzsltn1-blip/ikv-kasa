@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole } from '../types';
+import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, USER_CLASS_QUOTAS } from '../types';
 import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers, AlertTriangle } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { SetDetailModal } from './SetDetailModal';
@@ -119,8 +119,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     setSearchLimitMessage(
       remaining <= 0
         ? `Bugun global arama hakkiniz bitti. Yenilenmesine ${formatDuration(nextReset - Date.now())} kaldi.`
-        : `${remaining} adet hakkiniz kaldi.`
+      : `${remaining} adet hakkiniz kaldi.`
     );
+  };
+
+  const getClassSearchLimit = (rawClass: unknown) => {
+    const resolvedClass = normalizeUserClass(rawClass);
+    return USER_CLASS_QUOTAS[resolvedClass].dailyGlobalSearchLimit;
   };
 
   const refreshQuota = async (consumeOne: boolean) => {
@@ -146,14 +151,21 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
     if (!currentUserUid) return { allowed: true };
 
-    let resolvedLimit = 50;
+    let defaultLimit = 50;
+    let overrideLimit: number | null = null;
     try {
       const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
       if (limitsDoc.exists()) {
         const limitsData = limitsDoc.data();
-        const defaultLimit = limitsData.defaultLimit || 50;
-        const userOverrides = limitsData.userOverrides || {};
-        resolvedLimit = userOverrides[currentUserUid] !== undefined ? userOverrides[currentUserUid] : defaultLimit;
+        if (typeof limitsData.defaultLimit === 'number' && Number.isFinite(limitsData.defaultLimit) && limitsData.defaultLimit > 0) {
+          defaultLimit = Math.floor(limitsData.defaultLimit);
+        }
+        const userOverrides = (limitsData.userOverrides && typeof limitsData.userOverrides === 'object')
+          ? limitsData.userOverrides as Record<string, number>
+          : {};
+        if (typeof userOverrides[currentUserUid] === 'number' && Number.isFinite(userOverrides[currentUserUid]) && userOverrides[currentUserUid] > 0) {
+          overrideLimit = Math.floor(userOverrides[currentUserUid]);
+        }
       }
     } catch {
       // If limits cannot be read, continue with default limit.
@@ -161,17 +173,27 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
     const userRef = doc(db, "users", currentUserUid);
     const todayKey = getLocalDayKey();
+    const resolveLimitFromUserData = (userData: { userClass?: unknown }) => {
+      if (overrideLimit !== null) return overrideLimit;
+      const classLimit = getClassSearchLimit(userData.userClass);
+      return (typeof classLimit === 'number' && Number.isFinite(classLimit) && classLimit > 0)
+        ? classLimit
+        : defaultLimit;
+    };
 
     if (consumeOne) {
       try {
         const txnResult = await runTransaction(db, async (transaction) => {
           const snap = await transaction.get(userRef);
-          const data = snap.exists() ? snap.data() : {};
+          const data = snap.exists()
+            ? snap.data() as { userClass?: unknown; searchQuota?: { global?: { day?: string; used?: number } } }
+            : {};
+          const resolvedLimit = resolveLimitFromUserData(data);
           const quota = (data?.searchQuota?.global || {}) as { day?: string; used?: number };
 
           const currentUsed = quota.day === todayKey ? Math.max(0, quota.used || 0) : 0;
           if (currentUsed >= resolvedLimit) {
-            return { allowed: false, used: currentUsed };
+            return { allowed: false, used: currentUsed, resolvedLimit };
           }
 
           const nextUsed = currentUsed + 1;
@@ -185,27 +207,32 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
             },
           }, { merge: true });
 
-          return { allowed: true, used: nextUsed };
+          return { allowed: true, used: nextUsed, resolvedLimit };
         });
 
-        updateQuotaState(resolvedLimit, txnResult.used);
+        updateQuotaState(txnResult.resolvedLimit, txnResult.used);
         return { allowed: txnResult.allowed };
       } catch {
         // Fallback: if quota write fails, do not block search.
-        updateQuotaState(resolvedLimit, 0);
+        const fallbackLimit = overrideLimit ?? defaultLimit;
+        updateQuotaState(fallbackLimit, 0);
         return { allowed: true };
       }
     }
 
     try {
       const userSnap = await getDoc(userRef);
-      const data = userSnap.exists() ? userSnap.data() : {};
+      const data = userSnap.exists()
+        ? userSnap.data() as { userClass?: unknown; searchQuota?: { global?: { day?: string; used?: number } } }
+        : {};
+      const resolvedLimit = resolveLimitFromUserData(data);
       const quota = (data?.searchQuota?.global || {}) as { day?: string; used?: number };
       const currentUsed = quota.day === todayKey ? Math.max(0, quota.used || 0) : 0;
       updateQuotaState(resolvedLimit, currentUsed);
       return { allowed: currentUsed < resolvedLimit };
     } catch {
-      updateQuotaState(resolvedLimit, 0);
+      const fallbackLimit = overrideLimit ?? defaultLimit;
+      updateQuotaState(fallbackLimit, 0);
       return { allowed: true };
     }
   };

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Lock, MessageCircle, Search, Send, Shield, Trash2, User, X } from 'lucide-react';
 import { db } from '../firebase';
 import { arrayUnion, collection, deleteDoc, doc, documentId, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, setDoc, startAt, where, writeBatch } from 'firebase/firestore';
-import { UserRole } from '../types';
+import { UserRole, normalizeUserClass, USER_CLASS_QUOTAS } from '../types';
 
 interface MessagingModalProps {
   isOpen: boolean;
@@ -64,12 +64,11 @@ const formatDuration = (ms: number) => {
 };
 
 const toMessageLimit = (rawData: unknown) => {
-  const settings = (rawData && typeof rawData === 'object') ? (rawData as { messageSettings?: { dailySendLimit?: unknown } }).messageSettings : undefined;
-  const rawLimit = settings?.dailySendLimit;
-  if (typeof rawLimit === 'number' && Number.isFinite(rawLimit) && rawLimit > 0) {
-    return Math.floor(rawLimit);
-  }
-  return DEFAULT_DAILY_MESSAGE_LIMIT;
+  const data = (rawData && typeof rawData === 'object')
+    ? rawData as { userClass?: unknown }
+    : {};
+  const userClass = normalizeUserClass(data.userClass);
+  return USER_CLASS_QUOTAS[userClass].dailyMessageLimit;
 };
 
 const buildConversationId = (uidA: string, uidB: string) => [uidA, uidB].sort().join('__');

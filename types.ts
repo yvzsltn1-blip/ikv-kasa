@@ -27,6 +27,39 @@ export type Gender = 'Erkek' | 'Kadın' | 'Tüm Cinsiyetler';
 
 export type UserRole = 'admin' | 'user' | null;
 
+export type UserClass = 'user' | 'premium' | 'pro';
+
+export interface UserClassQuota {
+  label: string;
+  dailyMessageLimit: number;
+  dailyGlobalSearchLimit: number;
+}
+
+export const DEFAULT_USER_CLASS: UserClass = 'user';
+
+export const USER_CLASS_QUOTAS: Record<UserClass, UserClassQuota> = {
+  user: {
+    label: 'Kullanici',
+    dailyMessageLimit: 5,
+    dailyGlobalSearchLimit: 5,
+  },
+  premium: {
+    label: 'Premium',
+    dailyMessageLimit: 20,
+    dailyGlobalSearchLimit: 20,
+  },
+  pro: {
+    label: 'Pro',
+    dailyMessageLimit: 50,
+    dailyGlobalSearchLimit: 50,
+  },
+};
+
+export const normalizeUserClass = (raw: unknown): UserClass => {
+  if (raw === 'user' || raw === 'premium' || raw === 'pro') return raw;
+  return DEFAULT_USER_CLASS;
+};
+
 export interface ItemData {
   id: string;
   type: ItemType;
@@ -135,7 +168,7 @@ export interface AdminUserInfo {
   createdAt?: number;
   accounts: Account[];
   permissions: UserPermissions;
-  messageSettings: UserMessageSettings;
+  userClass: UserClass;
   blockInfo: UserBlockInfo;
 }
 
