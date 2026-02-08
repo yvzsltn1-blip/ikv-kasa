@@ -2055,14 +2055,15 @@ export default function App() {
                </div>
 
                <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center gap-2 group/acc">
+                  <div className="flex items-center gap-2 group/acc whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       <input
                         value={tempAccountName}
                         onChange={(e) => setTempAccountName(e.target.value)}
                         onBlur={commitAccountName}
                         readOnly={!canEditData}
-                        className="bg-transparent text-yellow-400 font-bold text-base outline-none w-36 placeholder-slate-600 border-b border-dashed border-yellow-700/30 focus:border-yellow-600/50 focus:border-solid transition-all"
+                        className="bg-transparent text-yellow-400 font-bold text-base outline-none w-auto min-w-[12ch] placeholder-slate-600 border-b border-dashed border-yellow-700/30 focus:border-yellow-600/50 focus:border-solid transition-all"
+                        style={{ width: `${Math.max(12, tempAccountName.length)}ch` }}
                         placeholder="Hesap Adı"
                         maxLength={30}
                       />
