@@ -26,6 +26,7 @@ const BLOCK_REASON_OPTIONS = [
 ];
 
 type ClassLimitInputs = Record<UserClass, { dailyMessageLimit: string; dailyGlobalSearchLimit: string }>;
+type NamedLevelEntry = { name: string; level: number };
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const defaultClassLimits = resolveUserClassQuotas(null);
@@ -84,6 +85,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [potionSaving, setPotionSaving] = useState(false);
   const [potionImporting, setPotionImporting] = useState(false);
   const potionImportInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [managedMines, setManagedMines] = useState<NamedLevelEntry[]>([]);
+  const [mineTextInput, setMineTextInput] = useState('');
+  const [mineListSearch, setMineListSearch] = useState('');
+  const [editingMine, setEditingMine] = useState<string | null>(null);
+  const [editingMineNameInput, setEditingMineNameInput] = useState('');
+  const [editingMineLevelInput, setEditingMineLevelInput] = useState('1');
+  const [mineSaving, setMineSaving] = useState(false);
+  const [managedGlasses, setManagedGlasses] = useState<NamedLevelEntry[]>([]);
+  const [glassesTextInput, setGlassesTextInput] = useState('');
+  const [glassesListSearch, setGlassesListSearch] = useState('');
+  const [editingGlasses, setEditingGlasses] = useState<string | null>(null);
+  const [editingGlassesNameInput, setEditingGlassesNameInput] = useState('');
+  const [editingGlassesLevelInput, setEditingGlassesLevelInput] = useState('1');
+  const [glassesSaving, setGlassesSaving] = useState(false);
+  const [managedTalismans, setManagedTalismans] = useState<string[]>([]);
+  const [talismanTextInput, setTalismanTextInput] = useState('');
+  const [talismanListSearch, setTalismanListSearch] = useState('');
+  const [editingTalisman, setEditingTalisman] = useState<string | null>(null);
+  const [editingTalismanInput, setEditingTalismanInput] = useState('');
+  const [talismanSaving, setTalismanSaving] = useState(false);
 
   // Users tab
   const [userSearch, setUserSearch] = useState('');
@@ -146,6 +167,120 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     return unique.sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
   };
 
+  const normalizeLevelValue = (value: unknown, fallback = 1) => {
+    const parsed = parseInt(String(value ?? '').trim(), 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(59, Math.max(1, parsed));
+  };
+
+  const normalizeHeaderToken = (value: string) => (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('tr')
+      .trim()
+  );
+
+  const isAutocompleteHeaderToken = (value: string) => {
+    const token = normalizeHeaderToken(value);
+    return (
+      token === 'efsun' ||
+      token === 'enchantment' ||
+      token === 'name' ||
+      token === 'isim' ||
+      token === 'ad' ||
+      token === 'iksir' ||
+      token === 'potion' ||
+      token === 'maden' ||
+      token === 'gozluk' ||
+      token === 'tilsim' ||
+      token === 'talisman' ||
+      token === 'seviye' ||
+      token === 'level' ||
+      token === 'lv'
+    );
+  };
+
+  const parseNamedLevelEntry = (rawName: unknown, rawLevel: unknown, fallbackLevel = 1): NamedLevelEntry | null => {
+    const normalizedName = normalizeEnchantmentName(rawName);
+    if (!normalizedName) return null;
+
+    const embeddedLevelMatch = normalizedName.match(/^(.+?)\s*[:;]\s*(\d+)$/);
+    if (embeddedLevelMatch) {
+      const embeddedName = normalizeEnchantmentName(embeddedLevelMatch[1]);
+      if (embeddedName) {
+        return {
+          name: embeddedName,
+          level: normalizeLevelValue(embeddedLevelMatch[2], fallbackLevel),
+        };
+      }
+    }
+
+    return {
+      name: normalizedName,
+      level: normalizeLevelValue(rawLevel, fallbackLevel),
+    };
+  };
+
+  const toUniqueSortedNamedLevels = (entries: NamedLevelEntry[]): NamedLevelEntry[] => {
+    const byKey = new Map<string, NamedLevelEntry>();
+    entries.forEach(entry => {
+      const name = normalizeEnchantmentName(entry.name);
+      if (!name) return;
+      const key = name.toLocaleLowerCase('tr');
+      byKey.set(key, {
+        name,
+        level: normalizeLevelValue(entry.level),
+      });
+    });
+    return [...byKey.values()].sort((a, b) => a.name.toLocaleLowerCase('tr').localeCompare(b.name.toLocaleLowerCase('tr'), 'tr'));
+  };
+
+  const toNamedLevelsFromUnknown = (raw: unknown): NamedLevelEntry[] => {
+    if (!Array.isArray(raw)) return [];
+    const parsed: NamedLevelEntry[] = [];
+    raw.forEach(value => {
+      if (!value || typeof value !== 'object') return;
+      const data = value as { name?: unknown; level?: unknown };
+      const entry = parseNamedLevelEntry(data.name, data.level, 1);
+      if (!entry) return;
+      parsed.push(entry);
+    });
+    return toUniqueSortedNamedLevels(parsed);
+  };
+
+  const extractNamedLevelsFromText = (rawText: string, fallbackLevel = 1): NamedLevelEntry[] => {
+    const sanitized = rawText.replace(/^\uFEFF/, '');
+    const values: NamedLevelEntry[] = [];
+
+    sanitized.split(/\r?\n/).forEach(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
+
+      const normalizedLine = trimmedLine.replace(/^"|"$/g, '');
+      const firstToken = normalizeEnchantmentName((normalizedLine.split(/[:;,\t]/)[0] || ''));
+      if (!firstToken || isAutocompleteHeaderToken(firstToken)) {
+        return;
+      }
+
+      const inlineMatch = normalizedLine.match(/^(.+?)\s*[:;,\t]\s*(\d+)\s*$/);
+      if (inlineMatch) {
+        const parsedInline = parseNamedLevelEntry(inlineMatch[1], inlineMatch[2], fallbackLevel);
+        if (parsedInline) values.push(parsedInline);
+        return;
+      }
+
+      const cells = normalizedLine
+        .split(/[;,\t]/)
+        .map(cell => cell.trim().replace(/^"|"$/g, ''));
+      const parsed = parseNamedLevelEntry(cells[0], cells[1], fallbackLevel);
+      if (!parsed) return;
+      values.push(parsed);
+    });
+
+    return toUniqueSortedNamedLevels(values);
+  };
+
   const extractEnchantmentNamesFromText = (rawText: string): string[] => {
     const sanitized = rawText.replace(/^\uFEFF/, '');
     const values: string[] = [];
@@ -154,14 +289,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       const trimmedLine = line.trim();
       if (!trimmedLine) return;
 
-      const cells = trimmedLine
+      const normalizedLine = trimmedLine.replace(/^"|"$/g, '');
+      const firstToken = normalizeEnchantmentName((normalizedLine.split(/[:;,\t]/)[0] || ''));
+      if (!firstToken || isAutocompleteHeaderToken(firstToken)) return;
+
+      const cells = normalizedLine
         .split(/[;,\t]/)
         .map(cell => cell.trim().replace(/^"|"$/g, ''));
       const candidate = (cells.find(cell => cell !== '') || '').trim();
       if (!candidate) return;
 
-      const token = candidate.toLocaleLowerCase('tr');
-      if (token === 'efsun' || token === 'enchantment' || token === 'name' || token === 'iksir' || token === 'potion') return;
+      if (isAutocompleteHeaderToken(candidate)) {
+        return;
+      }
       values.push(candidate);
     });
 
@@ -203,6 +343,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       return false;
     } finally {
       setPotionSaving(false);
+    }
+  };
+
+  const saveManagedMines = async (nextEntries: NamedLevelEntry[]): Promise<boolean> => {
+    const normalizedEntries = toUniqueSortedNamedLevels(nextEntries);
+    setMineSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "mines"), {
+        entries: normalizedEntries,
+        updatedAt: Date.now(),
+      }, { merge: true });
+      setManagedMines(normalizedEntries);
+      return true;
+    } catch (error) {
+      console.error("Maden onerileri kaydetme hatasi:", error);
+      alert("Maden onerileri kaydedilirken hata olustu.");
+      return false;
+    } finally {
+      setMineSaving(false);
+    }
+  };
+
+  const saveManagedGlasses = async (nextEntries: NamedLevelEntry[]): Promise<boolean> => {
+    const normalizedEntries = toUniqueSortedNamedLevels(nextEntries);
+    setGlassesSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "glasses"), {
+        entries: normalizedEntries,
+        updatedAt: Date.now(),
+      }, { merge: true });
+      setManagedGlasses(normalizedEntries);
+      return true;
+    } catch (error) {
+      console.error("Gozluk onerileri kaydetme hatasi:", error);
+      alert("Gozluk onerileri kaydedilirken hata olustu.");
+      return false;
+    } finally {
+      setGlassesSaving(false);
+    }
+  };
+
+  const saveManagedTalismans = async (nextNames: string[]): Promise<boolean> => {
+    const normalizedNames = toUniqueSortedEnchantments(nextNames);
+    setTalismanSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "talismans"), {
+        names: normalizedNames,
+        updatedAt: Date.now(),
+      }, { merge: true });
+      setManagedTalismans(normalizedNames);
+      return true;
+    } catch (error) {
+      console.error("Tilsim onerileri kaydetme hatasi:", error);
+      alert("Tilsim onerileri kaydedilirken hata olustu.");
+      return false;
+    } finally {
+      setTalismanSaving(false);
     }
   };
 
@@ -349,6 +546,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         }
       } catch {
         setManagedPotions([]);
+      }
+
+      // Fetch managed mine suggestions
+      try {
+        const minesDoc = await getDoc(doc(db, "metadata", "mines"));
+        if (minesDoc.exists()) {
+          setManagedMines(toNamedLevelsFromUnknown(minesDoc.data().entries));
+        } else {
+          setManagedMines([]);
+        }
+      } catch {
+        setManagedMines([]);
+      }
+
+      // Fetch managed glasses suggestions
+      try {
+        const glassesDoc = await getDoc(doc(db, "metadata", "glasses"));
+        if (glassesDoc.exists()) {
+          setManagedGlasses(toNamedLevelsFromUnknown(glassesDoc.data().entries));
+        } else {
+          setManagedGlasses([]);
+        }
+      } catch {
+        setManagedGlasses([]);
+      }
+
+      // Fetch managed talisman suggestions
+      try {
+        const talismansDoc = await getDoc(doc(db, "metadata", "talismans"));
+        if (talismansDoc.exists()) {
+          const rawNames = talismansDoc.data().names;
+          const names = Array.isArray(rawNames)
+            ? rawNames.filter((value): value is string => typeof value === 'string')
+            : [];
+          setManagedTalismans(toUniqueSortedEnchantments(names));
+        } else {
+          setManagedTalismans([]);
+        }
+      } catch {
+        setManagedTalismans([]);
       }
 
       // Fetch search limits
@@ -518,6 +755,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     if (!queryText) return managedPotions;
     return managedPotions.filter(name => name.toLocaleLowerCase('tr').includes(queryText));
   }, [managedPotions, potionListSearch]);
+
+  const filteredManagedMines = useMemo(() => {
+    const queryText = mineListSearch.trim().toLocaleLowerCase('tr');
+    if (!queryText) return managedMines;
+    return managedMines.filter(entry => entry.name.toLocaleLowerCase('tr').includes(queryText));
+  }, [managedMines, mineListSearch]);
+
+  const filteredManagedGlasses = useMemo(() => {
+    const queryText = glassesListSearch.trim().toLocaleLowerCase('tr');
+    if (!queryText) return managedGlasses;
+    return managedGlasses.filter(entry => entry.name.toLocaleLowerCase('tr').includes(queryText));
+  }, [managedGlasses, glassesListSearch]);
+
+  const filteredManagedTalismans = useMemo(() => {
+    const queryText = talismanListSearch.trim().toLocaleLowerCase('tr');
+    if (!queryText) return managedTalismans;
+    return managedTalismans.filter(name => name.toLocaleLowerCase('tr').includes(queryText));
+  }, [managedTalismans, talismanListSearch]);
 
   // Delete user
   const handleDeleteUser = async (user: AdminUserInfo) => {
@@ -1019,6 +1274,172 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     await saveManagedPotions(nextList);
     if (editingPotion === name) {
       handleCancelEditPotion();
+    }
+  };
+
+  const handleAddMinesFromText = async () => {
+    const parsedEntries = extractNamedLevelsFromText(mineTextInput, 1);
+    if (parsedEntries.length === 0) {
+      alert("Eklenebilir maden adi bulunamadi. Her satira Isim:Seviye yazin.");
+      return;
+    }
+
+    const merged = toUniqueSortedNamedLevels([...managedMines, ...parsedEntries]);
+    if (merged.length === managedMines.length) {
+      alert("Listede zaten mevcut olan maden isimleri girildi.");
+      return;
+    }
+
+    const saved = await saveManagedMines(merged);
+    if (saved) {
+      setMineTextInput('');
+    }
+  };
+
+  const handleStartEditMine = (entry: NamedLevelEntry) => {
+    setEditingMine(entry.name);
+    setEditingMineNameInput(entry.name);
+    setEditingMineLevelInput(String(entry.level));
+  };
+
+  const handleCancelEditMine = () => {
+    setEditingMine(null);
+    setEditingMineNameInput('');
+    setEditingMineLevelInput('1');
+  };
+
+  const handleSaveEditedMine = async () => {
+    if (!editingMine) return;
+    const nextName = normalizeEnchantmentName(editingMineNameInput);
+    if (!nextName) {
+      alert("Maden adi bos birakilamaz.");
+      return;
+    }
+    const nextLevel = normalizeLevelValue(editingMineLevelInput);
+    const nextList = managedMines.map(entry => (
+      entry.name === editingMine ? { name: nextName, level: nextLevel } : entry
+    ));
+    const saved = await saveManagedMines(nextList);
+    if (saved) {
+      handleCancelEditMine();
+    }
+  };
+
+  const handleDeleteMine = async (name: string) => {
+    const nextList = managedMines.filter(entry => entry.name !== name);
+    await saveManagedMines(nextList);
+    if (editingMine === name) {
+      handleCancelEditMine();
+    }
+  };
+
+  const handleAddGlassesFromText = async () => {
+    const parsedEntries = extractNamedLevelsFromText(glassesTextInput, 1);
+    if (parsedEntries.length === 0) {
+      alert("Eklenebilir gozluk adi bulunamadi. Her satira Isim:Seviye yazin.");
+      return;
+    }
+
+    const merged = toUniqueSortedNamedLevels([...managedGlasses, ...parsedEntries]);
+    if (merged.length === managedGlasses.length) {
+      alert("Listede zaten mevcut olan gozluk isimleri girildi.");
+      return;
+    }
+
+    const saved = await saveManagedGlasses(merged);
+    if (saved) {
+      setGlassesTextInput('');
+    }
+  };
+
+  const handleStartEditGlasses = (entry: NamedLevelEntry) => {
+    setEditingGlasses(entry.name);
+    setEditingGlassesNameInput(entry.name);
+    setEditingGlassesLevelInput(String(entry.level));
+  };
+
+  const handleCancelEditGlasses = () => {
+    setEditingGlasses(null);
+    setEditingGlassesNameInput('');
+    setEditingGlassesLevelInput('1');
+  };
+
+  const handleSaveEditedGlasses = async () => {
+    if (!editingGlasses) return;
+    const nextName = normalizeEnchantmentName(editingGlassesNameInput);
+    if (!nextName) {
+      alert("Gozluk adi bos birakilamaz.");
+      return;
+    }
+    const nextLevel = normalizeLevelValue(editingGlassesLevelInput);
+    const nextList = managedGlasses.map(entry => (
+      entry.name === editingGlasses ? { name: nextName, level: nextLevel } : entry
+    ));
+    const saved = await saveManagedGlasses(nextList);
+    if (saved) {
+      handleCancelEditGlasses();
+    }
+  };
+
+  const handleDeleteGlasses = async (name: string) => {
+    const nextList = managedGlasses.filter(entry => entry.name !== name);
+    await saveManagedGlasses(nextList);
+    if (editingGlasses === name) {
+      handleCancelEditGlasses();
+    }
+  };
+
+  const handleAddTalismansFromText = async () => {
+    const parsedNames = extractEnchantmentNamesFromText(talismanTextInput);
+    if (parsedNames.length === 0) {
+      alert("Eklenebilir tilsim adi bulunamadi. Her satira bir isim yazin.");
+      return;
+    }
+
+    const merged = toUniqueSortedEnchantments([...managedTalismans, ...parsedNames]);
+    if (merged.length === managedTalismans.length) {
+      alert("Listede zaten mevcut olan tilsim isimleri girildi.");
+      return;
+    }
+
+    const saved = await saveManagedTalismans(merged);
+    if (saved) {
+      setTalismanTextInput('');
+    }
+  };
+
+  const handleStartEditTalisman = (name: string) => {
+    setEditingTalisman(name);
+    setEditingTalismanInput(name);
+  };
+
+  const handleCancelEditTalisman = () => {
+    setEditingTalisman(null);
+    setEditingTalismanInput('');
+  };
+
+  const handleSaveEditedTalisman = async () => {
+    if (!editingTalisman) return;
+    const nextValue = normalizeEnchantmentName(editingTalismanInput);
+    if (!nextValue) {
+      alert("Tilsim adi bos birakilamaz.");
+      return;
+    }
+
+    const nextList = managedTalismans.map(name => (
+      name === editingTalisman ? nextValue : name
+    ));
+    const saved = await saveManagedTalismans(nextList);
+    if (saved) {
+      handleCancelEditTalisman();
+    }
+  };
+
+  const handleDeleteTalisman = async (name: string) => {
+    const nextList = managedTalismans.filter(itemName => itemName !== name);
+    await saveManagedTalismans(nextList);
+    if (editingTalisman === name) {
+      handleCancelEditTalisman();
     }
   };
 
@@ -1924,6 +2345,321 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               <button
                                 onClick={() => handleDeletePotion(name)}
                                 disabled={potionSaving || potionImporting}
+                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
+                              >
+                                Sil
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <h3 className="text-orange-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <Search size={14} />
+                  MADEN OTO TAMAMLAMA
+                </h3>
+
+                <p className="text-[10px] text-slate-500 mb-2.5">
+                  Her satira <span className="text-slate-300 font-semibold">Isim:Seviye</span> yazin. Ornek: <span className="text-slate-300">Osmiridyum:45</span>
+                </p>
+
+                <div className="space-y-2">
+                  <textarea
+                    value={mineTextInput}
+                    onChange={e => setMineTextInput(e.target.value)}
+                    rows={4}
+                    placeholder="Osmiridyum:45&#10;Mithril:30"
+                    className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-500/50 placeholder-slate-600 resize-y"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleAddMinesFromText}
+                      disabled={mineSaving || !mineTextInput.trim()}
+                      className="px-3 py-1.5 bg-orange-800 hover:bg-orange-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Plus size={12} />
+                      Metinden Ekle
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-700/40 bg-slate-900/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={mineListSearch}
+                      onChange={e => setMineListSearch(e.target.value)}
+                      placeholder="Listede ara..."
+                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-orange-500/50 placeholder-slate-600"
+                    />
+                    <span className="text-[10px] text-slate-500">{managedMines.length} kayit</span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {filteredManagedMines.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek maden yok.</div>
+                    ) : (
+                      filteredManagedMines.map(entry => (
+                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingMine === entry.name ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editingMineNameInput}
+                                onChange={e => setEditingMineNameInput(e.target.value)}
+                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-orange-500/50"
+                              />
+                              <input
+                                type="number"
+                                min="1"
+                                max="59"
+                                value={editingMineLevelInput}
+                                onChange={e => setEditingMineLevelInput(e.target.value)}
+                                className="w-16 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-orange-500/50"
+                              />
+                              <button
+                                onClick={handleSaveEditedMine}
+                                disabled={mineSaving}
+                                className="px-2 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Save size={10} />
+                                Kaydet
+                              </button>
+                              <button
+                                onClick={handleCancelEditMine}
+                                disabled={mineSaving}
+                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded transition-colors disabled:opacity-50"
+                              >
+                                Vazgec
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <span className="px-2 py-0.5 rounded bg-orange-900/35 border border-orange-800/40 text-[10px] text-orange-200 font-bold">Lv.{entry.level}</span>
+                              <button
+                                onClick={() => handleStartEditMine(entry)}
+                                disabled={mineSaving}
+                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Pencil size={10} />
+                                Duzenle
+                              </button>
+                              <button
+                                onClick={() => handleDeleteMine(entry.name)}
+                                disabled={mineSaving}
+                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
+                              >
+                                Sil
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <h3 className="text-cyan-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <Search size={14} />
+                  GOZLUK OTO TAMAMLAMA
+                </h3>
+
+                <p className="text-[10px] text-slate-500 mb-2.5">
+                  Her satira <span className="text-slate-300 font-semibold">Isim:Seviye</span> yazin. Ornek: <span className="text-slate-300">Kumlu Gozluk:52</span>
+                </p>
+
+                <div className="space-y-2">
+                  <textarea
+                    value={glassesTextInput}
+                    onChange={e => setGlassesTextInput(e.target.value)}
+                    rows={4}
+                    placeholder="Kumlu Gozluk:52&#10;Canavar Gozlugu:40"
+                    className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500/50 placeholder-slate-600 resize-y"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleAddGlassesFromText}
+                      disabled={glassesSaving || !glassesTextInput.trim()}
+                      className="px-3 py-1.5 bg-cyan-800 hover:bg-cyan-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Plus size={12} />
+                      Metinden Ekle
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-700/40 bg-slate-900/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={glassesListSearch}
+                      onChange={e => setGlassesListSearch(e.target.value)}
+                      placeholder="Listede ara..."
+                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-cyan-500/50 placeholder-slate-600"
+                    />
+                    <span className="text-[10px] text-slate-500">{managedGlasses.length} kayit</span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {filteredManagedGlasses.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek gozluk yok.</div>
+                    ) : (
+                      filteredManagedGlasses.map(entry => (
+                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingGlasses === entry.name ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editingGlassesNameInput}
+                                onChange={e => setEditingGlassesNameInput(e.target.value)}
+                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-cyan-500/50"
+                              />
+                              <input
+                                type="number"
+                                min="1"
+                                max="59"
+                                value={editingGlassesLevelInput}
+                                onChange={e => setEditingGlassesLevelInput(e.target.value)}
+                                className="w-16 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-cyan-500/50"
+                              />
+                              <button
+                                onClick={handleSaveEditedGlasses}
+                                disabled={glassesSaving}
+                                className="px-2 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Save size={10} />
+                                Kaydet
+                              </button>
+                              <button
+                                onClick={handleCancelEditGlasses}
+                                disabled={glassesSaving}
+                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded transition-colors disabled:opacity-50"
+                              >
+                                Vazgec
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <span className="px-2 py-0.5 rounded bg-cyan-900/35 border border-cyan-800/40 text-[10px] text-cyan-200 font-bold">Lv.{entry.level}</span>
+                              <button
+                                onClick={() => handleStartEditGlasses(entry)}
+                                disabled={glassesSaving}
+                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Pencil size={10} />
+                                Duzenle
+                              </button>
+                              <button
+                                onClick={() => handleDeleteGlasses(entry.name)}
+                                disabled={glassesSaving}
+                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
+                              >
+                                Sil
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <h3 className="text-violet-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <Search size={14} />
+                  TILSIM OTO TAMAMLAMA
+                </h3>
+
+                <p className="text-[10px] text-slate-500 mb-2.5">
+                  Bu listedeki isimler tilsım ekleme ekraninda otomatik onerilerde gorunur. Tilsim seviyesi sabit olarak 1 uygulanir.
+                </p>
+
+                <div className="space-y-2">
+                  <textarea
+                    value={talismanTextInput}
+                    onChange={e => setTalismanTextInput(e.target.value)}
+                    rows={4}
+                    placeholder="Her satira bir tilsim yazin. Ornek:&#10;Meteorit&#10;Direnc Kirma Alani (Mavi)"
+                    className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-violet-500/50 placeholder-slate-600 resize-y"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleAddTalismansFromText}
+                      disabled={talismanSaving || !talismanTextInput.trim()}
+                      className="px-3 py-1.5 bg-violet-800 hover:bg-violet-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Plus size={12} />
+                      Metinden Ekle
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-700/40 bg-slate-900/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={talismanListSearch}
+                      onChange={e => setTalismanListSearch(e.target.value)}
+                      placeholder="Listede ara..."
+                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-violet-500/50 placeholder-slate-600"
+                    />
+                    <span className="text-[10px] text-slate-500">{managedTalismans.length} kayit</span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {filteredManagedTalismans.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek tilsim yok.</div>
+                    ) : (
+                      filteredManagedTalismans.map(name => (
+                        <div key={name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingTalisman === name ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editingTalismanInput}
+                                onChange={e => setEditingTalismanInput(e.target.value)}
+                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-violet-500/50"
+                              />
+                              <button
+                                onClick={handleSaveEditedTalisman}
+                                disabled={talismanSaving}
+                                className="px-2 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Save size={10} />
+                                Kaydet
+                              </button>
+                              <button
+                                onClick={handleCancelEditTalisman}
+                                disabled={talismanSaving}
+                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded transition-colors disabled:opacity-50"
+                              >
+                                Vazgec
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{name}</span>
+                              <button
+                                onClick={() => handleStartEditTalisman(name)}
+                                disabled={talismanSaving}
+                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Pencil size={10} />
+                                Duzenle
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTalisman(name)}
+                                disabled={talismanSaving}
                                 className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
                               >
                                 Sil

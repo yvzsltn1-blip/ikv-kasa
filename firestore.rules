@@ -149,6 +149,24 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Global mine suggestions (name + level)
+    match /metadata/mines {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Global glasses suggestions (name + level)
+    match /metadata/glasses {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Global talisman suggestions
+    match /metadata/talismans {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     // Admin list
     match /metadata/admins {
       allow read: if request.auth != null;

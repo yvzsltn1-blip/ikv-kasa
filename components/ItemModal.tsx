@@ -13,12 +13,34 @@ interface ItemModalProps {
   existingItem: ItemData | null;
   enchantmentSuggestions?: string[];
   potionSuggestions?: string[];
+  mineSuggestions?: string[];
+  mineLevelMap?: Map<string, number>;
+  glassesSuggestions?: string[];
+  glassesLevelMap?: Map<string, number>;
+  talismanSuggestions?: string[];
   weaponTypeSuggestions?: string[];
   globalSetLookup?: Map<string, GlobalSetInfo>;
   globalSetMap?: Map<string, SetItemLocation[]>;
 }
 
-export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], potionSuggestions = [], weaponTypeSuggestions = [], globalSetLookup, globalSetMap }) => {
+export const ItemModal: React.FC<ItemModalProps> = ({
+  isOpen,
+  onClose,
+  onSave,
+  onDelete,
+  onRead,
+  existingItem,
+  enchantmentSuggestions = [],
+  potionSuggestions = [],
+  mineSuggestions = [],
+  mineLevelMap = new Map<string, number>(),
+  glassesSuggestions = [],
+  glassesLevelMap = new Map<string, number>(),
+  talismanSuggestions = [],
+  weaponTypeSuggestions = [],
+  globalSetLookup,
+  globalSetMap,
+}) => {
   const [step, setStep] = useState(1);
   const [activeField, setActiveField] = useState<'enchantment1' | 'enchantment2' | 'weaponType' | null>(null);
   const [formData, setFormData] = useState<Partial<ItemData>>({
@@ -66,16 +88,25 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     if (!activeField) return [];
     const text = (formData[activeField] || '').trim().toLocaleLowerCase('tr');
     if (!text) return [];
-    const pool = activeField === 'weaponType'
-      ? weaponTypeSuggestions
-      : (formData.category === 'İksir' && activeField === 'enchantment1' ? potionSuggestions : enchantmentSuggestions);
+    let pool: string[] = [];
+    if (activeField === 'weaponType') {
+      pool = weaponTypeSuggestions;
+    } else if (activeField === 'enchantment1') {
+      if (formData.category === 'İksir') pool = potionSuggestions;
+      else if (formData.category === 'Maden') pool = mineSuggestions;
+      else if (formData.category === 'Gözlük') pool = glassesSuggestions;
+      else if (formData.category === 'Tılsım') pool = talismanSuggestions;
+      else pool = enchantmentSuggestions;
+    } else {
+      pool = enchantmentSuggestions;
+    }
     return pool
       .filter(s => {
         const lower = s.toLocaleLowerCase('tr');
         return lower !== text && lower.includes(text);
       })
       .slice(0, 5);
-  }, [activeField, formData.category, formData.enchantment1, formData.enchantment2, formData.weaponType, enchantmentSuggestions, potionSuggestions, weaponTypeSuggestions]);
+  }, [activeField, formData.category, formData.enchantment1, formData.enchantment2, formData.weaponType, enchantmentSuggestions, potionSuggestions, mineSuggestions, glassesSuggestions, talismanSuggestions, weaponTypeSuggestions]);
 
   const blurTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -104,9 +135,14 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     if (formData.category && formData.type) {
       const normalizedGender = isGenderless ? 'Tüm Cinsiyetler' : (formData.gender || 'Erkek');
       const normalizedHeroClass = isClassless ? 'Tüm Sınıflar' : (formData.heroClass || 'Savaşçı');
-      const normalizedLevel = Math.min(59, Math.max(1, Number(formData.level) || 1));
+      const fallbackLevel = Math.min(59, Math.max(1, Number(formData.level) || 1));
+      const normalizedLevel = isAutoLevelCategory
+        ? resolveAutoLevel(formData.category, formData.enchantment1 || '', fallbackLevel)
+        : fallbackLevel;
       const normalizedBound = isBindableItemCategory ? Boolean(formData.isBound) : false;
-      const normalizedEnchantment2 = formData.category === 'İksir' ? '' : (formData.enchantment2 || '');
+      const normalizedEnchantment2 = (formData.category === 'İksir' || formData.category === 'Maden' || formData.category === 'Gözlük')
+        ? ''
+        : (formData.enchantment2 || '');
       onSave({
         ...formData as ItemData,
         gender: normalizedGender,
@@ -131,6 +167,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   const isStackable = formData.category === 'Maden' || formData.category === 'İksir' || formData.category === 'Diğer';
   // Determine if item is a Weapon
   const isWeapon = formData.category === 'Silah';
+  const isAutoLevelCategory = formData.category === 'Maden' || formData.category === 'Gözlük' || formData.category === 'Tılsım';
   const genderlessCategories = ['Silah', 'Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden', 'Diğer'];
   const classlessCategories = ['Gözlük', 'Yüzük', 'Kolye', 'İksir', 'Maden', 'Diğer'];
   const recipeBlockedCategories = ['Gözlük', 'Yüzük', 'Kolye'];
@@ -142,13 +179,50 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   const isGenderless = genderlessCategories.includes(formData.category || '');
   // Categories that don't have class selection
   const isClassless = classlessCategories.includes(formData.category || '');
+  const shouldShowLevelInput = !isAutoLevelCategory;
+  const shouldRenderMetaRow = shouldShowLevelInput || isBindableItemCategory || isStackable;
+  const metaRowGridClass = shouldShowLevelInput
+    ? (isStackable && isBindableItemCategory ? 'grid-cols-2 sm:grid-cols-[110px_1fr_1fr]' : isStackable || isBindableItemCategory ? 'grid-cols-2 sm:grid-cols-[110px_1fr]' : 'grid-cols-1 sm:grid-cols-[110px]')
+    : (isStackable && isBindableItemCategory ? 'grid-cols-2 sm:grid-cols-[1fr_1fr]' : 'grid-cols-1');
+
+  const resolveAutoLevel = (category: string, nameValue: string, fallbackLevel: number) => {
+    if (category === 'Tılsım') return 1;
+    const key = nameValue.trim().toLocaleLowerCase('tr');
+    if (!key) return fallbackLevel;
+    if (category === 'Maden') return mineLevelMap.get(key) ?? fallbackLevel;
+    if (category === 'Gözlük') return glassesLevelMap.get(key) ?? fallbackLevel;
+    return fallbackLevel;
+  };
+
+  const getPresetLevel = (category: string, nameValue: string): number | undefined => {
+    const key = nameValue.trim().toLocaleLowerCase('tr');
+    if (!key) return undefined;
+    if (category === 'Maden') return mineLevelMap.get(key);
+    if (category === 'Gözlük') return glassesLevelMap.get(key);
+    return undefined;
+  };
+
+  const minePresetLevel = getPresetLevel('Maden', formData.enchantment1 || '');
+  const glassesPresetLevel = getPresetLevel('Gözlük', formData.enchantment1 || '');
 
   const handleFieldBlur = () => {
     blurTimeout.current = setTimeout(() => setActiveField(null), 150);
   };
   const handleSuggestionClick = (field: 'enchantment1' | 'enchantment2' | 'weaponType', value: string) => {
     if (blurTimeout.current) clearTimeout(blurTimeout.current);
-    setFormData({ ...formData, [field]: value });
+    if (field === 'enchantment1' && isAutoLevelCategory) {
+      const nextLevel = resolveAutoLevel(formData.category || '', value, Math.min(59, Math.max(1, Number(formData.level) || 1)));
+      setFormData({
+        ...formData,
+        enchantment1: value,
+        enchantment2: (formData.category === 'İksir' || formData.category === 'Maden' || formData.category === 'Gözlük')
+          ? ''
+          : formData.enchantment2,
+        level: nextLevel,
+      });
+    } else {
+      setFormData({ ...formData, [field]: value });
+    }
     setActiveField(null);
   };
 
@@ -234,19 +308,23 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                  {selectableCategories.map((cat) => (
                     <button
                      key={cat}
-                     onClick={() => {
-                      const genderless = genderlessCategories.includes(cat);
-                      const classless = classlessCategories.includes(cat);
-                       setFormData({
-                         ...formData,
-                         category: cat,
-                         gender: genderless ? 'Tüm Cinsiyetler' : (formData.gender === 'Tüm Cinsiyetler' ? 'Erkek' : formData.gender),
-                         heroClass: classless ? 'Tüm Sınıflar' : (formData.heroClass === 'Tüm Sınıflar' ? 'Savaşçı' : formData.heroClass),
-                         isBound: formData.type === 'Item' && isBindableCategory(cat) ? Boolean(formData.isBound) : false,
-                         // Reset enchantments when switching category
-                         enchantment1: '',
-                         enchantment2: '',
-                       });
+                      onClick={() => {
+                       const genderless = genderlessCategories.includes(cat);
+                       const classless = classlessCategories.includes(cat);
+                       const nextLevel = (cat === 'Tılsım' || cat === 'Maden' || cat === 'Gözlük')
+                         ? 1
+                         : Math.min(59, Math.max(1, Number(formData.level) || 1));
+                        setFormData({
+                          ...formData,
+                          category: cat,
+                          gender: genderless ? 'Tüm Cinsiyetler' : (formData.gender === 'Tüm Cinsiyetler' ? 'Erkek' : formData.gender),
+                          heroClass: classless ? 'Tüm Sınıflar' : (formData.heroClass === 'Tüm Sınıflar' ? 'Savaşçı' : formData.heroClass),
+                          level: nextLevel,
+                          isBound: formData.type === 'Item' && isBindableCategory(cat) ? Boolean(formData.isBound) : false,
+                          // Reset enchantments when switching category
+                          enchantment1: '',
+                          enchantment2: '',
+                        });
                       handleNext();
                     }}
                     className="p-1.5 sm:p-2 text-[11px] sm:text-xs font-bold bg-slate-800 hover:bg-yellow-600 hover:text-black border border-slate-600 rounded transition-colors"
@@ -355,64 +433,68 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
               </div>
 
               {/* Level / Bound / Count Row */}
-              <div className={`grid gap-2 rounded-lg border border-slate-700/70 bg-slate-900/45 p-2 ${isStackable && isBindableItemCategory ? 'grid-cols-2 sm:grid-cols-[110px_1fr_1fr]' : isStackable || isBindableItemCategory ? 'grid-cols-2 sm:grid-cols-[110px_1fr]' : 'grid-cols-1 sm:grid-cols-[110px]'}`}>
-                  <div className="rounded-md border border-slate-700/80 bg-slate-950/45 p-1.5">
-                    <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-slate-400">Seviye</label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="59"
-                      value={formData.level}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => setFormData({...formData, level: Math.min(59, Math.max(1, parseInt(e.target.value) || 1))})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs sm:text-sm focus:border-yellow-500 focus:outline-none"
-                    />
-                  </div>
+              {shouldRenderMetaRow && (
+                <div className={`grid gap-2 rounded-lg border border-slate-700/70 bg-slate-900/45 p-2 ${metaRowGridClass}`}>
+                  {shouldShowLevelInput && (
+                    <div className="rounded-md border border-slate-700/80 bg-slate-950/45 p-1.5">
+                      <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-slate-400">Seviye</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="59"
+                        value={formData.level}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setFormData({...formData, level: Math.min(59, Math.max(1, parseInt(e.target.value) || 1))})}
+                        className="w-full bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs sm:text-sm focus:border-yellow-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
 
                   {isBindableItemCategory && (
-                      <div className="rounded-md border border-amber-800/40 bg-amber-950/15 p-1.5 min-w-0">
-                        <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-amber-300/90">Bağlı mı (^)</label>
-                        <div className="flex bg-slate-900/80 rounded p-0.5 md:p-1 gap-0.5 md:gap-1 border border-slate-700/70">
-                          <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, isBound: false })}
-                            className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors ${!formData.isBound ? 'bg-red-600 text-white ring-1 ring-red-300/60' : 'bg-red-900/40 text-red-300 hover:bg-red-800/50'}`}
-                            title="Bağlı değil"
-                            aria-label="Bağlı değil"
-                          >
-                            <X size={11} className="mx-auto" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, isBound: true })}
-                            className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors ${formData.isBound ? 'bg-emerald-500 text-black font-bold shadow-[0_0_12px_rgba(16,185,129,0.45)] ring-1 ring-emerald-200/70' : 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/50'}`}
-                            title="Bağlı"
-                            aria-label="Bağlı"
-                          >
-                            <CheckCircle size={11} className="mx-auto" />
-                          </button>
-                        </div>
+                    <div className="rounded-md border border-amber-800/40 bg-amber-950/15 p-1.5 min-w-0">
+                      <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-amber-300/90">Bağlı mı (^)</label>
+                      <div className="flex bg-slate-900/80 rounded p-0.5 md:p-1 gap-0.5 md:gap-1 border border-slate-700/70">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, isBound: false })}
+                          className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors ${!formData.isBound ? 'bg-red-600 text-white ring-1 ring-red-300/60' : 'bg-red-900/40 text-red-300 hover:bg-red-800/50'}`}
+                          title="Bağlı değil"
+                          aria-label="Bağlı değil"
+                        >
+                          <X size={11} className="mx-auto" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, isBound: true })}
+                          className={`flex-1 text-[10px] md:text-xs py-1 md:py-1.5 rounded transition-colors ${formData.isBound ? 'bg-emerald-500 text-black font-bold shadow-[0_0_12px_rgba(16,185,129,0.45)] ring-1 ring-emerald-200/70' : 'bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/50'}`}
+                          title="Bağlı"
+                          aria-label="Bağlı"
+                        >
+                          <CheckCircle size={11} className="mx-auto" />
+                        </button>
                       </div>
+                    </div>
                   )}
 
                   {/* Count Input - Only for Maden & İksir */}
                   {isStackable && (
-                      <div className={`rounded-md border border-emerald-800/40 bg-emerald-950/15 p-1.5 animate-in fade-in slide-in-from-right-4 ${isBindableItemCategory ? 'col-span-2 sm:col-span-1' : ''}`}>
-                        <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-emerald-400 flex items-center gap-1">
-                           <Layers size={12} /> Adet
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100000000"
-                          value={formData.count || 1}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => setFormData({...formData, count: Math.min(100000000, Math.max(1, parseInt(e.target.value) || 1))})}
-                          className="w-full bg-slate-900 border border-emerald-700/50 rounded px-2 py-1 text-xs sm:text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
-                        />
-                      </div>
+                    <div className={`rounded-md border border-emerald-800/40 bg-emerald-950/15 p-1.5 animate-in fade-in slide-in-from-right-4 ${isBindableItemCategory ? 'col-span-2 sm:col-span-1' : ''}`}>
+                      <label className="block text-[10px] md:text-xs font-bold mb-0.5 md:mb-1 text-emerald-400 flex items-center gap-1">
+                         <Layers size={12} /> Adet
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100000000"
+                        value={formData.count || 1}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => setFormData({...formData, count: Math.min(100000000, Math.max(1, parseInt(e.target.value) || 1))})}
+                        className="w-full bg-slate-900 border border-emerald-700/50 rounded px-2 py-1 text-xs sm:text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
                   )}
-              </div>
+                </div>
+              )}
 
               {/* Weapon Type - ONLY IF WEAPON */}
               {isWeapon && (
@@ -480,32 +562,59 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
               {formData.category === 'Maden' ? (
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-orange-400">Maden İsmi</label>
-                  <div className="relative">
+                  <div className="flex items-stretch rounded border border-orange-900/60 bg-slate-900 overflow-visible focus-within:border-orange-500">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Örn: Demir, Bakır, Gümüş..."
+                        value={formData.enchantment1}
+                        maxLength={100}
+                        onChange={(e) => {
+                          const nextName = e.target.value;
+                          const fallbackLevel = Math.min(59, Math.max(1, Number(formData.level) || 1));
+                          setFormData({
+                            ...formData,
+                            enchantment1: nextName,
+                            enchantment2: '',
+                            level: resolveAutoLevel('Maden', nextName, fallbackLevel),
+                          });
+                        }}
+                        onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
+                        onBlur={handleFieldBlur}
+                        className="w-full bg-transparent border-0 px-2 py-1 text-xs sm:text-sm focus:outline-none placeholder-slate-600 text-orange-100"
+                      />
+                      {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                        <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
+                          {filteredSuggestions.map(s => (
+                            <button
+                              key={s}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleSuggestionClick('enchantment1', s)}
+                              className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input
-                      type="text"
-                      placeholder="Örn: Demir, Bakır, Gümüş..."
-                      value={formData.enchantment1}
-                      maxLength={100}
-                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value, enchantment2: ''})}
-                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
-                      onBlur={handleFieldBlur}
-                      className="w-full bg-slate-900 border border-orange-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-orange-500 focus:outline-none placeholder-slate-600 text-orange-100"
+                      type="number"
+                      min="1"
+                      max="59"
+                      placeholder="Lv"
+                      aria-label="Maden seviyesi"
+                      value={minePresetLevel ?? Math.min(59, Math.max(1, Number(formData.level) || 1))}
+                      onChange={(e) => setFormData({ ...formData, level: Math.min(59, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+                      disabled={minePresetLevel !== undefined}
+                      className={`w-[72px] shrink-0 border-0 border-l px-2 py-1 text-center text-xs sm:text-sm focus:outline-none ${
+                        minePresetLevel !== undefined
+                          ? 'bg-slate-800 border-orange-700/40 text-orange-300 cursor-not-allowed'
+                          : 'bg-transparent border-orange-700/60 text-orange-100'
+                      }`}
+                      title={minePresetLevel !== undefined ? 'Bu madenin seviyesi admin panelinden otomatik gelir.' : 'Bu maden veritabaninda yok, seviyeyi elle girebilirsiniz.'}
                     />
-                    {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
-                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
-                        {filteredSuggestions.map(s => (
-                          <button
-                            key={s}
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => handleSuggestionClick('enchantment1', s)}
-                            className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : formData.category === 'İksir' ? (
@@ -514,7 +623,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Örn: Yaşam İksiri, Mana İksiri..."
+                      placeholder="Örn: Şarap İksir, Adalı Emsali İksir..."
                       value={formData.enchantment1}
                       maxLength={100}
                       onChange={(e) => setFormData({...formData, enchantment1: e.target.value, enchantment2: ''})}
@@ -539,6 +648,64 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                     )}
                   </div>
                 </div>
+              ) : formData.category === 'Gözlük' ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-cyan-400">Gözlük İsmi</label>
+                  <div className="flex items-stretch rounded border border-cyan-900/60 bg-slate-900 overflow-visible focus-within:border-cyan-500">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Örn: Kumlu Gözlük, Canavar Gözlüğü..."
+                        value={formData.enchantment1}
+                        maxLength={100}
+                        onChange={(e) => {
+                          const nextName = e.target.value;
+                          const fallbackLevel = Math.min(59, Math.max(1, Number(formData.level) || 1));
+                          setFormData({
+                            ...formData,
+                            enchantment1: nextName,
+                            enchantment2: '',
+                            level: resolveAutoLevel('Gözlük', nextName, fallbackLevel),
+                          });
+                        }}
+                        onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
+                        onBlur={handleFieldBlur}
+                        className="w-full bg-transparent border-0 px-2 py-1 text-xs sm:text-sm focus:outline-none placeholder-slate-600 text-cyan-100"
+                      />
+                      {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                        <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
+                          {filteredSuggestions.map(s => (
+                            <button
+                              key={s}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleSuggestionClick('enchantment1', s)}
+                              className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      max="59"
+                      placeholder="Lv"
+                      aria-label="Gözlük seviyesi"
+                      value={glassesPresetLevel ?? Math.min(59, Math.max(1, Number(formData.level) || 1))}
+                      onChange={(e) => setFormData({ ...formData, level: Math.min(59, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+                      disabled={glassesPresetLevel !== undefined}
+                      className={`w-[72px] shrink-0 border-0 border-l px-2 py-1 text-center text-xs sm:text-sm focus:outline-none ${
+                        glassesPresetLevel !== undefined
+                          ? 'bg-slate-800 border-cyan-700/40 text-cyan-300 cursor-not-allowed'
+                          : 'bg-transparent border-cyan-700/60 text-cyan-100'
+                      }`}
+                      title={glassesPresetLevel !== undefined ? 'Bu gözlüğün seviyesi admin panelinden otomatik gelir.' : 'Bu gözlük veritabaninda yok, seviyeyi elle girebilirsiniz.'}
+                    />
+                  </div>
+                </div>
               ) : formData.category === 'Tılsım' ? (
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-purple-400">Tılsım İsmi</label>
@@ -548,7 +715,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       placeholder="Örn: Meteorit, Direnç Kırma Alanı (Mavi)"
                       value={formData.enchantment1}
                       maxLength={100}
-                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value})}
+                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value, level: 1})}
                       onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
                       onBlur={handleFieldBlur}
                       className="w-full bg-slate-900 border border-purple-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600 text-purple-100"

@@ -117,6 +117,64 @@ type SystemAlert = {
   hint?: string;
 };
 
+type NamedLevelSuggestion = {
+  name: string;
+  level: number;
+};
+
+const normalizeSuggestionName = (value: unknown) => String(value ?? '').trim();
+const normalizeSuggestionLevel = (value: unknown, fallback = 1) => {
+  const parsed = parseInt(String(value ?? '').trim(), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(59, Math.max(1, parsed));
+};
+
+const parseNamedLevelSuggestion = (rawName: unknown, rawLevel: unknown): NamedLevelSuggestion | null => {
+  const normalizedName = normalizeSuggestionName(rawName);
+  if (!normalizedName) return null;
+
+  const embeddedLevelMatch = normalizedName.match(/^(.+?)\s*[:;]\s*(\d+)$/);
+  if (embeddedLevelMatch) {
+    const embeddedName = normalizeSuggestionName(embeddedLevelMatch[1]);
+    if (embeddedName) {
+      return {
+        name: embeddedName,
+        level: normalizeSuggestionLevel(embeddedLevelMatch[2], 1),
+      };
+    }
+  }
+
+  return {
+    name: normalizedName,
+    level: normalizeSuggestionLevel(rawLevel, 1),
+  };
+};
+
+const toUniqueSortedNames = (raw: unknown): string[] => {
+  const names = Array.isArray(raw) ? raw : [];
+  const byKey = new Map<string, string>();
+  names.forEach(value => {
+    if (typeof value !== 'string') return;
+    const normalized = normalizeSuggestionName(value);
+    if (!normalized) return;
+    byKey.set(normalized.toLocaleLowerCase('tr'), normalized);
+  });
+  return [...byKey.values()].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+};
+
+const toUniqueSortedNamedLevels = (raw: unknown): NamedLevelSuggestion[] => {
+  const values = Array.isArray(raw) ? raw : [];
+  const byKey = new Map<string, NamedLevelSuggestion>();
+  values.forEach(value => {
+    if (!value || typeof value !== 'object') return;
+    const item = value as { name?: unknown; level?: unknown };
+    const parsed = parseNamedLevelSuggestion(item.name, item.level);
+    if (!parsed) return;
+    byKey.set(parsed.name.toLocaleLowerCase('tr'), parsed);
+  });
+  return [...byKey.values()].sort((a, b) => a.name.toLocaleLowerCase('tr').localeCompare(b.name.toLocaleLowerCase('tr'), 'tr'));
+};
+
 export default function App() {
   // --- Auth & Loading State ---
   const [userRole, setUserRole] = useState<UserRole>(null);
@@ -145,6 +203,9 @@ export default function App() {
   // Global Enchantment Suggestions
   const [globalEnchantments, setGlobalEnchantments] = useState<string[]>([]);
   const [globalPotions, setGlobalPotions] = useState<string[]>([]);
+  const [globalMines, setGlobalMines] = useState<NamedLevelSuggestion[]>([]);
+  const [globalGlasses, setGlobalGlasses] = useState<NamedLevelSuggestion[]>([]);
+  const [globalTalismans, setGlobalTalismans] = useState<string[]>([]);
 
   // UI State
   const [activeCharIndex, setActiveCharIndex] = useState(0);
@@ -369,28 +430,23 @@ export default function App() {
             setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
           }
 
-          // Global efsun önerilerini yükle
+          // Global autocomplete verilerini yukle
           try {
-            const enchDoc = await getDoc(doc(db, "metadata", "enchantments"));
-            if (enchDoc.exists()) {
-              setGlobalEnchantments(enchDoc.data().names || []);
-            } else {
-              setGlobalEnchantments([]);
-            }
-          } catch (e) {
-            console.warn("Global enchantments yüklenemedi:", e);
-          }
+            const [enchDoc, potionsDoc, minesDoc, glassesDoc, talismansDoc] = await Promise.all([
+              getDoc(doc(db, "metadata", "enchantments")),
+              getDoc(doc(db, "metadata", "potions")),
+              getDoc(doc(db, "metadata", "mines")),
+              getDoc(doc(db, "metadata", "glasses")),
+              getDoc(doc(db, "metadata", "talismans")),
+            ]);
 
-          // Global iksir önerilerini yükle
-          try {
-            const potionsDoc = await getDoc(doc(db, "metadata", "potions"));
-            if (potionsDoc.exists()) {
-              setGlobalPotions(potionsDoc.data().names || []);
-            } else {
-              setGlobalPotions([]);
-            }
+            setGlobalEnchantments(enchDoc.exists() ? toUniqueSortedNames(enchDoc.data().names) : []);
+            setGlobalPotions(potionsDoc.exists() ? toUniqueSortedNames(potionsDoc.data().names) : []);
+            setGlobalMines(minesDoc.exists() ? toUniqueSortedNamedLevels(minesDoc.data().entries) : []);
+            setGlobalGlasses(glassesDoc.exists() ? toUniqueSortedNamedLevels(glassesDoc.data().entries) : []);
+            setGlobalTalismans(talismansDoc.exists() ? toUniqueSortedNames(talismansDoc.data().names) : []);
           } catch (e) {
-            console.warn("Global potions yüklenemedi:", e);
+            console.warn("Global autocomplete verileri yuklenemedi:", e);
           }
 
         } catch (error) {
@@ -411,6 +467,9 @@ export default function App() {
         setSocialLink('');
         setGlobalEnchantments([]);
         setGlobalPotions([]);
+        setGlobalMines([]);
+        setGlobalGlasses([]);
+        setGlobalTalismans([]);
         setUserPermissions(DEFAULT_USER_PERMISSIONS);
         setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
         setBlockedTemplateId(BLOCKED_CONTACT_TEMPLATES[0].id);
@@ -730,6 +789,49 @@ export default function App() {
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
   }, [globalPotions]);
 
+  const mineSuggestions = useMemo(() => (
+    globalMines
+      .map(entry => entry.name)
+      .filter(name => name.trim() !== '')
+      .sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'))
+  ), [globalMines]);
+
+  const mineLevelMap = useMemo(() => {
+    const map = new Map<string, number>();
+    globalMines.forEach(entry => {
+      const name = entry.name.trim();
+      if (!name) return;
+      map.set(name.toLocaleLowerCase('tr'), entry.level);
+    });
+    return map;
+  }, [globalMines]);
+
+  const glassesSuggestions = useMemo(() => (
+    globalGlasses
+      .map(entry => entry.name)
+      .filter(name => name.trim() !== '')
+      .sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'))
+  ), [globalGlasses]);
+
+  const glassesLevelMap = useMemo(() => {
+    const map = new Map<string, number>();
+    globalGlasses.forEach(entry => {
+      const name = entry.name.trim();
+      if (!name) return;
+      map.set(name.toLocaleLowerCase('tr'), entry.level);
+    });
+    return map;
+  }, [globalGlasses]);
+
+  const talismanSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    globalTalismans.forEach(name => {
+      const normalized = (name || '').trim();
+      if (normalized) set.add(normalized);
+    });
+    return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+  }, [globalTalismans]);
+
   const weaponTypeSuggestions = useMemo(() => {
     const set = new Set<string>();
     accounts.forEach(acc => {
@@ -933,29 +1035,18 @@ export default function App() {
   const handleCloseAdminPanel = async () => {
     setShowAdminPanel(false);
     try {
-      const [enchDoc, potionsDoc] = await Promise.all([
+      const [enchDoc, potionsDoc, minesDoc, glassesDoc, talismansDoc] = await Promise.all([
         getDoc(doc(db, "metadata", "enchantments")),
         getDoc(doc(db, "metadata", "potions")),
+        getDoc(doc(db, "metadata", "mines")),
+        getDoc(doc(db, "metadata", "glasses")),
+        getDoc(doc(db, "metadata", "talismans")),
       ]);
-      if (enchDoc.exists()) {
-        const rawNames = enchDoc.data().names;
-        const names = Array.isArray(rawNames)
-          ? rawNames.filter((value): value is string => typeof value === 'string')
-          : [];
-        setGlobalEnchantments(names);
-      } else {
-        setGlobalEnchantments([]);
-      }
-
-      if (potionsDoc.exists()) {
-        const rawNames = potionsDoc.data().names;
-        const names = Array.isArray(rawNames)
-          ? rawNames.filter((value): value is string => typeof value === 'string')
-          : [];
-        setGlobalPotions(names);
-      } else {
-        setGlobalPotions([]);
-      }
+      setGlobalEnchantments(enchDoc.exists() ? toUniqueSortedNames(enchDoc.data().names) : []);
+      setGlobalPotions(potionsDoc.exists() ? toUniqueSortedNames(potionsDoc.data().names) : []);
+      setGlobalMines(minesDoc.exists() ? toUniqueSortedNamedLevels(minesDoc.data().entries) : []);
+      setGlobalGlasses(glassesDoc.exists() ? toUniqueSortedNamedLevels(glassesDoc.data().entries) : []);
+      setGlobalTalismans(talismansDoc.exists() ? toUniqueSortedNames(talismansDoc.data().names) : []);
     } catch (error) {
       console.warn("Global autocomplete listeleri yenilenemedi:", error);
     }
@@ -2955,6 +3046,11 @@ export default function App() {
         existingItem={getCurrentItem()}
         enchantmentSuggestions={enchantmentSuggestions}
         potionSuggestions={potionSuggestions}
+        mineSuggestions={mineSuggestions}
+        mineLevelMap={mineLevelMap}
+        glassesSuggestions={glassesSuggestions}
+        glassesLevelMap={glassesLevelMap}
+        talismanSuggestions={talismanSuggestions}
         weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
@@ -2998,6 +3094,11 @@ export default function App() {
         existingItem={editingRecipe}
         enchantmentSuggestions={enchantmentSuggestions}
         potionSuggestions={potionSuggestions}
+        mineSuggestions={mineSuggestions}
+        mineLevelMap={mineLevelMap}
+        glassesSuggestions={glassesSuggestions}
+        glassesLevelMap={glassesLevelMap}
+        talismanSuggestions={talismanSuggestions}
         weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
