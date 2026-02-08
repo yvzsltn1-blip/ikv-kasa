@@ -3,6 +3,14 @@ import { Container, SlotData, ItemData } from '../types';
 import { SlotItem } from './SlotItem';
 import { ArrowRight, Maximize2, Minimize2 } from 'lucide-react';
 
+const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): 'I' | 'II' | 'III' => {
+  const direct = String(item.talismanTier || '').trim().toUpperCase();
+  if (direct === 'I' || direct === 'II' || direct === 'III') return direct;
+  const legacy = String(item.enchantment2 || '').trim().toUpperCase();
+  if (legacy === 'I' || legacy === 'II' || legacy === 'III') return legacy;
+  return 'I';
+};
+
 interface ContainerGridProps {
   container: Container;
   onSlotClick: (containerId: string, slotId: number) => void;
@@ -156,6 +164,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     return (
       (slot.item.enchantment1 || '').toLowerCase().includes(q) ||
       (slot.item.enchantment2 || '').toLowerCase().includes(q) ||
+      (slot.item.talismanTier || '').toLowerCase().includes(q) ||
       slot.item.category.toLowerCase().includes(q)
     );
   };
@@ -228,7 +237,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
             const highlight = isMatchingSearch(slot);
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
             const talismanKey = slot.item?.category === 'Tılsım' && slot.item.enchantment1?.trim()
-              ? `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${(slot.item.enchantment2 || '').toLocaleLowerCase('tr')}|${slot.item.heroClass}`
+              ? `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${resolveTalismanTier(slot.item).toLocaleLowerCase('tr')}|${slot.item.heroClass}`
               : null;
             const glowInfo = talismanKey ? talismanDuplicates?.get(talismanKey) : undefined;
             return (

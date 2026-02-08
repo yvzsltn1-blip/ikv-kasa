@@ -122,6 +122,7 @@ type NamedLevelSuggestion = {
   level: number;
 };
 type TalismanColorSuggestion = 'Mavi' | 'Kırmızı';
+type TalismanTierSuggestion = 'I' | 'II' | 'III';
 type TalismanHeroClassSuggestion = Exclude<HeroClass, 'Tüm Sınıflar'>;
 type TalismanRuleSuggestion = {
   name: string;
@@ -212,6 +213,22 @@ const normalizeTalismanColorSuggestion = (value: unknown): TalismanColorSuggesti
   if (token === 'kirmizi') return 'Kırmızı';
   return null;
 };
+const normalizeTalismanTierSuggestion = (value: unknown): TalismanTierSuggestion | null => {
+  const raw = String(value ?? '').trim().toUpperCase();
+  if (raw === 'I' || raw === 'II' || raw === 'III') return raw as TalismanTierSuggestion;
+  if (raw === '1') return 'I';
+  if (raw === '2') return 'II';
+  if (raw === '3') return 'III';
+  return null;
+};
+const resolveItemTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): TalismanTierSuggestion => (
+  normalizeTalismanTierSuggestion(item.talismanTier)
+  || normalizeTalismanTierSuggestion(item.enchantment2)
+  || 'I'
+);
+const resolveItemTalismanColor = (item: Pick<ItemData, 'enchantment2'>): TalismanColorSuggestion => (
+  normalizeTalismanColorSuggestion(item.enchantment2) || 'Mavi'
+);
 
 const normalizeTalismanHeroClassSuggestion = (value: unknown): TalismanHeroClassSuggestion | null => {
   const token = normalizeLookupToken(value);
@@ -285,6 +302,7 @@ export default function App() {
   const [globalEnchantments, setGlobalEnchantments] = useState<string[]>([]);
   const [globalPotions, setGlobalPotions] = useState<NamedLevelSuggestion[]>([]);
   const [globalMines, setGlobalMines] = useState<NamedLevelSuggestion[]>([]);
+  const [globalOthers, setGlobalOthers] = useState<NamedLevelSuggestion[]>([]);
   const [globalGlasses, setGlobalGlasses] = useState<NamedLevelSuggestion[]>([]);
   const [globalTalismans, setGlobalTalismans] = useState<string[]>([]);
   const [globalTalismanRules, setGlobalTalismanRules] = useState<TalismanRuleSuggestion[]>([]);
@@ -514,10 +532,11 @@ export default function App() {
 
           // Global autocomplete verilerini yukle
           try {
-            const [enchDoc, potionsDoc, minesDoc, glassesDoc, talismansDoc] = await Promise.all([
+            const [enchDoc, potionsDoc, minesDoc, othersDoc, glassesDoc, talismansDoc] = await Promise.all([
               getDoc(doc(db, "metadata", "enchantments")),
               getDoc(doc(db, "metadata", "potions")),
               getDoc(doc(db, "metadata", "mines")),
+              getDoc(doc(db, "metadata", "others")),
               getDoc(doc(db, "metadata", "glasses")),
               getDoc(doc(db, "metadata", "talismans")),
             ]);
@@ -525,6 +544,7 @@ export default function App() {
             setGlobalEnchantments(enchDoc.exists() ? toUniqueSortedNames(enchDoc.data().names) : []);
             setGlobalPotions(potionsDoc.exists() ? toPotionNamedLevelSuggestions(potionsDoc.data()) : []);
             setGlobalMines(minesDoc.exists() ? toUniqueSortedNamedLevels(minesDoc.data().entries) : []);
+            setGlobalOthers(othersDoc.exists() ? toUniqueSortedNamedLevels(othersDoc.data().entries) : []);
             setGlobalGlasses(glassesDoc.exists() ? toUniqueSortedNamedLevels(glassesDoc.data().entries) : []);
             if (talismansDoc.exists()) {
               const talismanData = toTalismanAutocompleteData(talismansDoc.data());
@@ -557,6 +577,7 @@ export default function App() {
         setGlobalEnchantments([]);
         setGlobalPotions([]);
         setGlobalMines([]);
+        setGlobalOthers([]);
         setGlobalGlasses([]);
         setGlobalTalismans([]);
         setGlobalTalismanRules([]);
@@ -821,9 +842,9 @@ export default function App() {
     [activeChar.bank1, activeChar.bank2, activeChar.bag].forEach(container => {
       container.slots.forEach(slot => {
         if (slot.item && slot.item.category === 'Tılsım' && slot.item.enchantment1?.trim()) {
-          const ench2 = (slot.item.enchantment2 || '').trim();
-          if (ench2 === 'III') return; // 3. kademe hariç
-          const key = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${ench2.toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
+          const tier = resolveItemTalismanTier(slot.item);
+          if (tier === 'III') return; // 3. kademe hariç
+          const key = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${tier.toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
           countMap.set(key, (countMap.get(key) || 0) + 1);
         }
       });
@@ -841,7 +862,8 @@ export default function App() {
   // Detay modalında gösterilecek tılsım duplikasyon konumları
   const talismanLocations = useMemo(() => {
     if (!detailItem || !activeChar || detailItem.category !== 'Tılsım' || !detailItem.enchantment1?.trim()) return null;
-    const key = `${detailItem.enchantment1.toLocaleLowerCase('tr')}|${(detailItem.enchantment2 || '').toLocaleLowerCase('tr')}|${detailItem.heroClass}`;
+    const detailTier = resolveItemTalismanTier(detailItem);
+    const key = `${detailItem.enchantment1.toLocaleLowerCase('tr')}|${detailTier.toLocaleLowerCase('tr')}|${detailItem.heroClass}`;
     if (!talismanDuplicates.has(key)) return null;
     const locations: { containerName: string; row: number; col: number }[] = [];
     [
@@ -851,7 +873,8 @@ export default function App() {
     ].forEach(({ data, name }) => {
       data.slots.forEach(slot => {
         if (slot.item && slot.item.category === 'Tılsım' && slot.item.enchantment1?.trim()) {
-          const slotKey = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${(slot.item.enchantment2 || '').toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
+          const slotTier = resolveItemTalismanTier(slot.item);
+          const slotKey = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${slotTier.toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
           if (slotKey === key) {
             locations.push({ containerName: name, row: Math.floor(slot.id / data.cols) + 1, col: (slot.id % data.cols) + 1 });
           }
@@ -905,6 +928,23 @@ export default function App() {
     });
     return map;
   }, [globalMines]);
+
+  const otherSuggestions = useMemo(() => (
+    globalOthers
+      .map(entry => entry.name)
+      .filter(name => name.trim() !== '')
+      .sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'))
+  ), [globalOthers]);
+
+  const otherLevelMap = useMemo(() => {
+    const map = new Map<string, number>();
+    globalOthers.forEach(entry => {
+      const name = entry.name.trim();
+      if (!name) return;
+      map.set(name.toLocaleLowerCase('tr'), entry.level);
+    });
+    return map;
+  }, [globalOthers]);
 
   const glassesSuggestions = useMemo(() => (
     globalGlasses
@@ -1150,16 +1190,18 @@ export default function App() {
   const handleCloseAdminPanel = async () => {
     setShowAdminPanel(false);
     try {
-      const [enchDoc, potionsDoc, minesDoc, glassesDoc, talismansDoc] = await Promise.all([
+      const [enchDoc, potionsDoc, minesDoc, othersDoc, glassesDoc, talismansDoc] = await Promise.all([
         getDoc(doc(db, "metadata", "enchantments")),
         getDoc(doc(db, "metadata", "potions")),
         getDoc(doc(db, "metadata", "mines")),
+        getDoc(doc(db, "metadata", "others")),
         getDoc(doc(db, "metadata", "glasses")),
         getDoc(doc(db, "metadata", "talismans")),
       ]);
       setGlobalEnchantments(enchDoc.exists() ? toUniqueSortedNames(enchDoc.data().names) : []);
       setGlobalPotions(potionsDoc.exists() ? toPotionNamedLevelSuggestions(potionsDoc.data()) : []);
       setGlobalMines(minesDoc.exists() ? toUniqueSortedNamedLevels(minesDoc.data().entries) : []);
+      setGlobalOthers(othersDoc.exists() ? toUniqueSortedNamedLevels(othersDoc.data().entries) : []);
       setGlobalGlasses(glassesDoc.exists() ? toUniqueSortedNamedLevels(glassesDoc.data().entries) : []);
       if (talismansDoc.exists()) {
         const talismanData = toTalismanAutocompleteData(talismansDoc.data());
@@ -1577,8 +1619,17 @@ export default function App() {
 
         const enchantment1 = getImportField(parsedRow, ['efsun1', 'enchantment1']).replace(/^-+$/, '').trim();
         const enchantment2 = getImportField(parsedRow, ['efsun2', 'enchantment2']).replace(/^-+$/, '').trim();
+        const talismanTierRaw = getImportField(parsedRow, ['kademe', 'tier', 'talismantier', 'tilsimkademe']);
 
         const categoryToken = normalizeImportText(category);
+        const importedTalismanTier = categoryToken === 'tilsim'
+          ? (normalizeTalismanTierSuggestion(talismanTierRaw)
+            || normalizeTalismanTierSuggestion(enchantment2)
+            || 'I')
+          : undefined;
+        const importedEnchantment2 = categoryToken === 'tilsim'
+          ? (normalizeTalismanColorSuggestion(enchantment2) || 'Mavi')
+          : enchantment2;
         const heroClassRaw = getImportField(parsedRow, ['sinif', 'class', 'heroclass']);
         const genderRaw = getImportField(parsedRow, ['cinsiyet', 'gender']);
 
@@ -1605,7 +1656,8 @@ export default function App() {
           type: isRecipeType ? 'Recipe' : 'Item',
           category,
           enchantment1,
-          enchantment2,
+          enchantment2: importedEnchantment2,
+          talismanTier: importedTalismanTier,
           heroClass,
           gender,
           level,
@@ -1618,9 +1670,9 @@ export default function App() {
 
         const shouldStoreInRecipeBook = importedItem.type === 'Recipe' && (importedItem.isRead || containerKey === 'learned');
         if (shouldStoreInRecipeBook) {
-          const recipeSignature = `${normalizeImportText(importedItem.category)}|${normalizeImportText(importedItem.enchantment1)}|${normalizeImportText(importedItem.enchantment2)}|${normalizeImportText(importedItem.weaponType || '')}|${importedItem.level}|${normalizeImportText(importedItem.gender)}|${normalizeImportText(importedItem.heroClass)}|${importedItem.count || 1}`;
+          const recipeSignature = `${normalizeImportText(importedItem.category)}|${normalizeImportText(importedItem.enchantment1)}|${normalizeImportText(importedItem.enchantment2)}|${normalizeImportText(importedItem.talismanTier || '')}|${normalizeImportText(importedItem.weaponType || '')}|${importedItem.level}|${normalizeImportText(importedItem.gender)}|${normalizeImportText(importedItem.heroClass)}|${importedItem.count || 1}`;
           const alreadyExists = targetChar.learnedRecipes.some(recipe => {
-            const existingSignature = `${normalizeImportText(recipe.category)}|${normalizeImportText(recipe.enchantment1)}|${normalizeImportText(recipe.enchantment2)}|${normalizeImportText(recipe.weaponType || '')}|${recipe.level}|${normalizeImportText(recipe.gender)}|${normalizeImportText(recipe.heroClass)}|${recipe.count || 1}`;
+            const existingSignature = `${normalizeImportText(recipe.category)}|${normalizeImportText(recipe.enchantment1)}|${normalizeImportText(recipe.enchantment2)}|${normalizeImportText(recipe.talismanTier || '')}|${normalizeImportText(recipe.weaponType || '')}|${recipe.level}|${normalizeImportText(recipe.gender)}|${normalizeImportText(recipe.heroClass)}|${recipe.count || 1}`;
             return existingSignature === recipeSignature;
           });
 
@@ -1725,7 +1777,7 @@ export default function App() {
     if (!activeAccount) return;
 
     const rows = [
-      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kategori", "Tur", "Silah Cinsi", "Bağlı", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kademe", "Kategori", "Tur", "Silah Cinsi", "Bağlı", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
     activeAccount.servers.forEach(server => {
@@ -1738,6 +1790,7 @@ export default function App() {
               rows.push([
                 activeAccount.name, server.name, char.name, container.name, row.toString(), col.toString(),
                 slot.item.enchantment1 || "-", slot.item.enchantment2 || "-",
+                slot.item.category === 'Tılsım' ? resolveItemTalismanTier(slot.item) : "-",
                 slot.item.category,
                 slot.item.type || "Item",
                 slot.item.weaponType || "-",
@@ -1753,6 +1806,7 @@ export default function App() {
           rows.push([
               activeAccount.name, server.name, char.name, "Reçete Kitabı", "-", "-",
               item.enchantment1 || "-", item.enchantment2 || "-",
+              item.category === 'Tılsım' ? resolveItemTalismanTier(item) : "-",
               item.category,
               "Recipe",
               item.weaponType || "-",
@@ -3171,6 +3225,8 @@ export default function App() {
         potionLevelMap={potionLevelMap}
         mineSuggestions={mineSuggestions}
         mineLevelMap={mineLevelMap}
+        otherSuggestions={otherSuggestions}
+        otherLevelMap={otherLevelMap}
         glassesSuggestions={glassesSuggestions}
         glassesLevelMap={glassesLevelMap}
         talismanSuggestions={talismanSuggestions}
@@ -3221,6 +3277,8 @@ export default function App() {
         potionLevelMap={potionLevelMap}
         mineSuggestions={mineSuggestions}
         mineLevelMap={mineLevelMap}
+        otherSuggestions={otherSuggestions}
+        otherLevelMap={otherLevelMap}
         glassesSuggestions={glassesSuggestions}
         glassesLevelMap={glassesLevelMap}
         talismanSuggestions={talismanSuggestions}
@@ -3265,8 +3323,18 @@ export default function App() {
 
             {(tooltip.item.enchantment1 || tooltip.item.enchantment2) && (
               <div className="bg-slate-800 p-1.5 rounded mt-1 border border-slate-700 space-y-1">
-                  {tooltip.item.enchantment1 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment1}</div>}
-                  {tooltip.item.enchantment2 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment2}</div>}
+                  {tooltip.item.category === 'Tılsım' ? (
+                    <>
+                      {tooltip.item.enchantment1 && <div className="text-purple-200 break-words">• {tooltip.item.enchantment1}</div>}
+                      <div className="text-purple-300 break-words">• Renk: {resolveItemTalismanColor(tooltip.item)}</div>
+                      <div className="text-purple-300 break-words">• Kademe: {resolveItemTalismanTier(tooltip.item)}</div>
+                    </>
+                  ) : (
+                    <>
+                      {tooltip.item.enchantment1 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment1}</div>}
+                      {tooltip.item.enchantment2 && <div className="text-yellow-200 break-words">• {tooltip.item.enchantment2}</div>}
+                    </>
+                  )}
               </div>
             )}
           </div>

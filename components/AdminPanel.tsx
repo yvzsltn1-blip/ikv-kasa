@@ -30,6 +30,7 @@ type NamedLevelEntry = { name: string; level: number };
 type TalismanColor = 'Mavi' | 'Kırmızı';
 type TalismanHeroClass = Exclude<HeroClass, 'Tüm Sınıflar'>;
 type TalismanEntry = { name: string; color: TalismanColor; heroClass: TalismanHeroClass };
+type AutocompleteSectionKey = 'enchantments' | 'potions' | 'mines' | 'others' | 'glasses' | 'talismans';
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const defaultClassLimits = resolveUserClassQuotas(null);
@@ -80,6 +81,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [enchantmentSaving, setEnchantmentSaving] = useState(false);
   const [enchantmentImporting, setEnchantmentImporting] = useState(false);
   const enchantmentImportInputRef = React.useRef<HTMLInputElement | null>(null);
+  const autocompleteBulkImportInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [autocompleteBulkImporting, setAutocompleteBulkImporting] = useState(false);
   const [managedPotions, setManagedPotions] = useState<NamedLevelEntry[]>([]);
   const [potionTextInput, setPotionTextInput] = useState('');
   const [potionListSearch, setPotionListSearch] = useState('');
@@ -94,6 +97,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [editingMineNameInput, setEditingMineNameInput] = useState('');
   const [editingMineLevelInput, setEditingMineLevelInput] = useState('1');
   const [mineSaving, setMineSaving] = useState(false);
+  const [managedOthers, setManagedOthers] = useState<NamedLevelEntry[]>([]);
+  const [otherTextInput, setOtherTextInput] = useState('');
+  const [otherListSearch, setOtherListSearch] = useState('');
+  const [editingOther, setEditingOther] = useState<string | null>(null);
+  const [editingOtherNameInput, setEditingOtherNameInput] = useState('');
+  const [editingOtherLevelInput, setEditingOtherLevelInput] = useState('1');
+  const [otherSaving, setOtherSaving] = useState(false);
   const [managedGlasses, setManagedGlasses] = useState<NamedLevelEntry[]>([]);
   const [glassesTextInput, setGlassesTextInput] = useState('');
   const [glassesListSearch, setGlassesListSearch] = useState('');
@@ -196,6 +206,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       token === 'iksir' ||
       token === 'potion' ||
       token === 'maden' ||
+      token === 'diger' ||
+      token === 'other' ||
       token === 'gozluk' ||
       token === 'tilsim' ||
       token === 'talisman' ||
@@ -271,10 +283,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         return;
       }
 
-      const inlineMatch = normalizedLine.match(/^(.+?)\s*[:;,\t]\s*(\d+)\s*$/);
-      if (inlineMatch) {
-        const parsedInline = parseNamedLevelEntry(inlineMatch[1], inlineMatch[2], fallbackLevel);
-        if (parsedInline) values.push(parsedInline);
+      // Allow multiple pairs in a single line (e.g. "Denim:25, Kurt Kurku:37").
+      const pairRegex = /([^,;\t]+?)\s*[:;]\s*(\d+)/g;
+      const parsedInlineEntries: NamedLevelEntry[] = [];
+      let pairMatch: RegExpExecArray | null = pairRegex.exec(normalizedLine);
+      while (pairMatch) {
+        const parsedInline = parseNamedLevelEntry(pairMatch[1], pairMatch[2], fallbackLevel);
+        if (parsedInline) parsedInlineEntries.push(parsedInline);
+        pairMatch = pairRegex.exec(normalizedLine);
+      }
+      if (parsedInlineEntries.length > 0) {
+        values.push(...parsedInlineEntries);
         return;
       }
 
@@ -410,6 +429,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     return toUniqueSortedEnchantments(values);
   };
 
+  const resolveAutocompleteSectionKey = (rawSection: string): AutocompleteSectionKey | null => {
+    const token = normalizeHeaderToken(rawSection).replace(/[\s_-]+/g, '');
+    if (token === 'efsun' || token === 'enchantment' || token === 'enchantments') return 'enchantments';
+    if (token === 'iksir' || token === 'potion' || token === 'potions') return 'potions';
+    if (token === 'maden' || token === 'mine' || token === 'mines') return 'mines';
+    if (token === 'diger' || token === 'other' || token === 'others') return 'others';
+    if (token === 'gozluk' || token === 'glasses') return 'glasses';
+    if (token === 'tilsim' || token === 'talisman' || token === 'talismans') return 'talismans';
+    return null;
+  };
+
+  const parseAutocompleteBulkSections = (rawText: string) => {
+    const sectionLines: Record<AutocompleteSectionKey, string[]> = {
+      enchantments: [],
+      potions: [],
+      mines: [],
+      others: [],
+      glasses: [],
+      talismans: [],
+    };
+    const seenSections: Record<AutocompleteSectionKey, boolean> = {
+      enchantments: false,
+      potions: false,
+      mines: false,
+      others: false,
+      glasses: false,
+      talismans: false,
+    };
+
+    const sanitized = rawText.replace(/^\uFEFF/, '');
+    let currentSection: AutocompleteSectionKey | null = null;
+
+    sanitized.split(/\r?\n/).forEach(rawLine => {
+      const line = rawLine.trim();
+      if (!line || line.startsWith('#') || line.startsWith('//')) return;
+
+      const headerMatch = line.match(/^\[(.+)\]$/);
+      if (headerMatch) {
+        const sectionKey = resolveAutocompleteSectionKey(headerMatch[1]);
+        currentSection = sectionKey;
+        if (sectionKey) {
+          seenSections[sectionKey] = true;
+        }
+        return;
+      }
+
+      if (!currentSection) return;
+      sectionLines[currentSection].push(line);
+    });
+
+    return {
+      seenSections,
+      parsed: {
+        enchantments: extractEnchantmentNamesFromText(sectionLines.enchantments.join('\n')),
+        potions: extractNamedLevelsFromText(sectionLines.potions.join('\n'), 1),
+        mines: extractNamedLevelsFromText(sectionLines.mines.join('\n'), 1),
+        others: extractNamedLevelsFromText(sectionLines.others.join('\n'), 1),
+        glasses: extractNamedLevelsFromText(sectionLines.glasses.join('\n'), 1),
+        talismans: extractTalismansFromText(sectionLines.talismans.join('\n')),
+      },
+    };
+  };
+
   const saveManagedEnchantments = async (nextNames: string[]): Promise<boolean> => {
     const normalizedNames = toUniqueSortedEnchantments(nextNames);
     setEnchantmentSaving(true);
@@ -465,6 +547,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       return false;
     } finally {
       setMineSaving(false);
+    }
+  };
+
+  const saveManagedOthers = async (nextEntries: NamedLevelEntry[]): Promise<boolean> => {
+    const normalizedEntries = toUniqueSortedNamedLevels(nextEntries);
+    setOtherSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "others"), {
+        entries: normalizedEntries,
+        updatedAt: Date.now(),
+      }, { merge: true });
+      setManagedOthers(normalizedEntries);
+      return true;
+    } catch (error) {
+      console.error("Diger onerileri kaydetme hatasi:", error);
+      const detail = error instanceof Error ? error.message : String(error);
+      alert(`Diger onerileri kaydedilirken hata olustu: ${detail}`);
+      return false;
+    } finally {
+      setOtherSaving(false);
     }
   };
 
@@ -667,6 +769,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         }
       } catch {
         setManagedMines([]);
+      }
+
+      // Fetch managed other suggestions
+      try {
+        const othersDoc = await getDoc(doc(db, "metadata", "others"));
+        if (othersDoc.exists()) {
+          setManagedOthers(toNamedLevelsFromUnknown(othersDoc.data().entries));
+        } else {
+          setManagedOthers([]);
+        }
+      } catch {
+        setManagedOthers([]);
       }
 
       // Fetch managed glasses suggestions
@@ -880,6 +994,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     return managedMines.filter(entry => entry.name.toLocaleLowerCase('tr').includes(queryText));
   }, [managedMines, mineListSearch]);
 
+  const filteredManagedOthers = useMemo(() => {
+    const queryText = otherListSearch.trim().toLocaleLowerCase('tr');
+    if (!queryText) return managedOthers;
+    return managedOthers.filter(entry => entry.name.toLocaleLowerCase('tr').includes(queryText));
+  }, [managedOthers, otherListSearch]);
+
   const filteredManagedGlasses = useMemo(() => {
     const queryText = glassesListSearch.trim().toLocaleLowerCase('tr');
     if (!queryText) return managedGlasses;
@@ -895,6 +1015,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       entry.heroClass.toLocaleLowerCase('tr').includes(queryText)
     ));
   }, [managedTalismans, talismanListSearch]);
+
+  const isAnyAutocompleteBusy = (
+    enchantmentSaving ||
+    enchantmentImporting ||
+    potionSaving ||
+    mineSaving ||
+    otherSaving ||
+    glassesSaving ||
+    talismanSaving ||
+    autocompleteBulkImporting
+  );
 
   // Delete user
   const handleDeleteUser = async (user: AdminUserInfo) => {
@@ -1223,6 +1354,80 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     enchantmentImportInputRef.current?.click();
   };
 
+  const handleOpenAutocompleteBulkImportPicker = () => {
+    autocompleteBulkImportInputRef.current?.click();
+  };
+
+  const handleImportAllAutocompleteFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setAutocompleteBulkImporting(true);
+    try {
+      const fileNameLower = file.name.toLocaleLowerCase();
+      if (!fileNameLower.endsWith('.csv') && !fileNameLower.endsWith('.txt')) {
+        alert("Su an sadece CSV/TXT import destekleniyor. Dosyayi CSV/TXT olarak kaydedip tekrar yukleyin.");
+        return;
+      }
+
+      const rawText = await file.text();
+      const { seenSections, parsed } = parseAutocompleteBulkSections(rawText);
+      const hasAnySection = Object.values(seenSections).some(Boolean);
+      if (!hasAnySection) {
+        alert("Dosyada [EFSUN], [IKSIR], [MADEN], [DIGER], [GOZLUK], [TILSIM] basliklari bulunamadi.");
+        return;
+      }
+
+      if (seenSections.enchantments) {
+        const saved = await saveManagedEnchantments(parsed.enchantments);
+        if (!saved) return;
+        setEnchantmentTextInput('');
+        setEnchantmentListSearch('');
+        handleCancelEditEnchantment();
+      }
+      if (seenSections.potions) {
+        const saved = await saveManagedPotions(parsed.potions);
+        if (!saved) return;
+        setPotionTextInput('');
+        setPotionListSearch('');
+        handleCancelEditPotion();
+      }
+      if (seenSections.mines) {
+        const saved = await saveManagedMines(parsed.mines);
+        if (!saved) return;
+        setMineTextInput('');
+        setMineListSearch('');
+        handleCancelEditMine();
+      }
+      if (seenSections.others) {
+        const saved = await saveManagedOthers(parsed.others);
+        if (!saved) return;
+        setOtherTextInput('');
+        setOtherListSearch('');
+        handleCancelEditOther();
+      }
+      if (seenSections.glasses) {
+        const saved = await saveManagedGlasses(parsed.glasses);
+        if (!saved) return;
+        setGlassesTextInput('');
+        setGlassesListSearch('');
+        handleCancelEditGlasses();
+      }
+      if (seenSections.talismans) {
+        const saved = await saveManagedTalismans(parsed.talismans);
+        if (!saved) return;
+        setTalismanTextInput('');
+        setTalismanListSearch('');
+        handleCancelEditTalisman();
+      }
+
+      alert("Toplu oto tamamlama import tamamlandi.");
+    } finally {
+      event.target.value = '';
+      setAutocompleteBulkImporting(false);
+    }
+  };
+
   const handleAddEnchantmentsFromText = async () => {
     const parsedNames = extractEnchantmentNamesFromText(enchantmentTextInput);
     if (parsedNames.length === 0) {
@@ -1422,6 +1627,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
+  const handleAddOthersFromText = async () => {
+    const parsedEntries = extractNamedLevelsFromText(otherTextInput, 1);
+    if (parsedEntries.length === 0) {
+      alert("Eklenebilir diger kaydi bulunamadi. Her satira Isim:Seviye yazin.");
+      return;
+    }
+
+    const merged = toUniqueSortedNamedLevels([...managedOthers, ...parsedEntries]);
+    if (merged.length === managedOthers.length) {
+      alert("Listede zaten mevcut olan diger isimleri girildi.");
+      return;
+    }
+
+    const saved = await saveManagedOthers(merged);
+    if (saved) {
+      setOtherTextInput('');
+    }
+  };
+
+  const handleStartEditOther = (entry: NamedLevelEntry) => {
+    setEditingOther(entry.name);
+    setEditingOtherNameInput(entry.name);
+    setEditingOtherLevelInput(String(entry.level));
+  };
+
+  const handleCancelEditOther = () => {
+    setEditingOther(null);
+    setEditingOtherNameInput('');
+    setEditingOtherLevelInput('1');
+  };
+
+  const handleSaveEditedOther = async () => {
+    if (!editingOther) return;
+    const nextName = normalizeEnchantmentName(editingOtherNameInput);
+    if (!nextName) {
+      alert("Diger adi bos birakilamaz.");
+      return;
+    }
+    const nextLevel = normalizeLevelValue(editingOtherLevelInput);
+    const nextList = managedOthers.map(entry => (
+      entry.name === editingOther ? { name: nextName, level: nextLevel } : entry
+    ));
+    const saved = await saveManagedOthers(nextList);
+    if (saved) {
+      handleCancelEditOther();
+    }
+  };
+
+  const handleDeleteOther = async (name: string) => {
+    const nextList = managedOthers.filter(entry => entry.name !== name);
+    await saveManagedOthers(nextList);
+    if (editingOther === name) {
+      handleCancelEditOther();
+    }
+  };
+
   const handleAddGlassesFromText = async () => {
     const parsedEntries = extractNamedLevelsFromText(glassesTextInput, 1);
     if (parsedEntries.length === 0) {
@@ -1586,6 +1847,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     );
   };
 
+  const handleExportOthers = () => {
+    downloadAutocompleteLines(
+      buildAutocompleteExportFileName('diger-oto-tamamlama'),
+      managedOthers.map(entry => `${entry.name}:${entry.level}`)
+    );
+  };
+
   const handleExportGlasses = () => {
     downloadAutocompleteLines(
       buildAutocompleteExportFileName('gozluk-oto-tamamlama'),
@@ -1597,6 +1865,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     downloadAutocompleteLines(
       buildAutocompleteExportFileName('tilsim-oto-tamamlama'),
       managedTalismans.map(entry => `${entry.name}:${entry.color}:${entry.heroClass}`)
+    );
+  };
+
+  const handleExportAllAutocomplete = () => {
+    downloadAutocompleteLines(
+      buildAutocompleteExportFileName('oto-tamamlama-tumu'),
+      [
+        '# IKV Oto Tamamlama Toplu Export',
+        '# Import icin ayni dosyayi "Toplu Ice Aktar" ile yukleyebilirsiniz.',
+        '[EFSUN]',
+        ...managedEnchantments,
+        '[IKSIR]',
+        ...managedPotions.map(entry => `${entry.name}:${entry.level}`),
+        '[MADEN]',
+        ...managedMines.map(entry => `${entry.name}:${entry.level}`),
+        '[DIGER]',
+        ...managedOthers.map(entry => `${entry.name}:${entry.level}`),
+        '[GOZLUK]',
+        ...managedGlasses.map(entry => `${entry.name}:${entry.level}`),
+        '[TILSIM]',
+        ...managedTalismans.map(entry => `${entry.name}:${entry.color}:${entry.heroClass}`),
+      ]
     );
   };
 
@@ -1633,6 +1923,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       setMineTextInput('');
       setMineListSearch('');
       handleCancelEditMine();
+    }
+  };
+
+  const handleBulkDeleteOthers = async () => {
+    if (managedOthers.length === 0) return;
+    if (!globalThis.confirm(`${managedOthers.length} diger kaydi silinecek. Devam etmek istiyor musunuz?`)) return;
+
+    const saved = await saveManagedOthers([]);
+    if (saved) {
+      setOtherTextInput('');
+      setOtherListSearch('');
+      handleCancelEditOther();
     }
   };
 
@@ -2347,6 +2649,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             <div className="space-y-4 max-w-2xl mx-auto">
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <input
+                  ref={autocompleteBulkImportInputRef}
+                  type="file"
+                  accept=".csv,.txt,text/csv,text/plain"
+                  className="hidden"
+                  onChange={handleImportAllAutocompleteFile}
+                />
+                <h3 className="text-slate-200 text-xs font-bold mb-2 tracking-wider flex items-center gap-2">
+                  <Upload size={14} />
+                  TOPLU ISLEM
+                </h3>
+                <p className="text-[10px] text-slate-500 mb-2.5">
+                  Tum oto tamamlama listelerini tek dosyada disa aktarabilir ve ayni formatla toplu ice aktarabilirsiniz.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleExportAllAutocomplete}
+                    disabled={isAnyAutocompleteBusy}
+                    className="px-3 py-1.5 bg-indigo-800 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Download size={12} />
+                    Tumunu Disa Aktar
+                  </button>
+                  <button
+                    onClick={handleOpenAutocompleteBulkImportPicker}
+                    disabled={isAnyAutocompleteBusy}
+                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Upload size={12} />
+                    {autocompleteBulkImporting ? 'Import...' : 'Toplu Ice Aktar'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <input
                   ref={enchantmentImportInputRef}
                   type="file"
                   accept=".csv,.txt,text/csv,text/plain"
@@ -2725,6 +3062,130 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               </div>
 
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <h3 className="text-slate-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <Search size={14} />
+                  DIGER OTO TAMAMLAMA
+                </h3>
+
+                <p className="text-[10px] text-slate-500 mb-2.5">
+                  Her satira <span className="text-slate-300 font-semibold">Isim:Seviye</span> yazin. Ornek: <span className="text-slate-300">Denim:25, Kurt Kurku:37</span>
+                </p>
+
+                <div className="space-y-2">
+                  <textarea
+                    value={otherTextInput}
+                    onChange={e => setOtherTextInput(e.target.value)}
+                    rows={4}
+                    placeholder="Denim:25&#10;Kurt Kurku:37"
+                    className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-slate-500/60 placeholder-slate-600 resize-y"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleAddOthersFromText}
+                      disabled={otherSaving || !otherTextInput.trim()}
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Plus size={12} />
+                      Metinden Ekle
+                    </button>
+                    <button
+                      onClick={handleExportOthers}
+                      disabled={otherSaving || managedOthers.length === 0}
+                      className="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Download size={12} />
+                      Disa Aktar
+                    </button>
+                    <button
+                      onClick={handleBulkDeleteOthers}
+                      disabled={otherSaving || managedOthers.length === 0}
+                      className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      Toplu Sil
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-700/40 bg-slate-900/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={otherListSearch}
+                      onChange={e => setOtherListSearch(e.target.value)}
+                      placeholder="Listede ara..."
+                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-500/60 placeholder-slate-600"
+                    />
+                    <span className="text-[10px] text-slate-500">{managedOthers.length} kayit</span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {filteredManagedOthers.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek diger kaydi yok.</div>
+                    ) : (
+                      filteredManagedOthers.map(entry => (
+                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingOther === entry.name ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editingOtherNameInput}
+                                onChange={e => setEditingOtherNameInput(e.target.value)}
+                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-slate-500/60"
+                              />
+                              <input
+                                type="number"
+                                min="1"
+                                max="59"
+                                value={editingOtherLevelInput}
+                                onChange={e => setEditingOtherLevelInput(e.target.value)}
+                                className="w-16 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-slate-500/60"
+                              />
+                              <button
+                                onClick={handleSaveEditedOther}
+                                disabled={otherSaving}
+                                className="px-2 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Save size={10} />
+                                Kaydet
+                              </button>
+                              <button
+                                onClick={handleCancelEditOther}
+                                disabled={otherSaving}
+                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded transition-colors disabled:opacity-50"
+                              >
+                                Vazgec
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <span className="px-2 py-0.5 rounded bg-slate-700/40 border border-slate-600/50 text-[10px] text-slate-100 font-bold">Lv.{entry.level}</span>
+                              <button
+                                onClick={() => handleStartEditOther(entry)}
+                                disabled={otherSaving}
+                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Pencil size={10} />
+                                Duzenle
+                              </button>
+                              <button
+                                onClick={() => handleDeleteOther(entry.name)}
+                                disabled={otherSaving}
+                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
+                              >
+                                Sil
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <h3 className="text-cyan-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   GOZLUK OTO TAMAMLAMA
@@ -2855,7 +3316,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </h3>
 
                 <p className="text-[10px] text-slate-500 mb-2.5">
-                  Her satira <span className="text-slate-300 font-semibold">Isim:Renk:Sinif</span> yazin. Ornek: <span className="text-slate-300">Depar:Kirmizi:Savasci</span>
+                  Her satira <span className="text-slate-300 font-semibold">Isim:Renk:Sinif</span> yazin. Ornek: <span className="text-slate-300">Asit Saldirisi 1:Kirmizi:Sifaci</span>
                 </p>
 
                 <div className="space-y-2">
@@ -2863,7 +3324,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     value={talismanTextInput}
                     onChange={e => setTalismanTextInput(e.target.value)}
                     rows={4}
-                    placeholder="Depar:Kirmizi:Savasci&#10;Direnc Kirma Alani:Mavi:Buyucu&#10;Direnc Kirma Alani:Kirmizi:Buyucu"
+                    placeholder="Asit Saldirisi 1:Kirmizi:Sifaci&#10;Asit Saldirisi 2:Mavi:Sifaci&#10;Direnc Kirma Alani 1:Mavi:Buyucu"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-violet-500/50 placeholder-slate-600 resize-y"
                   />
                   <div className="flex flex-wrap gap-2">

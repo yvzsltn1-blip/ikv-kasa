@@ -34,6 +34,24 @@ const getCategoryIcon = (category: string) => {
   }
 };
 
+const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): 'I' | 'II' | 'III' => {
+  const direct = String(item.talismanTier || '').trim().toUpperCase();
+  if (direct === 'I' || direct === 'II' || direct === 'III') return direct;
+  const legacy = String(item.enchantment2 || '').trim().toUpperCase();
+  if (legacy === 'I' || legacy === 'II' || legacy === 'III') return legacy;
+  return 'I';
+};
+const resolveTalismanColor = (item: Pick<ItemData, 'enchantment2'>): 'Mavi' | 'Kırmızı' => {
+  const token = String(item.enchantment2 || '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('tr')
+    .replace(/ı/g, 'i');
+  if (token === 'kirmizi') return 'Kırmızı';
+  return 'Mavi';
+};
+
 export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit, talismanLocations }) => {
   if (!item) return null;
 
@@ -120,14 +138,15 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
           )}
 
           {/* Enchantments */}
-          {(item.enchantment1 || item.enchantment2) && (
+          {(item.enchantment1 || item.enchantment2 || item.talismanTier) && (
             <div className="bg-slate-800 p-3 rounded-lg border border-slate-700 space-y-1.5">
               {item.category === 'Maden' ? (
                 <div className="text-orange-300 font-semibold text-sm">{item.enchantment1}</div>
               ) : item.category === 'Tılsım' ? (
                 <>
                   <div className="text-purple-300 font-semibold text-sm">{item.enchantment1}</div>
-                  {item.enchantment2 && <div className="text-purple-400 text-xs">Kademe: {item.enchantment2}</div>}
+                  <div className="text-purple-400 text-xs">Renk: {resolveTalismanColor(item)}</div>
+                  <div className="text-purple-400 text-xs">Kademe: {resolveTalismanTier(item)}</div>
                 </>
               ) : (
                 <>

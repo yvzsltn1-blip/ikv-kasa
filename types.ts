@@ -98,6 +98,7 @@ export interface ItemData {
   category: string;
   enchantment1: string;
   enchantment2: string;
+  talismanTier?: 'I' | 'II' | 'III';
   heroClass: HeroClass;
   gender: Gender;
   level: number;
