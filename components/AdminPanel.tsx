@@ -361,6 +361,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   // Delete user
   const handleDeleteUser = async (user: AdminUserInfo) => {
+    if (user.uid === auth.currentUser?.uid) {
+      alert("Guvenlik kilidi: Kendi admin hesabinizi silemezsiniz.");
+      return;
+    }
+
     setDeleting(true);
     try {
       const batch = writeBatch(db);
@@ -396,6 +401,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   };
 
   const handleResetUserData = async (user: AdminUserInfo) => {
+    if (user.uid === auth.currentUser?.uid) {
+      alert("Guvenlik kilidi: Kendi admin hesabinizin verisini bu ekrandan sifirlayamazsiniz.");
+      return;
+    }
+
     setResetting(true);
     try {
       const batch = writeBatch(db);
@@ -600,6 +610,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   };
 
   const handleToggleUserBlocked = async (user: AdminUserInfo) => {
+    if (user.uid === auth.currentUser?.uid) {
+      alert("Guvenlik kilidi: Kendi admin hesabinizi engelleyemezsiniz.");
+      return;
+    }
+
     const currentlyBlocked = user.blockInfo?.isBlocked === true;
     const selectedReasonCode = blockReasonInputs[user.uid] || BLOCK_REASON_OPTIONS[0].value;
     const nextBlockInfo: UserBlockInfo = currentlyBlocked
@@ -650,6 +665,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   const handleRemoveAdmin = async (email: string) => {
     if (email === 'yvzsltn61@gmail.com') return;
+    const currentAdminEmail = auth.currentUser?.email?.trim().toLowerCase();
+    if (currentAdminEmail && email.toLowerCase() === currentAdminEmail) {
+      alert("Guvenlik kilidi: Kendi admin yetkinizi bu listeden kaldiramazsiniz.");
+      return;
+    }
 
     setAdminLoading(true);
     try {
@@ -835,7 +855,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               </div>
 
               {/* User List */}
-              {filteredUsers.map(user => (
+              {filteredUsers.map(user => {
+                const isCurrentAdmin = user.uid === auth.currentUser?.uid;
+                return (
                 <div key={user.uid} className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
                   <button
                     onClick={() => setExpandedUser(expandedUser === user.uid ? null : user.uid)}
@@ -852,6 +874,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         </span>
                         {user.blockInfo?.isBlocked && (
                           <span className="text-[9px] text-red-300 bg-red-950/40 border border-red-800/50 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Engelli</span>
+                        )}
+                        {isCurrentAdmin && (
+                          <span className="text-[9px] text-amber-200 bg-amber-900/30 border border-amber-700/50 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Aktif Admin</span>
                         )}
                         <span className="text-[9px] text-slate-500 truncate hidden md:inline">{user.email}</span>
                       </div>
@@ -881,24 +906,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         )}
                       </div>
 
-                      <div className="mt-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="text-[11px]">
+                      <div className="mt-2 rounded-xl border border-cyan-900/35 bg-gradient-to-r from-slate-900/70 via-slate-800/45 to-cyan-950/20 px-2.5 py-2.5">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0 text-[11px]">
                             <p className="text-slate-200 font-semibold flex items-center gap-1.5"><AtSign size={12} /> Kullanici Adi</p>
                             <p className="text-[10px] text-slate-500">Admin olarak kullanici adini degistirebilirsiniz.</p>
                           </div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center">
                             <input
                               type="text"
                               value={usernameInputs[user.uid] ?? (user.username || '')}
                               onChange={e => setUsernameInputs(prev => ({ ...prev, [user.uid]: e.target.value }))}
-                              className="w-40 bg-slate-950/80 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-cyan-500/50"
+                              className="w-full sm:w-44 bg-slate-950/85 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-cyan-500/50"
                               maxLength={20}
                             />
                             <button
                               onClick={() => handleSaveUsername(user)}
                               disabled={deleting || resetting || !!usernameSaving[user.uid]}
-                              className="px-2.5 py-1.5 rounded-md text-[10px] font-bold border border-cyan-700/50 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/40 disabled:opacity-50"
+                              className="w-full sm:w-auto px-2.5 py-1.5 rounded-md text-[10px] font-bold border border-cyan-700/50 bg-cyan-900/35 text-cyan-100 hover:bg-cyan-800/45 disabled:opacity-50 shadow-sm shadow-cyan-950/40"
                             >
                               {usernameSaving[user.uid] ? 'Kayit...' : 'Kaydet'}
                             </button>
@@ -911,25 +936,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                           <div className="text-[11px]">
                             <p className="text-slate-200 font-semibold">Kullanici Engeli</p>
                             <p className="text-[10px] text-slate-500">
-                              {user.blockInfo?.isBlocked
+                              {isCurrentAdmin
+                                ? 'Aktif admin hesabi guvenlik nedeniyle engellenemez.'
+                                : user.blockInfo?.isBlocked
                                 ? `Kullanici engelli. ${user.blockInfo.reasonLabel ? `Neden: ${user.blockInfo.reasonLabel}` : ''}`
                                 : 'Kullanici aktif. Gerekirse engelleme uygulayabilirsiniz.'}
                             </p>
                           </div>
                           <button
                             onClick={() => handleToggleUserBlocked(user)}
-                            disabled={deleting || resetting || !!blockSaving[user.uid]}
+                            disabled={deleting || resetting || !!blockSaving[user.uid] || isCurrentAdmin}
                             className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${
                               user.blockInfo?.isBlocked
                                 ? 'bg-emerald-950/35 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40'
                                 : 'bg-red-950/35 text-red-300 border-red-900/50 hover:bg-red-900/40'
                             } disabled:opacity-50`}
                           >
-                            {user.blockInfo?.isBlocked ? <UserCheck size={12} /> : <UserX size={12} />}
-                            {blockSaving[user.uid] ? 'Kayit...' : (user.blockInfo?.isBlocked ? 'Engeli Kaldir' : 'Engelle')}
+                            {isCurrentAdmin ? <Shield size={12} /> : (user.blockInfo?.isBlocked ? <UserCheck size={12} /> : <UserX size={12} />)}
+                            {isCurrentAdmin ? 'Kilitli' : (blockSaving[user.uid] ? 'Kayit...' : (user.blockInfo?.isBlocked ? 'Engeli Kaldir' : 'Engelle'))}
                           </button>
                         </div>
-                        {!user.blockInfo?.isBlocked && (
+                        {!isCurrentAdmin && !user.blockInfo?.isBlocked && (
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-slate-500">Neden:</span>
                             <select
@@ -1089,10 +1116,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                           <span className="text-[11px] text-amber-300 flex-1">Bu kullanıcının tüm verilerini sıfırlamak istiyor musunuz?</span>
                           <button
                             onClick={() => handleResetUserData(user)}
-                            disabled={resetting || deleting}
+                            disabled={resetting || deleting || isCurrentAdmin}
                             className="px-3 py-1 bg-amber-700 hover:bg-amber-600 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50"
                           >
-                            {resetting ? 'Sıfırlanıyor...' : 'Evet, Sıfırla'}
+                            {isCurrentAdmin ? 'Kilitli' : (resetting ? 'Sıfırlanıyor...' : 'Evet, Sıfırla')}
                           </button>
                           <button
                             onClick={() => setResetConfirm(null)}
@@ -1104,11 +1131,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       ) : (
                         <button
                           onClick={() => { setDeleteConfirm(null); setResetConfirm(user.uid); }}
-                          disabled={deleting || resetting}
-                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-amber-950/30 hover:bg-amber-900/40 text-amber-400 hover:text-amber-300 text-[10px] font-bold rounded-lg border border-amber-900/30 hover:border-amber-700/50 transition-colors disabled:opacity-50"
+                          disabled={deleting || resetting || isCurrentAdmin}
+                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-amber-950/30 hover:bg-amber-900/40 text-amber-400 hover:text-amber-300 text-[10px] font-bold rounded-lg border border-amber-900/30 hover:border-amber-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <RotateCcw size={12} />
-                          Veri Sıfırla
+                          {isCurrentAdmin ? 'Kilitli' : 'Veri Sıfırla'}
                         </button>
                       )}
 
@@ -1119,10 +1146,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                           <span className="text-[11px] text-red-300 flex-1">Bu kullanıcının tüm verileri silinecek. Emin misiniz?</span>
                           <button
                             onClick={() => handleDeleteUser(user)}
-                            disabled={deleting || resetting}
+                            disabled={deleting || resetting || isCurrentAdmin}
                             className="px-3 py-1 bg-red-700 hover:bg-red-600 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50"
                           >
-                            {deleting ? 'Siliniyor...' : 'Evet, Sil'}
+                            {isCurrentAdmin ? 'Kilitli' : (deleting ? 'Siliniyor...' : 'Evet, Sil')}
                           </button>
                           <button
                             onClick={() => setDeleteConfirm(null)}
@@ -1134,17 +1161,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       ) : (
                         <button
                           onClick={() => { setResetConfirm(null); setDeleteConfirm(user.uid); }}
-                          disabled={deleting || resetting}
-                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-red-950/30 hover:bg-red-900/40 text-red-400 hover:text-red-300 text-[10px] font-bold rounded-lg border border-red-900/30 hover:border-red-700/50 transition-colors"
+                          disabled={deleting || resetting || isCurrentAdmin}
+                          className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-red-950/30 hover:bg-red-900/40 text-red-400 hover:text-red-300 text-[10px] font-bold rounded-lg border border-red-900/30 hover:border-red-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Trash2 size={12} />
-                          Kullanıcıyı Sil
+                          {isCurrentAdmin ? 'Kilitli' : 'Kullanıcıyı Sil'}
                         </button>
+                      )}
+                      {isCurrentAdmin && (
+                        <div className="mt-2 rounded-lg border border-amber-800/45 bg-amber-950/25 px-2.5 py-2 text-[10px] text-amber-200">
+                          Guvenlik kilidi: Aktif admin hesabi engellenemez, sifirlanamaz veya silinemez.
+                        </div>
                       )}
                     </div>
                   )}
                 </div>
-              ))}
+              );
+              })}
             </div>
           )}
 
@@ -1173,8 +1206,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <span className="text-sm text-slate-200 flex-1">{email}</span>
                       <button
                         onClick={() => handleRemoveAdmin(email)}
-                        disabled={adminLoading}
+                        disabled={adminLoading || email.toLowerCase() === (auth.currentUser?.email || '').toLowerCase()}
                         className="text-red-500 hover:text-red-400 p-1 hover:bg-red-900/20 rounded transition-colors disabled:opacity-50"
+                        title={email.toLowerCase() === (auth.currentUser?.email || '').toLowerCase() ? 'Kendi admin yetkinizi kaldiramazsiniz' : 'Admini kaldir'}
                       >
                         <X size={14} />
                       </button>
