@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, DEFAULT_USER_CLASS, normalizeUserClass, isBindableCategory, shouldShowBoundMarker } from './types';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, HeroClass, DEFAULT_USER_CLASS, normalizeUserClass, isBindableCategory, shouldShowBoundMarker } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
@@ -121,6 +121,13 @@ type NamedLevelSuggestion = {
   name: string;
   level: number;
 };
+type TalismanColorSuggestion = 'Mavi' | 'Kırmızı';
+type TalismanHeroClassSuggestion = Exclude<HeroClass, 'Tüm Sınıflar'>;
+type TalismanRuleSuggestion = {
+  name: string;
+  color: TalismanColorSuggestion;
+  heroClass: TalismanHeroClassSuggestion;
+};
 
 const normalizeSuggestionName = (value: unknown) => String(value ?? '').trim();
 const normalizeSuggestionLevel = (value: unknown, fallback = 1) => {
@@ -175,6 +182,80 @@ const toUniqueSortedNamedLevels = (raw: unknown): NamedLevelSuggestion[] => {
   return [...byKey.values()].sort((a, b) => a.name.toLocaleLowerCase('tr').localeCompare(b.name.toLocaleLowerCase('tr'), 'tr'));
 };
 
+const toPotionNamedLevelSuggestions = (rawDocData: unknown): NamedLevelSuggestion[] => {
+  if (!rawDocData || typeof rawDocData !== 'object') return [];
+  const data = rawDocData as { entries?: unknown; names?: unknown };
+
+  const entries = toUniqueSortedNamedLevels(data.entries);
+  if (entries.length > 0) return entries;
+
+  const names = Array.isArray(data.names)
+    ? data.names.filter((value): value is string => typeof value === 'string')
+    : [];
+  return toUniqueSortedNamedLevels(names.map(name => ({ name, level: 1 })));
+};
+
+const TALISMAN_CLASS_ORDER: TalismanHeroClassSuggestion[] = ['Savaşçı', 'Büyücü', 'Şifacı'];
+
+const normalizeLookupToken = (value: unknown) => (
+  String(value ?? '')
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('tr')
+    .replace(/ı/g, 'i')
+);
+
+const normalizeTalismanColorSuggestion = (value: unknown): TalismanColorSuggestion | null => {
+  const token = normalizeLookupToken(value);
+  if (token === 'mavi') return 'Mavi';
+  if (token === 'kirmizi') return 'Kırmızı';
+  return null;
+};
+
+const normalizeTalismanHeroClassSuggestion = (value: unknown): TalismanHeroClassSuggestion | null => {
+  const token = normalizeLookupToken(value);
+  if (token === 'savasci') return 'Savaşçı';
+  if (token === 'buyucu') return 'Büyücü';
+  if (token === 'sifaci') return 'Şifacı';
+  return null;
+};
+
+const toUniqueSortedTalismanRules = (raw: unknown): TalismanRuleSuggestion[] => {
+  const values = Array.isArray(raw) ? raw : [];
+  const byKey = new Map<string, TalismanRuleSuggestion>();
+  values.forEach(value => {
+    if (!value || typeof value !== 'object') return;
+    const item = value as { name?: unknown; color?: unknown; heroClass?: unknown; class?: unknown };
+    const name = normalizeSuggestionName(item.name);
+    const color = normalizeTalismanColorSuggestion(item.color);
+    const heroClass = normalizeTalismanHeroClassSuggestion(item.heroClass ?? item.class);
+    if (!name || !color || !heroClass) return;
+    const key = `${name.toLocaleLowerCase('tr')}|${color}|${heroClass}`;
+    byKey.set(key, { name, color, heroClass });
+  });
+
+  return [...byKey.values()].sort((a, b) => {
+    const nameCompare = a.name.toLocaleLowerCase('tr').localeCompare(b.name.toLocaleLowerCase('tr'), 'tr');
+    if (nameCompare !== 0) return nameCompare;
+    const classCompare = TALISMAN_CLASS_ORDER.indexOf(a.heroClass) - TALISMAN_CLASS_ORDER.indexOf(b.heroClass);
+    if (classCompare !== 0) return classCompare;
+    if (a.color === b.color) return 0;
+    return a.color === 'Mavi' ? -1 : 1;
+  });
+};
+
+const toTalismanAutocompleteData = (rawDocData: unknown): { names: string[]; rules: TalismanRuleSuggestion[] } => {
+  if (!rawDocData || typeof rawDocData !== 'object') return { names: [], rules: [] };
+  const data = rawDocData as { entries?: unknown; names?: unknown };
+  const rules = toUniqueSortedTalismanRules(data.entries);
+  if (rules.length > 0) {
+    const names = toUniqueSortedNames(rules.map(rule => rule.name));
+    return { names, rules };
+  }
+  return { names: toUniqueSortedNames(data.names), rules: [] };
+};
+
 export default function App() {
   // --- Auth & Loading State ---
   const [userRole, setUserRole] = useState<UserRole>(null);
@@ -202,10 +283,11 @@ export default function App() {
 
   // Global Enchantment Suggestions
   const [globalEnchantments, setGlobalEnchantments] = useState<string[]>([]);
-  const [globalPotions, setGlobalPotions] = useState<string[]>([]);
+  const [globalPotions, setGlobalPotions] = useState<NamedLevelSuggestion[]>([]);
   const [globalMines, setGlobalMines] = useState<NamedLevelSuggestion[]>([]);
   const [globalGlasses, setGlobalGlasses] = useState<NamedLevelSuggestion[]>([]);
   const [globalTalismans, setGlobalTalismans] = useState<string[]>([]);
+  const [globalTalismanRules, setGlobalTalismanRules] = useState<TalismanRuleSuggestion[]>([]);
 
   // UI State
   const [activeCharIndex, setActiveCharIndex] = useState(0);
@@ -441,10 +523,17 @@ export default function App() {
             ]);
 
             setGlobalEnchantments(enchDoc.exists() ? toUniqueSortedNames(enchDoc.data().names) : []);
-            setGlobalPotions(potionsDoc.exists() ? toUniqueSortedNames(potionsDoc.data().names) : []);
+            setGlobalPotions(potionsDoc.exists() ? toPotionNamedLevelSuggestions(potionsDoc.data()) : []);
             setGlobalMines(minesDoc.exists() ? toUniqueSortedNamedLevels(minesDoc.data().entries) : []);
             setGlobalGlasses(glassesDoc.exists() ? toUniqueSortedNamedLevels(glassesDoc.data().entries) : []);
-            setGlobalTalismans(talismansDoc.exists() ? toUniqueSortedNames(talismansDoc.data().names) : []);
+            if (talismansDoc.exists()) {
+              const talismanData = toTalismanAutocompleteData(talismansDoc.data());
+              setGlobalTalismans(talismanData.names);
+              setGlobalTalismanRules(talismanData.rules);
+            } else {
+              setGlobalTalismans([]);
+              setGlobalTalismanRules([]);
+            }
           } catch (e) {
             console.warn("Global autocomplete verileri yuklenemedi:", e);
           }
@@ -470,6 +559,7 @@ export default function App() {
         setGlobalMines([]);
         setGlobalGlasses([]);
         setGlobalTalismans([]);
+        setGlobalTalismanRules([]);
         setUserPermissions(DEFAULT_USER_PERMISSIONS);
         setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
         setBlockedTemplateId(BLOCKED_CONTACT_TEMPLATES[0].id);
@@ -782,11 +872,21 @@ export default function App() {
 
   const potionSuggestions = useMemo(() => {
     const set = new Set<string>();
-    globalPotions.forEach(name => {
-      const normalized = (name || '').trim();
+    globalPotions.forEach(entry => {
+      const normalized = (entry.name || '').trim();
       if (normalized) set.add(normalized);
     });
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+  }, [globalPotions]);
+
+  const potionLevelMap = useMemo(() => {
+    const map = new Map<string, number>();
+    globalPotions.forEach(entry => {
+      const name = entry.name.trim();
+      if (!name) return;
+      map.set(name.toLocaleLowerCase('tr'), entry.level);
+    });
+    return map;
   }, [globalPotions]);
 
   const mineSuggestions = useMemo(() => (
@@ -831,6 +931,21 @@ export default function App() {
     });
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
   }, [globalTalismans]);
+
+  const talismanOptionMap = useMemo(() => {
+    const map = new Map<string, { color: TalismanColorSuggestion; heroClass: TalismanHeroClassSuggestion }[]>();
+    globalTalismanRules.forEach(rule => {
+      const name = rule.name.trim();
+      if (!name) return;
+      const key = name.toLocaleLowerCase('tr');
+      const prev = map.get(key) || [];
+      if (!prev.some(item => item.color === rule.color && item.heroClass === rule.heroClass)) {
+        prev.push({ color: rule.color, heroClass: rule.heroClass });
+      }
+      map.set(key, prev);
+    });
+    return map;
+  }, [globalTalismanRules]);
 
   const weaponTypeSuggestions = useMemo(() => {
     const set = new Set<string>();
@@ -1043,10 +1158,17 @@ export default function App() {
         getDoc(doc(db, "metadata", "talismans")),
       ]);
       setGlobalEnchantments(enchDoc.exists() ? toUniqueSortedNames(enchDoc.data().names) : []);
-      setGlobalPotions(potionsDoc.exists() ? toUniqueSortedNames(potionsDoc.data().names) : []);
+      setGlobalPotions(potionsDoc.exists() ? toPotionNamedLevelSuggestions(potionsDoc.data()) : []);
       setGlobalMines(minesDoc.exists() ? toUniqueSortedNamedLevels(minesDoc.data().entries) : []);
       setGlobalGlasses(glassesDoc.exists() ? toUniqueSortedNamedLevels(glassesDoc.data().entries) : []);
-      setGlobalTalismans(talismansDoc.exists() ? toUniqueSortedNames(talismansDoc.data().names) : []);
+      if (talismansDoc.exists()) {
+        const talismanData = toTalismanAutocompleteData(talismansDoc.data());
+        setGlobalTalismans(talismanData.names);
+        setGlobalTalismanRules(talismanData.rules);
+      } else {
+        setGlobalTalismans([]);
+        setGlobalTalismanRules([]);
+      }
     } catch (error) {
       console.warn("Global autocomplete listeleri yenilenemedi:", error);
     }
@@ -3046,11 +3168,13 @@ export default function App() {
         existingItem={getCurrentItem()}
         enchantmentSuggestions={enchantmentSuggestions}
         potionSuggestions={potionSuggestions}
+        potionLevelMap={potionLevelMap}
         mineSuggestions={mineSuggestions}
         mineLevelMap={mineLevelMap}
         glassesSuggestions={glassesSuggestions}
         glassesLevelMap={glassesLevelMap}
         talismanSuggestions={talismanSuggestions}
+        talismanOptionMap={talismanOptionMap}
         weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
@@ -3094,11 +3218,13 @@ export default function App() {
         existingItem={editingRecipe}
         enchantmentSuggestions={enchantmentSuggestions}
         potionSuggestions={potionSuggestions}
+        potionLevelMap={potionLevelMap}
         mineSuggestions={mineSuggestions}
         mineLevelMap={mineLevelMap}
         glassesSuggestions={glassesSuggestions}
         glassesLevelMap={glassesLevelMap}
         talismanSuggestions={talismanSuggestions}
+        talismanOptionMap={talismanOptionMap}
         weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserBlockInfo, UserClass, DEFAULT_USER_CLASS, normalizeUserClass, resolveUserClassQuotas, USER_CLASS_KEYS } from '../types';
-import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle, UserX, UserCheck, AtSign, Upload, Pencil, Save } from 'lucide-react';
+import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserBlockInfo, UserClass, HeroClass, DEFAULT_USER_CLASS, normalizeUserClass, resolveUserClassQuotas, USER_CLASS_KEYS } from '../types';
+import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle, UserX, UserCheck, AtSign, Upload, Pencil, Save, Download } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, query, where, writeBatch, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 
@@ -27,6 +27,9 @@ const BLOCK_REASON_OPTIONS = [
 
 type ClassLimitInputs = Record<UserClass, { dailyMessageLimit: string; dailyGlobalSearchLimit: string }>;
 type NamedLevelEntry = { name: string; level: number };
+type TalismanColor = 'Mavi' | 'Kırmızı';
+type TalismanHeroClass = Exclude<HeroClass, 'Tüm Sınıflar'>;
+type TalismanEntry = { name: string; color: TalismanColor; heroClass: TalismanHeroClass };
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const defaultClassLimits = resolveUserClassQuotas(null);
@@ -77,14 +80,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [enchantmentSaving, setEnchantmentSaving] = useState(false);
   const [enchantmentImporting, setEnchantmentImporting] = useState(false);
   const enchantmentImportInputRef = React.useRef<HTMLInputElement | null>(null);
-  const [managedPotions, setManagedPotions] = useState<string[]>([]);
+  const [managedPotions, setManagedPotions] = useState<NamedLevelEntry[]>([]);
   const [potionTextInput, setPotionTextInput] = useState('');
   const [potionListSearch, setPotionListSearch] = useState('');
   const [editingPotion, setEditingPotion] = useState<string | null>(null);
-  const [editingPotionInput, setEditingPotionInput] = useState('');
+  const [editingPotionNameInput, setEditingPotionNameInput] = useState('');
+  const [editingPotionLevelInput, setEditingPotionLevelInput] = useState('1');
   const [potionSaving, setPotionSaving] = useState(false);
-  const [potionImporting, setPotionImporting] = useState(false);
-  const potionImportInputRef = React.useRef<HTMLInputElement | null>(null);
   const [managedMines, setManagedMines] = useState<NamedLevelEntry[]>([]);
   const [mineTextInput, setMineTextInput] = useState('');
   const [mineListSearch, setMineListSearch] = useState('');
@@ -99,11 +101,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [editingGlassesNameInput, setEditingGlassesNameInput] = useState('');
   const [editingGlassesLevelInput, setEditingGlassesLevelInput] = useState('1');
   const [glassesSaving, setGlassesSaving] = useState(false);
-  const [managedTalismans, setManagedTalismans] = useState<string[]>([]);
+  const [managedTalismans, setManagedTalismans] = useState<TalismanEntry[]>([]);
   const [talismanTextInput, setTalismanTextInput] = useState('');
   const [talismanListSearch, setTalismanListSearch] = useState('');
   const [editingTalisman, setEditingTalisman] = useState<string | null>(null);
-  const [editingTalismanInput, setEditingTalismanInput] = useState('');
+  const [editingTalismanNameInput, setEditingTalismanNameInput] = useState('');
+  const [editingTalismanColorInput, setEditingTalismanColorInput] = useState<TalismanColor>('Mavi');
+  const [editingTalismanClassInput, setEditingTalismanClassInput] = useState<TalismanHeroClass>('Savaşçı');
   const [talismanSaving, setTalismanSaving] = useState(false);
 
   // Users tab
@@ -195,6 +199,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       token === 'gozluk' ||
       token === 'tilsim' ||
       token === 'talisman' ||
+      token === 'renk' ||
+      token === 'color' ||
+      token === 'sinif' ||
+      token === 'class' ||
       token === 'seviye' ||
       token === 'level' ||
       token === 'lv'
@@ -281,6 +289,100 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     return toUniqueSortedNamedLevels(values);
   };
 
+  const TALISMAN_CLASS_ORDER: TalismanHeroClass[] = ['Savaşçı', 'Büyücü', 'Şifacı'];
+
+  const normalizeLookupToken = (value: unknown) => (
+    normalizeEnchantmentName(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('tr')
+      .replace(/ı/g, 'i')
+  );
+
+  const normalizeTalismanColor = (value: unknown): TalismanColor | null => {
+    const token = normalizeLookupToken(value);
+    if (token === 'mavi') return 'Mavi';
+    if (token === 'kirmizi') return 'Kırmızı';
+    return null;
+  };
+
+  const normalizeTalismanHeroClass = (value: unknown): TalismanHeroClass | null => {
+    const token = normalizeLookupToken(value);
+    if (token === 'savasci') return 'Savaşçı';
+    if (token === 'buyucu') return 'Büyücü';
+    if (token === 'sifaci') return 'Şifacı';
+    return null;
+  };
+
+  const toUniqueSortedTalismans = (entries: TalismanEntry[]): TalismanEntry[] => {
+    const byKey = new Map<string, TalismanEntry>();
+    entries.forEach(entry => {
+      const name = normalizeEnchantmentName(entry.name);
+      const color = normalizeTalismanColor(entry.color);
+      const heroClass = normalizeTalismanHeroClass(entry.heroClass);
+      if (!name || !color || !heroClass) return;
+      const key = `${name.toLocaleLowerCase('tr')}|${color}|${heroClass}`;
+      byKey.set(key, { name, color, heroClass });
+    });
+
+    return [...byKey.values()].sort((a, b) => {
+      const nameCompare = a.name.toLocaleLowerCase('tr').localeCompare(b.name.toLocaleLowerCase('tr'), 'tr');
+      if (nameCompare !== 0) return nameCompare;
+      const classCompare = TALISMAN_CLASS_ORDER.indexOf(a.heroClass) - TALISMAN_CLASS_ORDER.indexOf(b.heroClass);
+      if (classCompare !== 0) return classCompare;
+      if (a.color === b.color) return 0;
+      return a.color === 'Mavi' ? -1 : 1;
+    });
+  };
+
+  const parseTalismanEntry = (rawName: unknown, rawColor: unknown, rawHeroClass: unknown): TalismanEntry | null => {
+    const name = normalizeEnchantmentName(rawName);
+    const color = normalizeTalismanColor(rawColor);
+    const heroClass = normalizeTalismanHeroClass(rawHeroClass);
+    if (!name || !color || !heroClass) return null;
+    return { name, color, heroClass };
+  };
+
+  const toTalismansFromUnknown = (raw: unknown): TalismanEntry[] => {
+    if (!Array.isArray(raw)) return [];
+    const values: TalismanEntry[] = [];
+    raw.forEach(item => {
+      if (!item || typeof item !== 'object') return;
+      const data = item as { name?: unknown; color?: unknown; heroClass?: unknown; class?: unknown };
+      const parsed = parseTalismanEntry(data.name, data.color, data.heroClass ?? data.class);
+      if (!parsed) return;
+      values.push(parsed);
+    });
+    return toUniqueSortedTalismans(values);
+  };
+
+  const extractTalismansFromText = (rawText: string): TalismanEntry[] => {
+    const sanitized = rawText.replace(/^\uFEFF/, '');
+    const values: TalismanEntry[] = [];
+
+    sanitized.split(/\r?\n/).forEach(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
+
+      const normalizedLine = trimmedLine.replace(/^"|"$/g, '');
+      const cells = normalizedLine
+        .split(/[:;,\t]/)
+        .map(cell => cell.trim().replace(/^"|"$/g, ''))
+        .filter(cell => cell !== '');
+
+      if (cells.length < 3) return;
+      if (isAutocompleteHeaderToken(cells[0]) || isAutocompleteHeaderToken(cells[1]) || isAutocompleteHeaderToken(cells[2])) {
+        return;
+      }
+
+      const parsed = parseTalismanEntry(cells[0], cells[1], cells[2]);
+      if (!parsed) return;
+      values.push(parsed);
+    });
+
+    return toUniqueSortedTalismans(values);
+  };
+
   const extractEnchantmentNamesFromText = (rawText: string): string[] => {
     const sanitized = rawText.replace(/^\uFEFF/, '');
     const values: string[] = [];
@@ -327,15 +429,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  const saveManagedPotions = async (nextNames: string[]): Promise<boolean> => {
-    const normalizedNames = toUniqueSortedEnchantments(nextNames);
+  const saveManagedPotions = async (nextEntries: NamedLevelEntry[]): Promise<boolean> => {
+    const normalizedEntries = toUniqueSortedNamedLevels(nextEntries);
     setPotionSaving(true);
     try {
       await setDoc(doc(db, "metadata", "potions"), {
-        names: normalizedNames,
+        entries: normalizedEntries,
+        names: normalizedEntries.map(entry => entry.name),
         updatedAt: Date.now(),
       }, { merge: true });
-      setManagedPotions(normalizedNames);
+      setManagedPotions(normalizedEntries);
       return true;
     } catch (error) {
       console.error("Iksir onerileri kaydetme hatasi:", error);
@@ -384,15 +487,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  const saveManagedTalismans = async (nextNames: string[]): Promise<boolean> => {
-    const normalizedNames = toUniqueSortedEnchantments(nextNames);
+  const saveManagedTalismans = async (nextEntries: TalismanEntry[]): Promise<boolean> => {
+    const normalizedEntries = toUniqueSortedTalismans(nextEntries);
     setTalismanSaving(true);
     try {
       await setDoc(doc(db, "metadata", "talismans"), {
-        names: normalizedNames,
+        entries: normalizedEntries,
+        names: toUniqueSortedEnchantments(normalizedEntries.map(entry => entry.name)),
         updatedAt: Date.now(),
       }, { merge: true });
-      setManagedTalismans(normalizedNames);
+      setManagedTalismans(normalizedEntries);
       return true;
     } catch (error) {
       console.error("Tilsim onerileri kaydetme hatasi:", error);
@@ -536,11 +640,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       try {
         const potionsDoc = await getDoc(doc(db, "metadata", "potions"));
         if (potionsDoc.exists()) {
-          const rawNames = potionsDoc.data().names;
-          const names = Array.isArray(rawNames)
-            ? rawNames.filter((value): value is string => typeof value === 'string')
-            : [];
-          setManagedPotions(toUniqueSortedEnchantments(names));
+          const rawData = potionsDoc.data();
+          const entryList = toNamedLevelsFromUnknown(rawData.entries);
+          if (entryList.length > 0) {
+            setManagedPotions(entryList);
+          } else {
+            const rawNames = Array.isArray(rawData.names)
+              ? rawData.names.filter((value): value is string => typeof value === 'string')
+              : [];
+            setManagedPotions(toNamedLevelsFromUnknown(rawNames.map(name => ({ name, level: 1 }))));
+          }
         } else {
           setManagedPotions([]);
         }
@@ -576,11 +685,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       try {
         const talismansDoc = await getDoc(doc(db, "metadata", "talismans"));
         if (talismansDoc.exists()) {
-          const rawNames = talismansDoc.data().names;
-          const names = Array.isArray(rawNames)
-            ? rawNames.filter((value): value is string => typeof value === 'string')
-            : [];
-          setManagedTalismans(toUniqueSortedEnchantments(names));
+          const rawData = talismansDoc.data();
+          const entries = toTalismansFromUnknown(rawData.entries);
+          if (entries.length > 0) {
+            setManagedTalismans(entries);
+          } else {
+            const rawNames = Array.isArray(rawData.names)
+              ? rawData.names.filter((value): value is string => typeof value === 'string')
+              : [];
+            setManagedTalismans(toUniqueSortedTalismans(rawNames.map(name => ({
+              name,
+              color: 'Mavi',
+              heroClass: 'Savaşçı',
+            }))));
+          }
         } else {
           setManagedTalismans([]);
         }
@@ -753,7 +871,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const filteredManagedPotions = useMemo(() => {
     const queryText = potionListSearch.trim().toLocaleLowerCase('tr');
     if (!queryText) return managedPotions;
-    return managedPotions.filter(name => name.toLocaleLowerCase('tr').includes(queryText));
+    return managedPotions.filter(entry => entry.name.toLocaleLowerCase('tr').includes(queryText));
   }, [managedPotions, potionListSearch]);
 
   const filteredManagedMines = useMemo(() => {
@@ -771,7 +889,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const filteredManagedTalismans = useMemo(() => {
     const queryText = talismanListSearch.trim().toLocaleLowerCase('tr');
     if (!queryText) return managedTalismans;
-    return managedTalismans.filter(name => name.toLocaleLowerCase('tr').includes(queryText));
+    return managedTalismans.filter(entry => (
+      entry.name.toLocaleLowerCase('tr').includes(queryText) ||
+      entry.color.toLocaleLowerCase('tr').includes(queryText) ||
+      entry.heroClass.toLocaleLowerCase('tr').includes(queryText)
+    ));
   }, [managedTalismans, talismanListSearch]);
 
   // Delete user
@@ -1187,20 +1309,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  const handleOpenPotionImportPicker = () => {
-    potionImportInputRef.current?.click();
-  };
-
   const handleAddPotionsFromText = async () => {
-    const parsedNames = extractEnchantmentNamesFromText(potionTextInput);
-    if (parsedNames.length === 0) {
-      alert("Eklenebilir iksir adi bulunamadi. Her satira bir isim yazin.");
+    const parsedEntries = extractNamedLevelsFromText(potionTextInput, 1);
+    if (parsedEntries.length === 0) {
+      alert("Eklenebilir iksir adi bulunamadi. Her satira Isim:Seviye yazin.");
       return;
     }
 
-    const merged = toUniqueSortedEnchantments([...managedPotions, ...parsedNames]);
+    const merged = toUniqueSortedNamedLevels([...managedPotions, ...parsedEntries]);
     if (merged.length === managedPotions.length) {
-      alert("Listede zaten mevcut olan isimler girildi.");
+      alert("Listede zaten mevcut olan iksir isimleri girildi.");
       return;
     }
 
@@ -1210,58 +1328,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  const handleImportPotionsFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setPotionImporting(true);
-    try {
-      const fileNameLower = file.name.toLocaleLowerCase();
-      if (!fileNameLower.endsWith('.csv') && !fileNameLower.endsWith('.txt')) {
-        alert("Su an sadece CSV/TXT import destekleniyor. Excel dosyanizi CSV olarak kaydedip tekrar yukleyin.");
-        return;
-      }
-
-      const rawText = await file.text();
-      const parsedNames = extractEnchantmentNamesFromText(rawText);
-      if (parsedNames.length === 0) {
-        alert("Dosyada eklenebilir iksir adi bulunamadi.");
-        return;
-      }
-
-      const merged = toUniqueSortedEnchantments([...managedPotions, ...parsedNames]);
-      if (merged.length === managedPotions.length) {
-        alert("Dosyadaki tum isimler zaten listede mevcut.");
-        return;
-      }
-
-      await saveManagedPotions(merged);
-    } finally {
-      event.target.value = '';
-      setPotionImporting(false);
-    }
-  };
-
-  const handleStartEditPotion = (name: string) => {
-    setEditingPotion(name);
-    setEditingPotionInput(name);
+  const handleStartEditPotion = (entry: NamedLevelEntry) => {
+    setEditingPotion(entry.name);
+    setEditingPotionNameInput(entry.name);
+    setEditingPotionLevelInput(String(entry.level));
   };
 
   const handleCancelEditPotion = () => {
     setEditingPotion(null);
-    setEditingPotionInput('');
+    setEditingPotionNameInput('');
+    setEditingPotionLevelInput('1');
   };
 
   const handleSaveEditedPotion = async () => {
     if (!editingPotion) return;
-    const nextValue = normalizeEnchantmentName(editingPotionInput);
-    if (!nextValue) {
+    const nextName = normalizeEnchantmentName(editingPotionNameInput);
+    if (!nextName) {
       alert("Iksir adi bos birakilamaz.");
       return;
     }
+    const nextLevel = normalizeLevelValue(editingPotionLevelInput);
 
-    const nextList = managedPotions.map(name => (
-      name === editingPotion ? nextValue : name
+    const nextList = managedPotions.map(entry => (
+      entry.name === editingPotion ? { name: nextName, level: nextLevel } : entry
     ));
     const saved = await saveManagedPotions(nextList);
     if (saved) {
@@ -1270,7 +1359,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   };
 
   const handleDeletePotion = async (name: string) => {
-    const nextList = managedPotions.filter(itemName => itemName !== name);
+    const nextList = managedPotions.filter(entry => entry.name !== name);
     await saveManagedPotions(nextList);
     if (editingPotion === name) {
       handleCancelEditPotion();
@@ -1390,15 +1479,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   };
 
   const handleAddTalismansFromText = async () => {
-    const parsedNames = extractEnchantmentNamesFromText(talismanTextInput);
-    if (parsedNames.length === 0) {
-      alert("Eklenebilir tilsim adi bulunamadi. Her satira bir isim yazin.");
+    const parsedEntries = extractTalismansFromText(talismanTextInput);
+    if (parsedEntries.length === 0) {
+      alert("Eklenebilir tilsim kaydi bulunamadi. Her satira Isim:Renk:Sinif yazin.");
       return;
     }
 
-    const merged = toUniqueSortedEnchantments([...managedTalismans, ...parsedNames]);
+    const merged = toUniqueSortedTalismans([...managedTalismans, ...parsedEntries]);
     if (merged.length === managedTalismans.length) {
-      alert("Listede zaten mevcut olan tilsim isimleri girildi.");
+      alert("Listede zaten mevcut olan tilsim kayitlari girildi.");
       return;
     }
 
@@ -1408,26 +1497,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  const handleStartEditTalisman = (name: string) => {
-    setEditingTalisman(name);
-    setEditingTalismanInput(name);
+  const handleStartEditTalisman = (entry: TalismanEntry) => {
+    setEditingTalisman(`${entry.name}|${entry.color}|${entry.heroClass}`);
+    setEditingTalismanNameInput(entry.name);
+    setEditingTalismanColorInput(entry.color);
+    setEditingTalismanClassInput(entry.heroClass);
   };
 
   const handleCancelEditTalisman = () => {
     setEditingTalisman(null);
-    setEditingTalismanInput('');
+    setEditingTalismanNameInput('');
+    setEditingTalismanColorInput('Mavi');
+    setEditingTalismanClassInput('Savaşçı');
   };
 
   const handleSaveEditedTalisman = async () => {
     if (!editingTalisman) return;
-    const nextValue = normalizeEnchantmentName(editingTalismanInput);
-    if (!nextValue) {
+    const nextName = normalizeEnchantmentName(editingTalismanNameInput);
+    if (!nextName) {
       alert("Tilsim adi bos birakilamaz.");
       return;
     }
 
-    const nextList = managedTalismans.map(name => (
-      name === editingTalisman ? nextValue : name
+    const nextList = managedTalismans.map(entry => (
+      `${entry.name}|${entry.color}|${entry.heroClass}` === editingTalisman
+        ? { name: nextName, color: editingTalismanColorInput, heroClass: editingTalismanClassInput }
+        : entry
     ));
     const saved = await saveManagedTalismans(nextList);
     if (saved) {
@@ -1435,10 +1530,132 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  const handleDeleteTalisman = async (name: string) => {
-    const nextList = managedTalismans.filter(itemName => itemName !== name);
+  const handleDeleteTalisman = async (entryToDelete: TalismanEntry) => {
+    const nextList = managedTalismans.filter(entry => !(
+      entry.name === entryToDelete.name &&
+      entry.color === entryToDelete.color &&
+      entry.heroClass === entryToDelete.heroClass
+    ));
     await saveManagedTalismans(nextList);
-    if (editingTalisman === name) {
+    if (editingTalisman === `${entryToDelete.name}|${entryToDelete.color}|${entryToDelete.heroClass}`) {
+      handleCancelEditTalisman();
+    }
+  };
+
+  const buildAutocompleteExportFileName = (prefix: string) => {
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    return `${prefix}-${dateStamp}.txt`;
+  };
+
+  const downloadAutocompleteLines = (fileName: string, lines: string[]) => {
+    const normalizedLines = lines.map(line => line.trim()).filter(line => line !== '');
+    if (normalizedLines.length === 0) {
+      alert("Disa aktarilacak kayit bulunamadi.");
+      return;
+    }
+
+    const blob = new Blob([`\uFEFF${normalizedLines.join('\n')}`], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportEnchantments = () => {
+    downloadAutocompleteLines(
+      buildAutocompleteExportFileName('efsun-oto-tamamlama'),
+      managedEnchantments
+    );
+  };
+
+  const handleExportPotions = () => {
+    downloadAutocompleteLines(
+      buildAutocompleteExportFileName('iksir-oto-tamamlama'),
+      managedPotions.map(entry => `${entry.name}:${entry.level}`)
+    );
+  };
+
+  const handleExportMines = () => {
+    downloadAutocompleteLines(
+      buildAutocompleteExportFileName('maden-oto-tamamlama'),
+      managedMines.map(entry => `${entry.name}:${entry.level}`)
+    );
+  };
+
+  const handleExportGlasses = () => {
+    downloadAutocompleteLines(
+      buildAutocompleteExportFileName('gozluk-oto-tamamlama'),
+      managedGlasses.map(entry => `${entry.name}:${entry.level}`)
+    );
+  };
+
+  const handleExportTalismans = () => {
+    downloadAutocompleteLines(
+      buildAutocompleteExportFileName('tilsim-oto-tamamlama'),
+      managedTalismans.map(entry => `${entry.name}:${entry.color}:${entry.heroClass}`)
+    );
+  };
+
+  const handleBulkDeleteEnchantments = async () => {
+    if (managedEnchantments.length === 0) return;
+    if (!globalThis.confirm(`${managedEnchantments.length} efsun kaydi silinecek. Devam etmek istiyor musunuz?`)) return;
+
+    const saved = await saveManagedEnchantments([]);
+    if (saved) {
+      setEnchantmentTextInput('');
+      setEnchantmentListSearch('');
+      handleCancelEditEnchantment();
+    }
+  };
+
+  const handleBulkDeletePotions = async () => {
+    if (managedPotions.length === 0) return;
+    if (!globalThis.confirm(`${managedPotions.length} iksir kaydi silinecek. Devam etmek istiyor musunuz?`)) return;
+
+    const saved = await saveManagedPotions([]);
+    if (saved) {
+      setPotionTextInput('');
+      setPotionListSearch('');
+      handleCancelEditPotion();
+    }
+  };
+
+  const handleBulkDeleteMines = async () => {
+    if (managedMines.length === 0) return;
+    if (!globalThis.confirm(`${managedMines.length} maden kaydi silinecek. Devam etmek istiyor musunuz?`)) return;
+
+    const saved = await saveManagedMines([]);
+    if (saved) {
+      setMineTextInput('');
+      setMineListSearch('');
+      handleCancelEditMine();
+    }
+  };
+
+  const handleBulkDeleteGlasses = async () => {
+    if (managedGlasses.length === 0) return;
+    if (!globalThis.confirm(`${managedGlasses.length} gozluk kaydi silinecek. Devam etmek istiyor musunuz?`)) return;
+
+    const saved = await saveManagedGlasses([]);
+    if (saved) {
+      setGlassesTextInput('');
+      setGlassesListSearch('');
+      handleCancelEditGlasses();
+    }
+  };
+
+  const handleBulkDeleteTalismans = async () => {
+    if (managedTalismans.length === 0) return;
+    if (!globalThis.confirm(`${managedTalismans.length} tilsim kaydi silinecek. Devam etmek istiyor musunuz?`)) return;
+
+    const saved = await saveManagedTalismans([]);
+    if (saved) {
+      setTalismanTextInput('');
+      setTalismanListSearch('');
       handleCancelEditTalisman();
     }
   };
@@ -2171,6 +2388,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <Upload size={12} />
                       {enchantmentImporting ? 'Import...' : 'CSV/TXT Import'}
                     </button>
+                    <button
+                      onClick={handleExportEnchantments}
+                      disabled={enchantmentSaving || enchantmentImporting || managedEnchantments.length === 0}
+                      className="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Download size={12} />
+                      Disa Aktar
+                    </button>
+                    <button
+                      onClick={handleBulkDeleteEnchantments}
+                      disabled={enchantmentSaving || enchantmentImporting || managedEnchantments.length === 0}
+                      className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      Toplu Sil
+                    </button>
                   </div>
                 </div>
 
@@ -2244,21 +2477,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               </div>
 
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                <input
-                  ref={potionImportInputRef}
-                  type="file"
-                  accept=".csv,.txt,text/csv,text/plain"
-                  className="hidden"
-                  onChange={handleImportPotionsFile}
-                />
-
                 <h3 className="text-emerald-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   IKSIR OTO TAMAMLAMA
                 </h3>
 
                 <p className="text-[10px] text-slate-500 mb-2.5">
-                  Bu listedeki isimler iksir ekleme ekranindaki Iksir Ismi alaninda otomatik onerilerde gorunur.
+                  Her satira <span className="text-slate-300 font-semibold">Isim:Seviye</span> yazin. Ornek: <span className="text-slate-300">Alman Modeli Iksir:35</span>
                 </p>
 
                 <div className="space-y-2">
@@ -2266,25 +2491,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     value={potionTextInput}
                     onChange={e => setPotionTextInput(e.target.value)}
                     rows={4}
-                    placeholder="Her satira bir iksir yazin. Ornek:&#10;Yasam Iksiri&#10;Mana Iksiri"
+                    placeholder="Alman Modeli Iksir:35&#10;Yasam Iksiri:25"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500/50 placeholder-slate-600 resize-y"
                   />
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={handleAddPotionsFromText}
-                      disabled={potionSaving || potionImporting || !potionTextInput.trim()}
+                      disabled={potionSaving || !potionTextInput.trim()}
                       className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
                     >
                       <Plus size={12} />
                       Metinden Ekle
                     </button>
                     <button
-                      onClick={handleOpenPotionImportPicker}
-                      disabled={potionSaving || potionImporting}
-                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                      onClick={handleExportPotions}
+                      disabled={potionSaving || managedPotions.length === 0}
+                      className="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
                     >
-                      <Upload size={12} />
-                      {potionImporting ? 'Import...' : 'CSV/TXT Import'}
+                      <Download size={12} />
+                      Disa Aktar
+                    </button>
+                    <button
+                      onClick={handleBulkDeletePotions}
+                      disabled={potionSaving || managedPotions.length === 0}
+                      className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      Toplu Sil
                     </button>
                   </div>
                 </div>
@@ -2305,19 +2538,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     {filteredManagedPotions.length === 0 ? (
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek iksir yok.</div>
                     ) : (
-                      filteredManagedPotions.map(name => (
-                        <div key={name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
-                          {editingPotion === name ? (
+                      filteredManagedPotions.map(entry => (
+                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingPotion === entry.name ? (
                             <>
                               <input
                                 type="text"
-                                value={editingPotionInput}
-                                onChange={e => setEditingPotionInput(e.target.value)}
+                                value={editingPotionNameInput}
+                                onChange={e => setEditingPotionNameInput(e.target.value)}
                                 className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-500/50"
+                              />
+                              <input
+                                type="number"
+                                min="1"
+                                max="59"
+                                value={editingPotionLevelInput}
+                                onChange={e => setEditingPotionLevelInput(e.target.value)}
+                                className="w-16 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-500/50"
                               />
                               <button
                                 onClick={handleSaveEditedPotion}
-                                disabled={potionSaving || potionImporting}
+                                disabled={potionSaving}
                                 className="px-2 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1"
                               >
                                 <Save size={10} />
@@ -2325,7 +2566,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               </button>
                               <button
                                 onClick={handleCancelEditPotion}
-                                disabled={potionSaving || potionImporting}
+                                disabled={potionSaving}
                                 className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded transition-colors disabled:opacity-50"
                               >
                                 Vazgec
@@ -2333,18 +2574,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                             </>
                           ) : (
                             <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{name}</span>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <span className="px-2 py-0.5 rounded bg-emerald-900/35 border border-emerald-800/40 text-[10px] text-emerald-200 font-bold">Lv.{entry.level}</span>
                               <button
-                                onClick={() => handleStartEditPotion(name)}
-                                disabled={potionSaving || potionImporting}
+                                onClick={() => handleStartEditPotion(entry)}
+                                disabled={potionSaving}
                                 className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                               >
                                 <Pencil size={10} />
                                 Duzenle
                               </button>
                               <button
-                                onClick={() => handleDeletePotion(name)}
-                                disabled={potionSaving || potionImporting}
+                                onClick={() => handleDeletePotion(entry.name)}
+                                disabled={potionSaving}
                                 className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
                               >
                                 Sil
@@ -2384,6 +2626,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     >
                       <Plus size={12} />
                       Metinden Ekle
+                    </button>
+                    <button
+                      onClick={handleExportMines}
+                      disabled={mineSaving || managedMines.length === 0}
+                      className="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Download size={12} />
+                      Disa Aktar
+                    </button>
+                    <button
+                      onClick={handleBulkDeleteMines}
+                      disabled={mineSaving || managedMines.length === 0}
+                      className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      Toplu Sil
                     </button>
                   </div>
                 </div>
@@ -2493,6 +2751,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <Plus size={12} />
                       Metinden Ekle
                     </button>
+                    <button
+                      onClick={handleExportGlasses}
+                      disabled={glassesSaving || managedGlasses.length === 0}
+                      className="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Download size={12} />
+                      Disa Aktar
+                    </button>
+                    <button
+                      onClick={handleBulkDeleteGlasses}
+                      disabled={glassesSaving || managedGlasses.length === 0}
+                      className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      Toplu Sil
+                    </button>
                   </div>
                 </div>
 
@@ -2581,7 +2855,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </h3>
 
                 <p className="text-[10px] text-slate-500 mb-2.5">
-                  Bu listedeki isimler tilsım ekleme ekraninda otomatik onerilerde gorunur. Tilsim seviyesi sabit olarak 1 uygulanir.
+                  Her satira <span className="text-slate-300 font-semibold">Isim:Renk:Sinif</span> yazin. Ornek: <span className="text-slate-300">Depar:Kirmizi:Savasci</span>
                 </p>
 
                 <div className="space-y-2">
@@ -2589,7 +2863,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     value={talismanTextInput}
                     onChange={e => setTalismanTextInput(e.target.value)}
                     rows={4}
-                    placeholder="Her satira bir tilsim yazin. Ornek:&#10;Meteorit&#10;Direnc Kirma Alani (Mavi)"
+                    placeholder="Depar:Kirmizi:Savasci&#10;Direnc Kirma Alani:Mavi:Buyucu&#10;Direnc Kirma Alani:Kirmizi:Buyucu"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-violet-500/50 placeholder-slate-600 resize-y"
                   />
                   <div className="flex flex-wrap gap-2">
@@ -2600,6 +2874,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     >
                       <Plus size={12} />
                       Metinden Ekle
+                    </button>
+                    <button
+                      onClick={handleExportTalismans}
+                      disabled={talismanSaving || managedTalismans.length === 0}
+                      className="px-3 py-1.5 bg-blue-800 hover:bg-blue-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Download size={12} />
+                      Disa Aktar
+                    </button>
+                    <button
+                      onClick={handleBulkDeleteTalismans}
+                      disabled={talismanSaving || managedTalismans.length === 0}
+                      className="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Trash2 size={12} />
+                      Toplu Sil
                     </button>
                   </div>
                 </div>
@@ -2620,16 +2910,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     {filteredManagedTalismans.length === 0 ? (
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek tilsim yok.</div>
                     ) : (
-                      filteredManagedTalismans.map(name => (
-                        <div key={name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
-                          {editingTalisman === name ? (
+                      filteredManagedTalismans.map(entry => (
+                        <div key={`${entry.name}|${entry.color}|${entry.heroClass}`} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingTalisman === `${entry.name}|${entry.color}|${entry.heroClass}` ? (
                             <>
                               <input
                                 type="text"
-                                value={editingTalismanInput}
-                                onChange={e => setEditingTalismanInput(e.target.value)}
+                                value={editingTalismanNameInput}
+                                onChange={e => setEditingTalismanNameInput(e.target.value)}
                                 className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-violet-500/50"
                               />
+                              <select
+                                value={editingTalismanColorInput}
+                                onChange={e => setEditingTalismanColorInput(e.target.value as TalismanColor)}
+                                className="w-[86px] bg-slate-900/80 border border-slate-600 rounded px-1.5 py-1 text-xs text-slate-100 outline-none focus:border-violet-500/50"
+                              >
+                                <option value="Mavi">Mavi</option>
+                                <option value="Kırmızı">Kırmızı</option>
+                              </select>
+                              <select
+                                value={editingTalismanClassInput}
+                                onChange={e => setEditingTalismanClassInput(e.target.value as TalismanHeroClass)}
+                                className="w-[92px] bg-slate-900/80 border border-slate-600 rounded px-1.5 py-1 text-xs text-slate-100 outline-none focus:border-violet-500/50"
+                              >
+                                <option value="Savaşçı">Savaşçı</option>
+                                <option value="Büyücü">Büyücü</option>
+                                <option value="Şifacı">Şifacı</option>
+                              </select>
                               <button
                                 onClick={handleSaveEditedTalisman}
                                 disabled={talismanSaving}
@@ -2648,9 +2955,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                             </>
                           ) : (
                             <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{name}</span>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${entry.color === 'Kırmızı' ? 'bg-red-900/35 border-red-800/45 text-red-200' : 'bg-blue-900/35 border-blue-800/45 text-blue-200'}`}>{entry.color}</span>
+                              <span className="px-2 py-0.5 rounded bg-violet-900/35 border border-violet-800/45 text-[10px] text-violet-200 font-bold">{entry.heroClass}</span>
                               <button
-                                onClick={() => handleStartEditTalisman(name)}
+                                onClick={() => handleStartEditTalisman(entry)}
                                 disabled={talismanSaving}
                                 className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                               >
@@ -2658,7 +2967,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 Duzenle
                               </button>
                               <button
-                                onClick={() => handleDeleteTalisman(name)}
+                                onClick={() => handleDeleteTalisman(entry)}
                                 disabled={talismanSaving}
                                 className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
                               >

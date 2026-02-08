@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CATEGORY_OPTIONS, ItemData, SetItemLocation, GlobalSetInfo, isBindableCategory } from '../types';
+import { CATEGORY_OPTIONS, HeroClass, ItemData, SetItemLocation, GlobalSetInfo, isBindableCategory } from '../types';
 import { HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { X, BookOpen, CheckCircle, Circle, Layers, Sword, Globe, Lock } from 'lucide-react';
 import { SetDetailModal } from './SetDetailModal';
+
+type TalismanColor = 'Mavi' | 'Kırmızı';
+type TalismanHeroClass = Exclude<HeroClass, 'Tüm Sınıflar'>;
 
 interface ItemModalProps {
   isOpen: boolean;
@@ -13,11 +16,13 @@ interface ItemModalProps {
   existingItem: ItemData | null;
   enchantmentSuggestions?: string[];
   potionSuggestions?: string[];
+  potionLevelMap?: Map<string, number>;
   mineSuggestions?: string[];
   mineLevelMap?: Map<string, number>;
   glassesSuggestions?: string[];
   glassesLevelMap?: Map<string, number>;
   talismanSuggestions?: string[];
+  talismanOptionMap?: Map<string, { color: TalismanColor; heroClass: TalismanHeroClass }[]>;
   weaponTypeSuggestions?: string[];
   globalSetLookup?: Map<string, GlobalSetInfo>;
   globalSetMap?: Map<string, SetItemLocation[]>;
@@ -32,11 +37,13 @@ export const ItemModal: React.FC<ItemModalProps> = ({
   existingItem,
   enchantmentSuggestions = [],
   potionSuggestions = [],
+  potionLevelMap = new Map<string, number>(),
   mineSuggestions = [],
   mineLevelMap = new Map<string, number>(),
   glassesSuggestions = [],
   glassesLevelMap = new Map<string, number>(),
   talismanSuggestions = [],
+  talismanOptionMap = new Map<string, { color: TalismanColor; heroClass: TalismanHeroClass }[]>(),
   weaponTypeSuggestions = [],
   globalSetLookup,
   globalSetMap,
@@ -125,8 +132,6 @@ export const ItemModal: React.FC<ItemModalProps> = ({
     return info ? { info, globalKey } : null;
   }, [globalSetLookup, formData.category, formData.enchantment1, formData.enchantment2, formData.gender, formData.heroClass]);
 
-  if (!isOpen) return null;
-
   const handleNext = () => setStep((prev) => prev + 1);
   const handleBack = () => setStep((prev) => prev - 1);
 
@@ -167,7 +172,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
   const isStackable = formData.category === 'Maden' || formData.category === 'İksir' || formData.category === 'Diğer';
   // Determine if item is a Weapon
   const isWeapon = formData.category === 'Silah';
-  const isAutoLevelCategory = formData.category === 'Maden' || formData.category === 'Gözlük' || formData.category === 'Tılsım';
+  const isAutoLevelCategory = formData.category === 'Maden' || formData.category === 'Gözlük' || formData.category === 'Tılsım' || formData.category === 'İksir';
   const genderlessCategories = ['Silah', 'Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden', 'Diğer'];
   const classlessCategories = ['Gözlük', 'Yüzük', 'Kolye', 'İksir', 'Maden', 'Diğer'];
   const recipeBlockedCategories = ['Gözlük', 'Yüzük', 'Kolye'];
@@ -179,6 +184,12 @@ export const ItemModal: React.FC<ItemModalProps> = ({
   const isGenderless = genderlessCategories.includes(formData.category || '');
   // Categories that don't have class selection
   const isClassless = classlessCategories.includes(formData.category || '');
+  const talismanClassBaseOptions = useMemo(() => (
+    HERO_CLASSES.filter(cls => cls !== 'Tüm Sınıflar') as TalismanHeroClass[]
+  ), []);
+  const talismanColorBaseOptions = useMemo(() => (
+    ['Mavi', 'Kırmızı'] as TalismanColor[]
+  ), []);
   const shouldShowLevelInput = !isAutoLevelCategory;
   const shouldRenderMetaRow = shouldShowLevelInput || isBindableItemCategory || isStackable;
   const metaRowGridClass = shouldShowLevelInput
@@ -189,6 +200,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
     if (category === 'Tılsım') return 1;
     const key = nameValue.trim().toLocaleLowerCase('tr');
     if (!key) return fallbackLevel;
+    if (category === 'İksir') return potionLevelMap.get(key) ?? fallbackLevel;
     if (category === 'Maden') return mineLevelMap.get(key) ?? fallbackLevel;
     if (category === 'Gözlük') return glassesLevelMap.get(key) ?? fallbackLevel;
     return fallbackLevel;
@@ -197,13 +209,73 @@ export const ItemModal: React.FC<ItemModalProps> = ({
   const getPresetLevel = (category: string, nameValue: string): number | undefined => {
     const key = nameValue.trim().toLocaleLowerCase('tr');
     if (!key) return undefined;
+    if (category === 'İksir') return potionLevelMap.get(key);
     if (category === 'Maden') return mineLevelMap.get(key);
     if (category === 'Gözlük') return glassesLevelMap.get(key);
     return undefined;
   };
 
+  const potionPresetLevel = getPresetLevel('İksir', formData.enchantment1 || '');
   const minePresetLevel = getPresetLevel('Maden', formData.enchantment1 || '');
   const glassesPresetLevel = getPresetLevel('Gözlük', formData.enchantment1 || '');
+
+  const talismanMatchedOptions = useMemo(() => {
+    if (formData.category !== 'Tılsım') return [];
+    const key = (formData.enchantment1 || '').trim().toLocaleLowerCase('tr');
+    if (!key) return [];
+    return talismanOptionMap.get(key) || [];
+  }, [formData.category, formData.enchantment1, talismanOptionMap]);
+
+  const talismanClassOptions = useMemo(() => {
+    if (talismanMatchedOptions.length === 0) return talismanClassBaseOptions;
+    return talismanClassBaseOptions.filter(cls => talismanMatchedOptions.some(option => option.heroClass === cls));
+  }, [talismanClassBaseOptions, talismanMatchedOptions]);
+
+  const talismanResolvedClass = useMemo(() => {
+    if (formData.category !== 'Tılsım') return formData.heroClass as TalismanHeroClass;
+    const current = formData.heroClass as TalismanHeroClass | undefined;
+    if (current && talismanClassOptions.includes(current)) return current;
+    return talismanClassOptions[0] || 'Savaşçı';
+  }, [formData.category, formData.heroClass, talismanClassOptions]);
+
+  const talismanColorOptions = useMemo(() => {
+    if (talismanMatchedOptions.length === 0) return talismanColorBaseOptions;
+    const colors = talismanColorBaseOptions.filter(color => talismanMatchedOptions.some(option => (
+      option.heroClass === talismanResolvedClass && option.color === color
+    )));
+    return colors.length > 0 ? colors : talismanColorBaseOptions;
+  }, [talismanColorBaseOptions, talismanMatchedOptions, talismanResolvedClass]);
+
+  const talismanResolvedColor = useMemo(() => {
+    const current = formData.enchantment2 === 'Kırmızı' ? 'Kırmızı' : 'Mavi';
+    if (talismanColorOptions.includes(current)) return current;
+    return talismanColorOptions[0] || 'Mavi';
+  }, [formData.enchantment2, talismanColorOptions]);
+
+  const isTalismanClassLocked = formData.category === 'Tılsım' && talismanMatchedOptions.length > 0 && talismanClassOptions.length === 1;
+  const isTalismanColorLocked = formData.category === 'Tılsım' && talismanMatchedOptions.length > 0 && talismanColorOptions.length === 1;
+  const canSelectMaviForTalisman = talismanColorOptions.includes('Mavi');
+  const canSelectKirmiziForTalisman = talismanColorOptions.includes('Kırmızı');
+
+  useEffect(() => {
+    if (formData.category !== 'Tılsım') return;
+    const nextHeroClass = talismanResolvedClass;
+    const nextColor = talismanResolvedColor;
+    const nextLevel = 1;
+
+    if (
+      formData.heroClass !== nextHeroClass ||
+      formData.enchantment2 !== nextColor ||
+      formData.level !== nextLevel
+    ) {
+      setFormData(prev => ({
+        ...prev,
+        heroClass: nextHeroClass,
+        enchantment2: nextColor,
+        level: nextLevel,
+      }));
+    }
+  }, [formData.category, formData.heroClass, formData.enchantment2, formData.level, talismanResolvedClass, talismanResolvedColor]);
 
   const handleFieldBlur = () => {
     blurTimeout.current = setTimeout(() => setActiveField(null), 150);
@@ -225,6 +297,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({
     }
     setActiveField(null);
   };
+
+  if (!isOpen) return null;
 
   return (
     <>
@@ -311,7 +385,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                       onClick={() => {
                        const genderless = genderlessCategories.includes(cat);
                        const classless = classlessCategories.includes(cat);
-                       const nextLevel = (cat === 'Tılsım' || cat === 'Maden' || cat === 'Gözlük')
+                       const nextLevel = (cat === 'Tılsım' || cat === 'Maden' || cat === 'Gözlük' || cat === 'İksir')
                          ? 1
                          : Math.min(59, Math.max(1, Number(formData.level) || 1));
                         setFormData({
@@ -323,7 +397,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                           isBound: formData.type === 'Item' && isBindableCategory(cat) ? Boolean(formData.isBound) : false,
                           // Reset enchantments when switching category
                           enchantment1: '',
-                          enchantment2: '',
+                          enchantment2: cat === 'Tılsım' ? 'Mavi' : '',
                         });
                       handleNext();
                     }}
@@ -413,8 +487,10 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                   <div className="flex gap-0.5 md:gap-1 bg-slate-900 rounded p-0.5 md:p-1 border border-slate-700/70">
                     {isClassless ? (
                       <div className="px-2 py-1 text-[10px] md:text-xs rounded bg-blue-600 text-white flex-grow text-center">Tüm Sınıflar</div>
+                    ) : (formData.category === 'Tılsım' && isTalismanClassLocked) ? (
+                      <div className="px-2 py-1 text-[10px] md:text-xs rounded bg-violet-600 text-white flex-grow text-center">{talismanResolvedClass}</div>
                     ) : (
-                      HERO_CLASSES.filter(cls => cls !== 'Tüm Sınıflar').map(cls => {
+                      (formData.category === 'Tılsım' ? talismanClassOptions : HERO_CLASSES.filter(cls => cls !== 'Tüm Sınıflar')).map(cls => {
                         const activeColor = cls === 'Savaşçı' ? 'bg-blue-600 text-white' : cls === 'Büyücü' ? 'bg-red-600 text-white' : 'bg-green-600 text-white';
                         return (
                         <button
@@ -620,32 +696,59 @@ export const ItemModal: React.FC<ItemModalProps> = ({
               ) : formData.category === 'İksir' ? (
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-emerald-400">İksir İsmi</label>
-                  <div className="relative">
+                  <div className="flex items-stretch rounded border border-emerald-900/60 bg-slate-900 overflow-visible focus-within:border-emerald-500">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Örn: Alman Modeli İksir, Yaşam İksiri..."
+                        value={formData.enchantment1}
+                        maxLength={100}
+                        onChange={(e) => {
+                          const nextName = e.target.value;
+                          const fallbackLevel = Math.min(59, Math.max(1, Number(formData.level) || 1));
+                          setFormData({
+                            ...formData,
+                            enchantment1: nextName,
+                            enchantment2: '',
+                            level: resolveAutoLevel('İksir', nextName, fallbackLevel),
+                          });
+                        }}
+                        onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
+                        onBlur={handleFieldBlur}
+                        className="w-full bg-transparent border-0 px-2 py-1 text-xs sm:text-sm focus:outline-none placeholder-slate-600 text-emerald-100"
+                      />
+                      {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                        <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
+                          {filteredSuggestions.map(s => (
+                            <button
+                              key={s}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleSuggestionClick('enchantment1', s)}
+                              className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input
-                      type="text"
-                      placeholder="Örn: Şarap İksir, Adalı Emsali İksir..."
-                      value={formData.enchantment1}
-                      maxLength={100}
-                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value, enchantment2: ''})}
-                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
-                      onBlur={handleFieldBlur}
-                      className="w-full bg-slate-900 border border-emerald-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-emerald-500 focus:outline-none placeholder-slate-600 text-emerald-100"
+                      type="number"
+                      min="1"
+                      max="59"
+                      placeholder="Lv"
+                      aria-label="İksir seviyesi"
+                      value={potionPresetLevel ?? Math.min(59, Math.max(1, Number(formData.level) || 1))}
+                      onChange={(e) => setFormData({ ...formData, level: Math.min(59, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+                      disabled={potionPresetLevel !== undefined}
+                      className={`w-[72px] shrink-0 border-0 border-l px-2 py-1 text-center text-xs sm:text-sm focus:outline-none ${
+                        potionPresetLevel !== undefined
+                          ? 'bg-slate-800 border-emerald-700/40 text-emerald-300 cursor-not-allowed'
+                          : 'bg-transparent border-emerald-700/60 text-emerald-100'
+                      }`}
+                      title={potionPresetLevel !== undefined ? 'Bu iksirin seviyesi admin panelinden otomatik gelir.' : 'Bu iksir veritabaninda yok, seviyeyi elle girebilirsiniz.'}
                     />
-                    {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
-                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
-                        {filteredSuggestions.map(s => (
-                          <button
-                            key={s}
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => handleSuggestionClick('enchantment1', s)}
-                            className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               ) : formData.category === 'Gözlük' ? (
@@ -709,45 +812,69 @@ export const ItemModal: React.FC<ItemModalProps> = ({
               ) : formData.category === 'Tılsım' ? (
                 <div className="space-y-2">
                   <label className="block text-xs font-bold text-purple-400">Tılsım İsmi</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Örn: Meteorit, Direnç Kırma Alanı (Mavi)"
-                      value={formData.enchantment1}
-                      maxLength={100}
-                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value, level: 1})}
-                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
-                      onBlur={handleFieldBlur}
-                      className="w-full bg-slate-900 border border-purple-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600 text-purple-100"
-                    />
-                    {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
-                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
-                        {filteredSuggestions.map(s => (
-                          <button
-                            key={s}
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => handleSuggestionClick('enchantment1', s)}
-                            className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
-                          >
-                            {s}
-                          </button>
-                        ))}
+                  <div className="flex items-stretch rounded border border-purple-900/60 bg-slate-900 overflow-visible focus-within:border-purple-500">
+                    <div className="relative min-w-0 flex-1">
+                      <input
+                        type="text"
+                        placeholder="Örn: Meteorit, Direnç Kırma Alanı"
+                        value={formData.enchantment1}
+                        maxLength={100}
+                        onChange={(e) => setFormData({...formData, enchantment1: e.target.value, level: 1})}
+                        onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
+                        onBlur={handleFieldBlur}
+                        className="w-full bg-transparent border-0 px-2 py-1 text-xs sm:text-sm focus:outline-none placeholder-slate-600 text-purple-100"
+                      />
+                      {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                        <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
+                          {filteredSuggestions.map(s => (
+                            <button
+                              key={s}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => handleSuggestionClick('enchantment1', s)}
+                              className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="w-[88px] sm:w-[126px] shrink-0 border-l border-purple-700/60 bg-slate-900/70 p-1">
+                      <div className="flex h-full bg-slate-900/80 rounded p-0.5 md:p-1 gap-0.5 md:gap-1 border border-slate-700/70">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, enchantment2: 'Mavi' })}
+                          disabled={!canSelectMaviForTalisman || isTalismanColorLocked}
+                          className={`flex-1 text-[10px] md:text-xs py-0.5 md:py-1 rounded transition-all ${
+                            talismanResolvedColor === 'Mavi'
+                              ? 'bg-blue-800 text-white font-bold shadow-[0_0_12px_rgba(30,58,138,0.45)] ring-1 ring-blue-300/60'
+                              : (!canSelectMaviForTalisman ? 'bg-slate-800/70 text-slate-500 cursor-not-allowed' : 'bg-blue-950/45 text-blue-300 hover:bg-blue-900/60')
+                          }`}
+                          title="Mavi"
+                          aria-label="Mavi"
+                        >
+                          <span className="hidden sm:inline">Mavi</span>
+                          <span className="sm:hidden">M</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, enchantment2: 'Kırmızı' })}
+                          disabled={!canSelectKirmiziForTalisman || isTalismanColorLocked}
+                          className={`flex-1 text-[10px] md:text-xs py-0.5 md:py-1 rounded transition-all ${
+                            talismanResolvedColor === 'Kırmızı'
+                              ? 'bg-red-700 text-white font-bold shadow-[0_0_12px_rgba(185,28,28,0.45)] ring-1 ring-red-300/60'
+                              : (!canSelectKirmiziForTalisman ? 'bg-slate-800/70 text-slate-500 cursor-not-allowed' : 'bg-red-950/45 text-red-300 hover:bg-red-900/60')
+                          }`}
+                          title="Kırmızı"
+                          aria-label="Kırmızı"
+                        >
+                          <span className="hidden sm:inline">Kırmızı</span>
+                          <span className="sm:hidden">K</span>
+                        </button>
                       </div>
-                    )}
-                  </div>
-                  <label className="block text-[10px] md:text-xs font-bold text-purple-400 mt-1 md:mt-2">Kademe</label>
-                  <div className="flex bg-slate-900 rounded p-0.5 md:p-1 gap-0.5 md:gap-1">
-                    {['I', 'II', 'III'].map(tier => (
-                      <button
-                        key={tier}
-                        type="button"
-                        onClick={() => setFormData({...formData, enchantment2: tier})}
-                        className={`flex-1 text-xs sm:text-sm py-1.5 rounded font-bold transition-colors ${formData.enchantment2 === tier ? 'bg-purple-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                      >
-                        {tier}
-                      </button>
-                    ))}
+                    </div>
                   </div>
                 </div>
               ) : (
