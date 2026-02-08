@@ -13,8 +13,30 @@ service cloud.firestore {
       );
     }
 
+    function isAdminEmail(email) {
+      return email is string && (
+        email == 'yvzsltn61@gmail.com' ||
+        (
+          exists(/databases/$(database)/documents/metadata/admins) &&
+          email in get(/databases/$(database)/documents/metadata/admins).data.emails
+        )
+      );
+    }
+
+    function isBlockedUserByUid(uid) {
+      return uid is string &&
+        exists(/databases/$(database)/documents/users/$(uid)) &&
+        ('blockInfo' in get(/databases/$(database)/documents/users/$(uid)).data) &&
+        (get(/databases/$(database)/documents/users/$(uid)).data.blockInfo.isBlocked == true);
+    }
+
+    function isCurrentUserBlocked() {
+      return request.auth != null && isBlockedUserByUid(request.auth.uid);
+    }
+
     function canDataEntry() {
-      return request.auth != null && (
+      return request.auth != null &&
+        !isCurrentUserBlocked() && (
         !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
         !('permissions' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
         !('canDataEntry' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions) ||
@@ -23,7 +45,8 @@ service cloud.firestore {
     }
 
     function canGlobalSearch() {
-      return request.auth != null && (
+      return request.auth != null &&
+        !isCurrentUserBlocked() && (
         !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
         !('permissions' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
         !('canGlobalSearch' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions) ||
@@ -148,7 +171,10 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow read: if request.auth != null && (
         isAdmin() ||
-        request.auth.uid in resource.data.participants
+        (
+          !isCurrentUserBlocked() &&
+          request.auth.uid in resource.data.participants
+        )
       );
       allow create: if request.auth != null &&
         request.resource.data.senderUid == request.auth.uid &&
@@ -162,11 +188,12 @@ service cloud.firestore {
         request.auth.uid in request.resource.data.readBy &&
         request.auth.uid in request.resource.data.participants &&
         request.resource.data.receiverUid in request.resource.data.participants &&
-        (isAdmin() || isDirectMessagingEnabled()) &&
+        (isAdmin() || (!isCurrentUserBlocked() && isDirectMessagingEnabled())) &&
         receiverAcceptsMessage(request.resource.data.receiverUid);
       allow update: if request.auth != null && (
         isAdmin() ||
         (
+          !isCurrentUserBlocked() &&
           request.auth.uid == resource.data.receiverUid &&
           request.resource.data.diff(resource.data).changedKeys().hasOnly(['readBy', 'readAt']) &&
           request.resource.data.readBy is list &&
@@ -179,6 +206,7 @@ service cloud.firestore {
           request.resource.data.createdAt == resource.data.createdAt
         ) ||
         (
+          !isCurrentUserBlocked() &&
           request.auth.uid in resource.data.participants &&
           request.resource.data.diff(resource.data).changedKeys().hasOnly(['deletedFor']) &&
           request.resource.data.deletedFor is list &&
@@ -192,8 +220,42 @@ service cloud.firestore {
       );
       allow delete: if request.auth != null && (
         isAdmin() ||
-        request.auth.uid in resource.data.participants
+        (!isCurrentUserBlocked() && request.auth.uid in resource.data.participants)
       );
+    }
+
+    // Notifications routed to admin users (blocked-account contact templates)
+    match /adminNotifications/{notificationId} {
+      allow read: if request.auth != null && (
+        isAdmin() ||
+        request.auth.token.email == resource.data.recipientEmail ||
+        request.auth.uid == resource.data.senderUid
+      );
+      allow create: if request.auth != null && (
+        isAdmin() ||
+        (
+          isCurrentUserBlocked() &&
+          request.resource.data.type == 'blocked_contact' &&
+          request.resource.data.senderUid == request.auth.uid &&
+          request.resource.data.recipientEmail is string &&
+          isAdminEmail(request.resource.data.recipientEmail) &&
+          request.resource.data.templateId is string &&
+          request.resource.data.templateLabel is string &&
+          request.resource.data.templateMessage is string &&
+          request.resource.data.createdAt is number &&
+          request.resource.data.read == false
+        )
+      );
+      allow update: if request.auth != null && (
+        isAdmin() ||
+        (
+          request.auth.token.email == resource.data.recipientEmail &&
+          request.resource.data.diff(resource.data).changedKeys().hasOnly(['read', 'readAt']) &&
+          request.resource.data.read == true &&
+          request.resource.data.readAt is number
+        )
+      );
+      allow delete: if isAdmin();
     }
 
     // Deny everything else

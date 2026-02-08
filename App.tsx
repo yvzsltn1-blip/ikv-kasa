@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS } from './types';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
@@ -44,6 +44,34 @@ const DEFAULT_MESSAGE_SETTINGS = {
   dailySendLimit: 5,
 };
 
+const DEFAULT_USER_BLOCK_INFO: UserBlockInfo = {
+  isBlocked: false,
+};
+
+type BlockedContactTemplate = {
+  id: BlockContactTemplateId;
+  label: string;
+  message: string;
+};
+
+const BLOCKED_CONTACT_TEMPLATES: BlockedContactTemplate[] = [
+  {
+    id: 'appeal_review',
+    label: 'Hesabimin tekrar incelenmesini talep ediyorum.',
+    message: 'Merhaba, hesabimin engel durumunun tekrar incelenmesini talep ediyorum.',
+  },
+  {
+    id: 'appeal_mistake',
+    label: 'Yanlis anlasilma olabilecegini dusunuyorum.',
+    message: 'Merhaba, hesabimin yanlis anlasilma nedeniyle engellenmis olabilecegini dusunuyorum. Kontrol eder misiniz?',
+  },
+  {
+    id: 'request_contact',
+    label: 'Yonetici ile iletisim kurmak istiyorum.',
+    message: 'Merhaba, engel sebebini ogrenmek ve gerekli duzeltmeyi yapmak icin yonetici ile iletisim kurmak istiyorum.',
+  },
+];
+
 const normalizeUserPermissions = (raw: unknown): UserPermissions => {
   const fromDoc = (raw && typeof raw === 'object') ? raw as Partial<UserPermissions> : {};
   return {
@@ -59,6 +87,19 @@ const normalizeMessageSettings = (raw: unknown) => {
     dailySendLimit: (typeof limit === 'number' && Number.isFinite(limit) && limit > 0)
       ? Math.floor(limit)
       : DEFAULT_MESSAGE_SETTINGS.dailySendLimit,
+  };
+};
+
+const normalizeUserBlockInfo = (raw: unknown): UserBlockInfo => {
+  const fromDoc = (raw && typeof raw === 'object') ? raw as Partial<UserBlockInfo> : {};
+  return {
+    isBlocked: fromDoc.isBlocked === true,
+    reasonCode: typeof fromDoc.reasonCode === 'string' ? fromDoc.reasonCode : undefined,
+    reasonLabel: typeof fromDoc.reasonLabel === 'string' ? fromDoc.reasonLabel : undefined,
+    blockedAt: (typeof fromDoc.blockedAt === 'number' && Number.isFinite(fromDoc.blockedAt) && fromDoc.blockedAt > 0)
+      ? fromDoc.blockedAt
+      : undefined,
+    blockedByUid: typeof fromDoc.blockedByUid === 'string' ? fromDoc.blockedByUid : undefined,
   };
 };
 
@@ -80,6 +121,7 @@ export default function App() {
   // --- Auth & Loading State ---
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [userPermissions, setUserPermissions] = useState<UserPermissions>(DEFAULT_USER_PERMISSIONS);
+  const [userBlockInfo, setUserBlockInfo] = useState<UserBlockInfo>(DEFAULT_USER_BLOCK_INFO);
   const [loading, setLoading] = useState(true);
 
   // Global State
@@ -110,6 +152,7 @@ export default function App() {
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
   const [isMessagingOpen, setIsMessagingOpen] = useState(false);
   const [unreadMessageSenderCount, setUnreadMessageSenderCount] = useState(0);
+  const [unreadAdminNotificationCount, setUnreadAdminNotificationCount] = useState(0);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
   const [isMobileAccountMenuOpen, setIsMobileAccountMenuOpen] = useState(false);
@@ -143,6 +186,9 @@ export default function App() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [accessAlert, setAccessAlert] = useState<AccessAlert | null>(null);
   const [systemAlert, setSystemAlert] = useState<SystemAlert | null>(null);
+  const [blockedTemplateId, setBlockedTemplateId] = useState<BlockContactTemplateId>(BLOCKED_CONTACT_TEMPLATES[0].id);
+  const [blockedMessageSending, setBlockedMessageSending] = useState(false);
+  const [blockedMessageFeedback, setBlockedMessageFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const toastTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showToast = (msg: string) => {
@@ -154,6 +200,7 @@ export default function App() {
 
   const canEditData = userRole === 'admin' || userPermissions.canDataEntry;
   const canUseGlobalSearch = userRole === 'admin' || userPermissions.canGlobalSearch;
+  const isBlockedUser = userRole === 'user' && userBlockInfo.isBlocked;
 
   const showAccessAlert = (kind: AccessAlert['kind']) => {
     if (kind === 'dataEntry') {
@@ -211,6 +258,7 @@ export default function App() {
 
         try {
           const docSnap = await getDoc(userDocRef);
+          let resolvedBlockInfo = DEFAULT_USER_BLOCK_INFO;
 
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -218,7 +266,9 @@ export default function App() {
             const loadedAccounts = rawAccounts.map(migrateAccount);
             const resolvedPermissions = normalizeUserPermissions(data.permissions);
             const resolvedMessageSettings = normalizeMessageSettings(data.messageSettings);
+            resolvedBlockInfo = normalizeUserBlockInfo(data.blockInfo);
             setUserPermissions(resolvedPermissions);
+            setUserBlockInfo(resolvedBlockInfo);
 
             // Load username
             if (data.username) {
@@ -258,6 +308,14 @@ export default function App() {
               setDoc(userDocRef, { messageSettings: resolvedMessageSettings }, { merge: true }).catch(() => {});
             }
 
+            if (
+              !data.blockInfo ||
+              typeof data.blockInfo !== 'object' ||
+              typeof data.blockInfo.isBlocked !== 'boolean'
+            ) {
+              setDoc(userDocRef, { blockInfo: DEFAULT_USER_BLOCK_INFO }, { merge: true }).catch(() => {});
+            }
+
             if (loadedAccounts.length > 0) {
               // Check if migration happened and auto-save
               const needsMigration = rawAccounts.some((acc: any) => !acc.servers || acc.servers.length === 0);
@@ -269,10 +327,12 @@ export default function App() {
                 await setDoc(userDocRef, { accounts: loadedAccounts }, { merge: true });
               }
             } else {
-              initializeDefault(userDocRef);
+              await initializeDefault(userDocRef);
             }
           } else {
             await initializeDefault(userDocRef);
+            resolvedBlockInfo = DEFAULT_USER_BLOCK_INFO;
+            setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
           }
 
           // Admin kontrolü: hardcoded email + Firestore metadata/admins
@@ -299,6 +359,9 @@ export default function App() {
             } catch { /* admins doc may not exist */ }
           }
           setUserRole(isAdmin ? 'admin' : 'user');
+          if (isAdmin && resolvedBlockInfo.isBlocked) {
+            setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
+          }
 
           // Global efsun önerilerini yükle
           try {
@@ -328,7 +391,12 @@ export default function App() {
         setSocialLink('');
         setGlobalEnchantments([]);
         setUserPermissions(DEFAULT_USER_PERMISSIONS);
+        setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
+        setBlockedTemplateId(BLOCKED_CONTACT_TEMPLATES[0].id);
+        setBlockedMessageFeedback(null);
         setUnreadMessageSenderCount(0);
+        setUnreadAdminNotificationCount(0);
+        setShowAdminPanel(false);
         setLoading(false);
       }
     });
@@ -371,6 +439,26 @@ export default function App() {
     return () => unsubscribe();
   }, [userRole]);
 
+  useEffect(() => {
+    const emailLower = (auth.currentUser?.email || '').trim().toLowerCase();
+    if (!emailLower || userRole !== 'admin') {
+      setUnreadAdminNotificationCount(0);
+      return;
+    }
+
+    const notificationsQuery = query(collection(db, "adminNotifications"), where("recipientEmail", "==", emailLower));
+    const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
+      let unreadCount = 0;
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data() as { read?: unknown };
+        if (data.read !== true) unreadCount += 1;
+      });
+      setUnreadAdminNotificationCount(unreadCount);
+    });
+
+    return () => unsubscribe();
+  }, [userRole]);
+
   const initializeDefault = async (docRef: any) => {
     const newId = crypto.randomUUID();
     const defaultAccount = createAccount(newId, 'Hesap 1');
@@ -383,11 +471,13 @@ export default function App() {
       createdAt: Date.now(),
       permissions: DEFAULT_USER_PERMISSIONS,
       messageSettings: DEFAULT_MESSAGE_SETTINGS,
+      blockInfo: DEFAULT_USER_BLOCK_INFO,
     });
 
     setAccounts(initialAccounts);
     setSelectedAccountId(newId);
     setUserPermissions(DEFAULT_USER_PERMISSIONS);
+    setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
   };
 
   const openUsernameModal = () => {
@@ -802,6 +892,98 @@ export default function App() {
     }
   };
 
+  const markAdminNotificationsRead = async () => {
+    const emailLower = (auth.currentUser?.email || '').trim().toLowerCase();
+    if (!emailLower || userRole !== 'admin') return;
+    try {
+      const notificationsQuery = query(collection(db, "adminNotifications"), where("recipientEmail", "==", emailLower));
+      const snapshot = await getDocs(notificationsQuery);
+      const updatePromises: Promise<void>[] = [];
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data() as { read?: unknown };
+        if (data.read !== true) {
+          updatePromises.push(updateDoc(docSnap.ref, { read: true, readAt: Date.now() }));
+        }
+      });
+      await Promise.all(updatePromises);
+    } catch (error) {
+      console.warn("Admin bildirimleri okunmus yapilamadi:", error);
+    }
+  };
+
+  const handleOpenAdminPanel = () => {
+    setShowAdminPanel(true);
+    markAdminNotificationsRead().catch(() => {});
+  };
+
+  const handleSendBlockedTemplateMessage = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || blockedMessageSending) return;
+
+    const selectedTemplate = BLOCKED_CONTACT_TEMPLATES.find(template => template.id === blockedTemplateId) || BLOCKED_CONTACT_TEMPLATES[0];
+    setBlockedMessageSending(true);
+    setBlockedMessageFeedback(null);
+
+    try {
+      const adminEmailSet = new Set<string>(['yvzsltn61@gmail.com']);
+      try {
+        const adminsDoc = await getDoc(doc(db, "metadata", "admins"));
+        if (adminsDoc.exists()) {
+          const emails = adminsDoc.data().emails;
+          if (Array.isArray(emails)) {
+            emails.forEach(value => {
+              if (typeof value === 'string' && value.trim()) {
+                adminEmailSet.add(value.trim().toLowerCase());
+              }
+            });
+          }
+        }
+      } catch {
+        // metadata/admins missing olsa da kalici admin adresi ile devam edilir.
+      }
+
+      if (adminEmailSet.size === 0) {
+        throw new Error('NO_ADMIN_RECIPIENT');
+      }
+
+      const currentUserDoc = await getDoc(doc(db, "users", currentUser.uid));
+      const currentUserData = currentUserDoc.exists()
+        ? currentUserDoc.data() as { username?: unknown }
+        : {};
+      const senderDisplay = (typeof currentUserData.username === 'string' && currentUserData.username.trim())
+        ? currentUserData.username.trim()
+        : (currentUser.email || currentUser.uid);
+      const senderEmail = (currentUser.email || '').trim().toLowerCase();
+      const now = Date.now();
+
+      await Promise.all(Array.from(adminEmailSet).map(recipientEmail => setDoc(doc(collection(db, "adminNotifications")), {
+        type: 'blocked_contact',
+        recipientEmail,
+        senderUid: currentUser.uid,
+        senderDisplay,
+        senderEmail,
+        templateId: selectedTemplate.id,
+        templateLabel: selectedTemplate.label,
+        templateMessage: selectedTemplate.message,
+        createdAt: now,
+        read: false,
+      })));
+
+      setBlockedMessageFeedback({
+        type: 'success',
+        message: 'Mesajiniz yoneticiye iletildi. Inceleme yapildiginda bilgilendirileceksiniz.',
+      });
+    } catch (error) {
+      console.error("Engelli kullanici bildirim gonderme hatasi:", error);
+      setBlockedMessageFeedback({
+        type: 'error',
+        message: 'Mesaj gonderilemedi. Lutfen daha sonra tekrar deneyin.',
+      });
+    } finally {
+      setBlockedMessageSending(false);
+    }
+  };
+
   // --- Auth Handlers ---
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
@@ -816,7 +998,11 @@ export default function App() {
         setIsRecipeBookOpen(false);
         setIsMessagingOpen(false);
         setUnreadMessageSenderCount(0);
+        setUnreadAdminNotificationCount(0);
         setModalOpen(false);
+        setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
+        setBlockedTemplateId(BLOCKED_CONTACT_TEMPLATES[0].id);
+        setBlockedMessageFeedback(null);
     } catch (error) {
         console.error("Çıkış hatası:", error);
     }
@@ -1768,6 +1954,84 @@ export default function App() {
     return <LoginScreen onLogin={handleLogin} />;
   }
 
+  if (isBlockedUser) {
+    const selectedTemplate = BLOCKED_CONTACT_TEMPLATES.find(template => template.id === blockedTemplateId) || BLOCKED_CONTACT_TEMPLATES[0];
+    return (
+      <div className="min-h-[100dvh] w-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(220,38,38,0.2),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom,rgba(14,116,144,0.16),transparent_60%)]" />
+        <div className="relative z-10 w-full max-w-xl rounded-2xl border border-red-800/45 bg-gradient-to-b from-slate-900/95 via-slate-900/90 to-slate-950/95 shadow-[0_28px_80px_rgba(2,6,23,0.75)] overflow-hidden">
+          <div className="px-6 py-5 border-b border-red-900/40 bg-gradient-to-r from-red-950/45 to-slate-900/40">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl border border-red-700/45 bg-red-900/25">
+                <Lock size={18} className="text-red-300" />
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-lg">Hesabiniz Gecici Olarak Engellendi</h2>
+                <p className="text-red-200/80 text-xs mt-0.5">Bu hesap icin erisim yonetici tarafindan kisitlandi.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            <div className="rounded-xl border border-red-900/40 bg-red-950/20 p-3">
+              <p className="text-[11px] uppercase tracking-wider text-red-300/80 font-semibold">Engel Nedeni</p>
+              <p className="text-sm text-red-100 mt-1">{userBlockInfo.reasonLabel || 'Yonetici incelemesi devam ediyor.'}</p>
+              {userBlockInfo.blockedAt && (
+                <p className="text-[10px] text-red-200/70 mt-1">Tarih: {new Date(userBlockInfo.blockedAt).toLocaleString('tr-TR')}</p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-cyan-900/45 bg-cyan-950/20 p-3 space-y-2">
+              <p className="text-cyan-200 text-xs font-semibold">Yoneticiyle Iletisim (Kalıp Mesaj)</p>
+              <p className="text-[11px] text-slate-400">Serbest mesaj yazamazsiniz. Asagidaki hazir metinlerden birini gonderebilirsiniz.</p>
+              <select
+                value={blockedTemplateId}
+                onChange={(e) => {
+                  setBlockedTemplateId(e.target.value as BlockContactTemplateId);
+                  setBlockedMessageFeedback(null);
+                }}
+                className="w-full bg-slate-950/85 border border-slate-700/60 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                disabled={blockedMessageSending}
+              >
+                {BLOCKED_CONTACT_TEMPLATES.map(template => (
+                  <option key={template.id} value={template.id}>{template.label}</option>
+                ))}
+              </select>
+              <div className="rounded-lg border border-slate-700/60 bg-slate-950/75 px-3 py-2 text-xs text-slate-300 leading-relaxed">
+                {selectedTemplate.message}
+              </div>
+              <button
+                onClick={handleSendBlockedTemplateMessage}
+                disabled={blockedMessageSending}
+                className="w-full py-2 rounded-lg text-xs font-bold border border-cyan-700/50 bg-cyan-900/30 text-cyan-100 hover:bg-cyan-800/40 transition-colors disabled:opacity-60"
+              >
+                {blockedMessageSending ? 'Gonderiliyor...' : 'Mesaji Yoneticiye Gonder'}
+              </button>
+              {blockedMessageFeedback && (
+                <div className={`rounded-lg border px-3 py-2 text-xs ${
+                  blockedMessageFeedback.type === 'success'
+                    ? 'border-emerald-800/50 bg-emerald-950/25 text-emerald-200'
+                    : 'border-red-900/50 bg-red-950/25 text-red-200'
+                }`}>
+                  {blockedMessageFeedback.message}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="w-full py-2.5 rounded-lg text-sm font-bold border border-red-800/50 bg-red-950/35 text-red-200 hover:bg-red-900/45 transition-colors flex items-center justify-center gap-2"
+            >
+              <LogOut size={15} />
+              Cikis Yap
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (showAdminPanel && userRole === 'admin') {
     return <AdminPanel onBack={() => setShowAdminPanel(false)} />;
   }
@@ -1993,11 +2257,18 @@ export default function App() {
                       </button>
                       {userRole === 'admin' && (
                         <button
-                          onClick={() => { setShowAdminPanel(true); setIsMobileQuickMenuOpen(false); }}
+                          onClick={() => { handleOpenAdminPanel(); setIsMobileQuickMenuOpen(false); }}
                           className="w-full rounded-lg border border-red-900/35 bg-red-950/20 px-2.5 py-2 text-left text-[11px] text-red-200 active:bg-red-900/30 flex items-center justify-between gap-2"
                         >
                           <span>Admin Paneli</span>
-                          <Crown size={13} className="text-red-300" />
+                          <div className="relative">
+                            <Crown size={13} className="text-red-300" />
+                            {unreadAdminNotificationCount > 0 && (
+                              <span className="absolute -top-1.5 -right-1.5 min-w-[13px] h-3.5 px-1 rounded-full bg-amber-500 text-black text-[8px] leading-3.5 font-bold text-center border border-amber-200/80">
+                                {unreadAdminNotificationCount > 99 ? '99+' : unreadAdminNotificationCount}
+                              </span>
+                            )}
+                          </div>
                         </button>
                       )}
                       <button
@@ -2168,7 +2439,7 @@ export default function App() {
               </button>
               <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-2 xl:px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`} title="Kaydet"><Save size={13} /><span className="hidden xl:inline">Kaydet</span></button>
               {userRole === 'admin' && (
-                <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all" title="Admin"><Crown size={13} /><span className="hidden xl:inline">Admin</span></button>
+                <button onClick={handleOpenAdminPanel} className="relative flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all" title="Admin"><Crown size={13} /><span className="hidden xl:inline">Admin</span>{unreadAdminNotificationCount > 0 && <span className="absolute -top-1.5 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-black text-[9px] leading-4 font-bold text-center border border-amber-200/80">{unreadAdminNotificationCount > 99 ? '99+' : unreadAdminNotificationCount}</span>}</button>
               )}
               <button onClick={handleLogout} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-md border border-transparent hover:border-red-800/30 transition-all" title="Çıkış"><LogOut size={14} /></button>
             </div>

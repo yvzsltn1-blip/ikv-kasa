@@ -101,6 +101,19 @@ export interface UserMessageSettings {
   dailySendLimit: number;
 }
 
+export type BlockContactTemplateId =
+  | 'appeal_review'
+  | 'appeal_mistake'
+  | 'request_contact';
+
+export interface UserBlockInfo {
+  isBlocked: boolean;
+  reasonCode?: string;
+  reasonLabel?: string;
+  blockedAt?: number;
+  blockedByUid?: string;
+}
+
 export interface MessageQuotaEntry {
   day: string;
   used: number;
@@ -123,6 +136,7 @@ export interface AdminUserInfo {
   accounts: Account[];
   permissions: UserPermissions;
   messageSettings: UserMessageSettings;
+  blockInfo: UserBlockInfo;
 }
 
 export interface SearchLimitsConfig {

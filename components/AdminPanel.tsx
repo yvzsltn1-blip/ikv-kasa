@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserMessageSettings } from '../types';
+import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserMessageSettings, UserBlockInfo } from '../types';
 import { CATEGORY_OPTIONS } from '../types';
-import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle } from 'lucide-react';
-import { db } from '../firebase';
-import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, where, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle, UserX, UserCheck, AtSign } from 'lucide-react';
+import { auth, db } from '../firebase';
+import { collection, getDocs, doc, getDoc, setDoc, query, where, writeBatch, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 
 interface AdminPanelProps {
   onBack: () => void;
@@ -19,6 +19,16 @@ const DEFAULT_USER_PERMISSIONS: UserPermissions = {
 const DEFAULT_MESSAGE_SETTINGS: UserMessageSettings = {
   dailySendLimit: 5,
 };
+
+const DEFAULT_BLOCK_INFO: UserBlockInfo = {
+  isBlocked: false,
+};
+
+const BLOCK_REASON_OPTIONS = [
+  { value: 'policy_violation', label: 'Kural ihlali' },
+  { value: 'suspicious_activity', label: 'Supheli aktivite' },
+  { value: 'security_review', label: 'Guvenlik incelemesi' },
+];
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -54,6 +64,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [permissionSaving, setPermissionSaving] = useState<Record<string, boolean>>({});
   const [messageLimitInputs, setMessageLimitInputs] = useState<Record<string, string>>({});
   const [messageLimitSaving, setMessageLimitSaving] = useState<Record<string, boolean>>({});
+  const [usernameInputs, setUsernameInputs] = useState<Record<string, string>>({});
+  const [usernameSaving, setUsernameSaving] = useState<Record<string, boolean>>({});
+  const [blockReasonInputs, setBlockReasonInputs] = useState<Record<string, string>>({});
+  const [blockSaving, setBlockSaving] = useState<Record<string, boolean>>({});
 
   // Fetch all data on mount
   useEffect(() => {
@@ -110,6 +124,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               ? Math.floor(rawMessageSettings.dailySendLimit)
               : DEFAULT_MESSAGE_SETTINGS.dailySendLimit,
           };
+          const rawBlockInfo = (data.blockInfo && typeof data.blockInfo === 'object')
+            ? data.blockInfo as Partial<UserBlockInfo>
+            : {};
+          const blockInfo: UserBlockInfo = {
+            isBlocked: rawBlockInfo.isBlocked === true,
+            reasonCode: typeof rawBlockInfo.reasonCode === 'string' ? rawBlockInfo.reasonCode : undefined,
+            reasonLabel: typeof rawBlockInfo.reasonLabel === 'string' ? rawBlockInfo.reasonLabel : undefined,
+            blockedAt: (typeof rawBlockInfo.blockedAt === 'number' && Number.isFinite(rawBlockInfo.blockedAt) && rawBlockInfo.blockedAt > 0)
+              ? rawBlockInfo.blockedAt
+              : undefined,
+            blockedByUid: typeof rawBlockInfo.blockedByUid === 'string' ? rawBlockInfo.blockedByUid : undefined,
+          };
 
           let totalItems = 0;
           let totalRecipes = 0;
@@ -143,6 +169,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             accounts,
             permissions,
             messageSettings,
+            blockInfo,
           });
         } catch (userError) {
           console.warn("Kullanici parse atlaniyor:", docSnap.id, userError);
@@ -152,6 +179,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       setAllUsers(users);
       setMessageLimitInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
         acc[userInfo.uid] = String(userInfo.messageSettings.dailySendLimit);
+        return acc;
+      }, {}));
+      setUsernameInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
+        acc[userInfo.uid] = userInfo.username || '';
+        return acc;
+      }, {}));
+      setBlockReasonInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
+        acc[userInfo.uid] = userInfo.blockInfo.reasonCode || BLOCK_REASON_OPTIONS[0].value;
         return acc;
       }, {}));
 
@@ -438,6 +473,103 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
+  const getBlockReasonLabel = (reasonCode: string) => {
+    const found = BLOCK_REASON_OPTIONS.find(option => option.value === reasonCode);
+    return found?.label || 'Engel nedeni';
+  };
+
+  const handleSaveUsername = async (user: AdminUserInfo) => {
+    const rawValue = (usernameInputs[user.uid] ?? user.username ?? '').trim();
+    if (rawValue.length < 3 || rawValue.length > 20) {
+      alert("Kullanici adi 3 ile 20 karakter arasinda olmalidir.");
+      return;
+    }
+
+    setUsernameSaving(prev => ({ ...prev, [user.uid]: true }));
+    try {
+      const nextUsername = rawValue;
+      const nextUsernameLower = nextUsername.toLowerCase();
+      const currentUsernameLower = user.username ? user.username.toLowerCase() : null;
+
+      await runTransaction(db, async (transaction) => {
+        const nextUsernameDocRef = doc(db, "usernames", nextUsernameLower);
+        const nextUsernameSnap = await transaction.get(nextUsernameDocRef);
+
+        if (nextUsernameSnap.exists()) {
+          const existingData = nextUsernameSnap.data() as { uid?: string };
+          if (existingData.uid !== user.uid) {
+            throw new Error("USERNAME_TAKEN");
+          }
+        }
+
+        if (currentUsernameLower && currentUsernameLower !== nextUsernameLower) {
+          transaction.delete(doc(db, "usernames", currentUsernameLower));
+        }
+
+        transaction.set(nextUsernameDocRef, { uid: user.uid, displayName: nextUsername });
+        transaction.set(doc(db, "users", user.uid), { username: nextUsername }, { merge: true });
+      });
+
+      const emailLower = (user.email || '').trim().toLowerCase();
+      if (emailLower) {
+        await setDoc(doc(db, "publicProfiles", user.uid), {
+          uid: user.uid,
+          username: nextUsername,
+          emailLower,
+          updatedAt: Date.now(),
+        }, { merge: true });
+      }
+
+      setAllUsers(prev => prev.map(u => (
+        u.uid === user.uid
+          ? { ...u, username: nextUsername }
+          : u
+      )));
+      setUsernameInputs(prev => ({ ...prev, [user.uid]: nextUsername }));
+    } catch (error: any) {
+      console.error("Admin username guncelleme hatasi:", error);
+      if (error?.message === 'USERNAME_TAKEN') {
+        alert("Bu kullanici adi baska bir hesap tarafindan kullaniliyor.");
+      } else {
+        alert("Kullanici adi guncellenirken hata olustu.");
+      }
+    } finally {
+      setUsernameSaving(prev => ({ ...prev, [user.uid]: false }));
+    }
+  };
+
+  const handleToggleUserBlocked = async (user: AdminUserInfo) => {
+    const currentlyBlocked = user.blockInfo?.isBlocked === true;
+    const selectedReasonCode = blockReasonInputs[user.uid] || BLOCK_REASON_OPTIONS[0].value;
+    const nextBlockInfo: UserBlockInfo = currentlyBlocked
+      ? {
+          ...DEFAULT_BLOCK_INFO,
+          isBlocked: false,
+        }
+      : {
+          isBlocked: true,
+          reasonCode: selectedReasonCode,
+          reasonLabel: getBlockReasonLabel(selectedReasonCode),
+          blockedAt: Date.now(),
+          blockedByUid: auth.currentUser?.uid || 'admin',
+        };
+
+    setBlockSaving(prev => ({ ...prev, [user.uid]: true }));
+    try {
+      await setDoc(doc(db, "users", user.uid), { blockInfo: nextBlockInfo }, { merge: true });
+      setAllUsers(prev => prev.map(u => (
+        u.uid === user.uid
+          ? { ...u, blockInfo: nextBlockInfo }
+          : u
+      )));
+    } catch (error) {
+      console.error("Kullanici engel durumu guncelleme hatasi:", error);
+      alert("Kullanici engel durumu guncellenirken hata olustu.");
+    } finally {
+      setBlockSaving(prev => ({ ...prev, [user.uid]: false }));
+    }
+  };
+
   // Admin management
   const handleAddAdmin = async () => {
     const email = newAdminEmail.trim().toLowerCase();
@@ -687,6 +819,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-white font-bold truncate">{user.username || '(İsimsiz)'}</span>
+                        {user.blockInfo?.isBlocked && (
+                          <span className="text-[9px] text-red-300 bg-red-950/40 border border-red-800/50 rounded-full px-1.5 py-0.5 uppercase tracking-wider">Engelli</span>
+                        )}
                         <span className="text-[9px] text-slate-500 truncate hidden md:inline">{user.email}</span>
                       </div>
                       <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-0.5">
@@ -712,6 +847,70 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         <div><span className="text-slate-500">Sosyal:</span> <span className="text-blue-300 truncate">{user.socialLink || '-'}</span></div>
                         {user.createdAt && (
                           <div><span className="text-slate-500">Kayıt:</span> <span className="text-slate-300">{new Date(user.createdAt).toLocaleString('tr-TR')}</span></div>
+                        )}
+                      </div>
+
+                      <div className="mt-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[11px]">
+                            <p className="text-slate-200 font-semibold flex items-center gap-1.5"><AtSign size={12} /> Kullanici Adi</p>
+                            <p className="text-[10px] text-slate-500">Admin olarak kullanici adini degistirebilirsiniz.</p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={usernameInputs[user.uid] ?? (user.username || '')}
+                              onChange={e => setUsernameInputs(prev => ({ ...prev, [user.uid]: e.target.value }))}
+                              className="w-40 bg-slate-950/80 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-cyan-500/50"
+                              maxLength={20}
+                            />
+                            <button
+                              onClick={() => handleSaveUsername(user)}
+                              disabled={deleting || resetting || !!usernameSaving[user.uid]}
+                              className="px-2.5 py-1.5 rounded-md text-[10px] font-bold border border-cyan-700/50 bg-cyan-900/30 text-cyan-200 hover:bg-cyan-800/40 disabled:opacity-50"
+                            >
+                              {usernameSaving[user.uid] ? 'Kayit...' : 'Kaydet'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 bg-slate-800/40 border border-slate-700/40 rounded-lg px-2.5 py-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[11px]">
+                            <p className="text-slate-200 font-semibold">Kullanici Engeli</p>
+                            <p className="text-[10px] text-slate-500">
+                              {user.blockInfo?.isBlocked
+                                ? `Kullanici engelli. ${user.blockInfo.reasonLabel ? `Neden: ${user.blockInfo.reasonLabel}` : ''}`
+                                : 'Kullanici aktif. Gerekirse engelleme uygulayabilirsiniz.'}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => handleToggleUserBlocked(user)}
+                            disabled={deleting || resetting || !!blockSaving[user.uid]}
+                            className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${
+                              user.blockInfo?.isBlocked
+                                ? 'bg-emerald-950/35 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40'
+                                : 'bg-red-950/35 text-red-300 border-red-900/50 hover:bg-red-900/40'
+                            } disabled:opacity-50`}
+                          >
+                            {user.blockInfo?.isBlocked ? <UserCheck size={12} /> : <UserX size={12} />}
+                            {blockSaving[user.uid] ? 'Kayit...' : (user.blockInfo?.isBlocked ? 'Engeli Kaldir' : 'Engelle')}
+                          </button>
+                        </div>
+                        {!user.blockInfo?.isBlocked && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-500">Neden:</span>
+                            <select
+                              value={blockReasonInputs[user.uid] ?? BLOCK_REASON_OPTIONS[0].value}
+                              onChange={e => setBlockReasonInputs(prev => ({ ...prev, [user.uid]: e.target.value }))}
+                              className="bg-slate-950/80 border border-slate-700 rounded-md px-2 py-1.5 text-[11px] text-slate-200 outline-none focus:border-red-500/50"
+                            >
+                              {BLOCK_REASON_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </select>
+                          </div>
                         )}
                       </div>
 
