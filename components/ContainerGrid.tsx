@@ -3,12 +3,14 @@ import { Container, SlotData, ItemData } from '../types';
 import { SlotItem } from './SlotItem';
 import { ArrowRight, Maximize2, Minimize2 } from 'lucide-react';
 
-const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): 'I' | 'II' | 'III' => {
+const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): '-' | 'I' | 'II' | 'III' => {
   const direct = String(item.talismanTier || '').trim().toUpperCase();
+  if (direct === '-') return '-';
   if (direct === 'I' || direct === 'II' || direct === 'III') return direct;
   const legacy = String(item.enchantment2 || '').trim().toUpperCase();
+  if (legacy === '-') return '-';
   if (legacy === 'I' || legacy === 'II' || legacy === 'III') return legacy;
-  return 'I';
+  return '-';
 };
 
 interface ContainerGridProps {

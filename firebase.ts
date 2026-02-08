@@ -2,7 +2,7 @@
 
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 
 // BURAYA FIREBASE KONSOLUNDAN ALDIĞIN "const firebaseConfig" KODUNU YAPIŞTIR
 // Örnek (Sen kendi kodunu yapıştıracaksın):
@@ -20,4 +20,4 @@ const app = initializeApp(firebaseConfig);
 
 // Dışarıya (diğer dosyalara) servisleri açıyoruz
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, { ignoreUndefinedProperties: true });

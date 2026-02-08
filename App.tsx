@@ -103,6 +103,23 @@ const normalizeUserBlockInfo = (raw: unknown): UserBlockInfo => {
   };
 };
 
+const stripUndefinedDeep = <T,>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map(item => stripUndefinedDeep(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, val]) => {
+      if (val === undefined) return;
+      out[key] = stripUndefinedDeep(val);
+    });
+    return out as T;
+  }
+
+  return value;
+};
+
 type AccessAlert = {
   kind: 'dataEntry' | 'globalSearch';
   title: string;
@@ -122,7 +139,7 @@ type NamedLevelSuggestion = {
   level: number;
 };
 type TalismanColorSuggestion = 'Mavi' | 'Kırmızı';
-type TalismanTierSuggestion = 'I' | 'II' | 'III';
+type TalismanTierSuggestion = '-' | 'I' | 'II' | 'III';
 type TalismanHeroClassSuggestion = Exclude<HeroClass, 'Tüm Sınıflar'>;
 type TalismanRuleSuggestion = {
   name: string;
@@ -215,6 +232,7 @@ const normalizeTalismanColorSuggestion = (value: unknown): TalismanColorSuggesti
 };
 const normalizeTalismanTierSuggestion = (value: unknown): TalismanTierSuggestion | null => {
   const raw = String(value ?? '').trim().toUpperCase();
+  if (raw === '-') return '-';
   if (raw === 'I' || raw === 'II' || raw === 'III') return raw as TalismanTierSuggestion;
   if (raw === '1') return 'I';
   if (raw === '2') return 'II';
@@ -224,7 +242,7 @@ const normalizeTalismanTierSuggestion = (value: unknown): TalismanTierSuggestion
 const resolveItemTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): TalismanTierSuggestion => (
   normalizeTalismanTierSuggestion(item.talismanTier)
   || normalizeTalismanTierSuggestion(item.enchantment2)
-  || 'I'
+  || '-'
 );
 const resolveItemTalismanColor = (item: Pick<ItemData, 'enchantment2'>): TalismanColorSuggestion => (
   normalizeTalismanColorSuggestion(item.enchantment2) || 'Mavi'
@@ -799,11 +817,16 @@ export default function App() {
     setIsSaving(true);
     try {
         const userDocRef = doc(db, "users", user.uid);
-        await setDoc(userDocRef, { accounts: accounts }, { merge: true });
+        const sanitizedAccounts = stripUndefinedDeep(accounts);
+        await setDoc(userDocRef, { accounts: sanitizedAccounts }, { merge: true });
         setHasUnsavedChanges(false);
         setSaveNotification({ type: 'success', message: 'Tüm veriler başarıyla buluta kaydedildi!' });
         setTimeout(() => setSaveNotification(null), 3000);
-    } catch (error) {
+    } catch (error: any) {
+        console.error('saveData error:', error, {
+          code: error?.code,
+          message: error?.message,
+        });
         setSaveNotification({ type: 'error', message: 'Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.' });
         setTimeout(() => setSaveNotification(null), 4000);
     } finally {
@@ -1657,7 +1680,7 @@ export default function App() {
           category,
           enchantment1,
           enchantment2: importedEnchantment2,
-          talismanTier: importedTalismanTier,
+          ...(importedTalismanTier ? { talismanTier: importedTalismanTier } : {}),
           heroClass,
           gender,
           level,

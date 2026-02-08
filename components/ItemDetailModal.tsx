@@ -34,12 +34,14 @@ const getCategoryIcon = (category: string) => {
   }
 };
 
-const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): 'I' | 'II' | 'III' => {
+const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): '-' | 'I' | 'II' | 'III' => {
   const direct = String(item.talismanTier || '').trim().toUpperCase();
+  if (direct === '-') return '-';
   if (direct === 'I' || direct === 'II' || direct === 'III') return direct;
   const legacy = String(item.enchantment2 || '').trim().toUpperCase();
+  if (legacy === '-') return '-';
   if (legacy === 'I' || legacy === 'II' || legacy === 'III') return legacy;
-  return 'I';
+  return '-';
 };
 const resolveTalismanColor = (item: Pick<ItemData, 'enchantment2'>): 'Mavi' | 'Kırmızı' => {
   const token = String(item.enchantment2 || '')

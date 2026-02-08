@@ -6,9 +6,9 @@ import { SetDetailModal } from './SetDetailModal';
 
 type TalismanColor = 'Mavi' | 'Kırmızı';
 type TalismanHeroClass = Exclude<HeroClass, 'Tüm Sınıflar'>;
-type TalismanTier = 'I' | 'II' | 'III';
+type TalismanTier = '-' | 'I' | 'II' | 'III';
 const TALISMAN_COLOR_OPTIONS: TalismanColor[] = ['Mavi', 'Kırmızı'];
-const TALISMAN_TIER_OPTIONS: TalismanTier[] = ['I', 'II', 'III'];
+const TALISMAN_TIER_OPTIONS: TalismanTier[] = ['-', 'I', 'II', 'III'];
 const normalizeTalismanLookupToken = (value: unknown) => (
   String(value ?? '')
     .trim()
@@ -25,6 +25,7 @@ const normalizeTalismanColorValue = (value: unknown): TalismanColor | null => {
 };
 const normalizeTalismanTierValue = (value: unknown): TalismanTier | null => {
   const raw = String(value ?? '').trim().toUpperCase();
+  if (raw === '-') return '-';
   if (raw === 'I' || raw === 'II' || raw === 'III') return raw as TalismanTier;
   if (raw === '1') return 'I';
   if (raw === '2') return 'II';
@@ -103,7 +104,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
           const resolvedColor = normalizeTalismanColorValue(existingItem.enchantment2) || 'Mavi';
           const resolvedTier = normalizeTalismanTierValue(existingItem.talismanTier)
             || normalizeTalismanTierValue(existingItem.enchantment2)
-            || 'I';
+            || '-';
           setFormData({
             ...existingItem,
             enchantment2: resolvedColor,
@@ -195,21 +196,23 @@ export const ItemModal: React.FC<ItemModalProps> = ({
         ? (normalizeTalismanColorValue(formData.enchantment2) || 'Mavi')
         : null;
       const normalizedTalismanTier = formData.category === 'Tılsım'
-        ? (normalizeTalismanTierValue(formData.talismanTier) || 'I')
+        ? (normalizeTalismanTierValue(formData.talismanTier) || '-')
         : undefined;
       const normalizedEnchantment2 = (formData.category === 'İksir' || formData.category === 'Maden' || formData.category === 'Diğer' || formData.category === 'Gözlük')
         ? ''
         : (formData.category === 'Tılsım' ? normalizedTalismanColor! : (formData.enchantment2 || ''));
-      onSave({
+      const itemToSave: ItemData = {
         ...formData as ItemData,
         gender: normalizedGender,
         heroClass: normalizedHeroClass,
         level: normalizedLevel,
         enchantment2: normalizedEnchantment2,
-        talismanTier: normalizedTalismanTier,
         isBound: normalizedBound,
         id: existingItem?.id || crypto.randomUUID(),
-      });
+      };
+      if (normalizedTalismanTier) itemToSave.talismanTier = normalizedTalismanTier;
+      else delete itemToSave.talismanTier;
+      onSave(itemToSave);
       onClose();
     }
   };
@@ -309,7 +312,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
   const talismanResolvedTier = useMemo(() => {
     const current = normalizeTalismanTierValue(formData.talismanTier);
     if (current && TALISMAN_TIER_OPTIONS.includes(current)) return current;
-    return 'I';
+    return '-';
   }, [formData.talismanTier]);
 
   const isTalismanClassLocked = formData.category === 'Tılsım' && talismanMatchedOptions.length > 0 && talismanClassOptions.length === 1;
@@ -997,7 +1000,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                   </div>
                   <div className="rounded border border-purple-900/60 bg-slate-900/70 p-1.5">
                     <div className="text-[10px] text-purple-300/90 mb-1">Kademe</div>
-                    <div className="grid grid-cols-3 gap-1">
+                    <div className="grid grid-cols-4 gap-1">
                       {TALISMAN_TIER_OPTIONS.map(tier => (
                         <button
                           key={tier}
@@ -1008,8 +1011,8 @@ export const ItemModal: React.FC<ItemModalProps> = ({
                               ? 'bg-purple-700 text-white ring-1 ring-purple-300/70'
                               : 'bg-slate-800 text-purple-200 hover:bg-purple-900/70'
                           }`}
-                          title={`${tier}. Kademe`}
-                          aria-label={`${tier}. Kademe`}
+                          title={tier === '-' ? 'Kademesiz' : `${tier}. Kademe`}
+                          aria-label={tier === '-' ? 'Kademesiz' : `${tier}. Kademe`}
                         >
                           {tier}
                         </button>
