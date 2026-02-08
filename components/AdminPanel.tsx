@@ -8,7 +8,7 @@ interface AdminPanelProps {
   onBack: () => void;
 }
 
-type TabType = 'dashboard' | 'users' | 'settings';
+type TabType = 'dashboard' | 'users' | 'settings' | 'autocomplete';
 
 const DEFAULT_USER_PERMISSIONS: UserPermissions = {
   canDataEntry: true,
@@ -76,6 +76,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [enchantmentSaving, setEnchantmentSaving] = useState(false);
   const [enchantmentImporting, setEnchantmentImporting] = useState(false);
   const enchantmentImportInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [managedPotions, setManagedPotions] = useState<string[]>([]);
+  const [potionTextInput, setPotionTextInput] = useState('');
+  const [potionListSearch, setPotionListSearch] = useState('');
+  const [editingPotion, setEditingPotion] = useState<string | null>(null);
+  const [editingPotionInput, setEditingPotionInput] = useState('');
+  const [potionSaving, setPotionSaving] = useState(false);
+  const [potionImporting, setPotionImporting] = useState(false);
+  const potionImportInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Users tab
   const [userSearch, setUserSearch] = useState('');
@@ -153,7 +161,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       if (!candidate) return;
 
       const token = candidate.toLocaleLowerCase('tr');
-      if (token === 'efsun' || token === 'enchantment' || token === 'name') return;
+      if (token === 'efsun' || token === 'enchantment' || token === 'name' || token === 'iksir' || token === 'potion') return;
       values.push(candidate);
     });
 
@@ -176,6 +184,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       return false;
     } finally {
       setEnchantmentSaving(false);
+    }
+  };
+
+  const saveManagedPotions = async (nextNames: string[]): Promise<boolean> => {
+    const normalizedNames = toUniqueSortedEnchantments(nextNames);
+    setPotionSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "potions"), {
+        names: normalizedNames,
+        updatedAt: Date.now(),
+      }, { merge: true });
+      setManagedPotions(normalizedNames);
+      return true;
+    } catch (error) {
+      console.error("Iksir onerileri kaydetme hatasi:", error);
+      alert("Iksir onerileri kaydedilirken hata olustu.");
+      return false;
+    } finally {
+      setPotionSaving(false);
     }
   };
 
@@ -306,6 +333,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         }
       } catch {
         setManagedEnchantments([]);
+      }
+
+      // Fetch managed potion suggestions
+      try {
+        const potionsDoc = await getDoc(doc(db, "metadata", "potions"));
+        if (potionsDoc.exists()) {
+          const rawNames = potionsDoc.data().names;
+          const names = Array.isArray(rawNames)
+            ? rawNames.filter((value): value is string => typeof value === 'string')
+            : [];
+          setManagedPotions(toUniqueSortedEnchantments(names));
+        } else {
+          setManagedPotions([]);
+        }
+      } catch {
+        setManagedPotions([]);
       }
 
       // Fetch search limits
@@ -469,6 +512,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     if (!queryText) return managedEnchantments;
     return managedEnchantments.filter(name => name.toLocaleLowerCase('tr').includes(queryText));
   }, [managedEnchantments, enchantmentListSearch]);
+
+  const filteredManagedPotions = useMemo(() => {
+    const queryText = potionListSearch.trim().toLocaleLowerCase('tr');
+    if (!queryText) return managedPotions;
+    return managedPotions.filter(name => name.toLocaleLowerCase('tr').includes(queryText));
+  }, [managedPotions, potionListSearch]);
 
   // Delete user
   const handleDeleteUser = async (user: AdminUserInfo) => {
@@ -883,6 +932,96 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
+  const handleOpenPotionImportPicker = () => {
+    potionImportInputRef.current?.click();
+  };
+
+  const handleAddPotionsFromText = async () => {
+    const parsedNames = extractEnchantmentNamesFromText(potionTextInput);
+    if (parsedNames.length === 0) {
+      alert("Eklenebilir iksir adi bulunamadi. Her satira bir isim yazin.");
+      return;
+    }
+
+    const merged = toUniqueSortedEnchantments([...managedPotions, ...parsedNames]);
+    if (merged.length === managedPotions.length) {
+      alert("Listede zaten mevcut olan isimler girildi.");
+      return;
+    }
+
+    const saved = await saveManagedPotions(merged);
+    if (saved) {
+      setPotionTextInput('');
+    }
+  };
+
+  const handleImportPotionsFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setPotionImporting(true);
+    try {
+      const fileNameLower = file.name.toLocaleLowerCase();
+      if (!fileNameLower.endsWith('.csv') && !fileNameLower.endsWith('.txt')) {
+        alert("Su an sadece CSV/TXT import destekleniyor. Excel dosyanizi CSV olarak kaydedip tekrar yukleyin.");
+        return;
+      }
+
+      const rawText = await file.text();
+      const parsedNames = extractEnchantmentNamesFromText(rawText);
+      if (parsedNames.length === 0) {
+        alert("Dosyada eklenebilir iksir adi bulunamadi.");
+        return;
+      }
+
+      const merged = toUniqueSortedEnchantments([...managedPotions, ...parsedNames]);
+      if (merged.length === managedPotions.length) {
+        alert("Dosyadaki tum isimler zaten listede mevcut.");
+        return;
+      }
+
+      await saveManagedPotions(merged);
+    } finally {
+      event.target.value = '';
+      setPotionImporting(false);
+    }
+  };
+
+  const handleStartEditPotion = (name: string) => {
+    setEditingPotion(name);
+    setEditingPotionInput(name);
+  };
+
+  const handleCancelEditPotion = () => {
+    setEditingPotion(null);
+    setEditingPotionInput('');
+  };
+
+  const handleSaveEditedPotion = async () => {
+    if (!editingPotion) return;
+    const nextValue = normalizeEnchantmentName(editingPotionInput);
+    if (!nextValue) {
+      alert("Iksir adi bos birakilamaz.");
+      return;
+    }
+
+    const nextList = managedPotions.map(name => (
+      name === editingPotion ? nextValue : name
+    ));
+    const saved = await saveManagedPotions(nextList);
+    if (saved) {
+      handleCancelEditPotion();
+    }
+  };
+
+  const handleDeletePotion = async (name: string) => {
+    const nextList = managedPotions.filter(itemName => itemName !== name);
+    await saveManagedPotions(nextList);
+    if (editingPotion === name) {
+      handleCancelEditPotion();
+    }
+  };
+
   // Limit settings
   const handleSaveClassLimits = async () => {
     const rawLimits = {
@@ -1007,6 +1146,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             { key: 'dashboard' as TabType, label: 'Panel', icon: BarChart3 },
             { key: 'users' as TabType, label: 'Kullanıcılar', icon: Users },
             { key: 'settings' as TabType, label: 'Ayarlar', icon: Settings },
+            { key: 'autocomplete' as TabType, label: 'Oto Tamamlama', icon: Search },
           ]).map(tab => (
             <button
               key={tab.key}
@@ -1469,7 +1609,104 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              {/* Enchantment Suggestions Management */}
+              {/* Messaging System */}
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <h3 className="text-cyan-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <MessageCircle size={14} />
+                  MESAJLASMA SiSTEMi
+                </h3>
+
+                <div className="flex items-center justify-between gap-3 bg-slate-900/50 rounded-lg border border-slate-700/40 px-3 py-2.5">
+                  <div className="text-[11px]">
+                    <p className="text-slate-200 font-semibold">Kullanici Mesajlasmasi</p>
+                    <p className="text-[10px] text-slate-500">Kapaliyken sadece yoneticiler mesaj gonderebilir.</p>
+                  </div>
+                  <button
+                    onClick={handleToggleMessagingSystem}
+                    disabled={messageSystemSaving}
+                    className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${directMessagingEnabled ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40' : 'bg-red-950/40 text-red-300 border-red-900/50 hover:bg-red-900/40'} disabled:opacity-50`}
+                  >
+                    {directMessagingEnabled ? <Unlock size={11} /> : <Lock size={11} />}
+                    {messageSystemSaving ? 'Kaydediliyor...' : (directMessagingEnabled ? 'Acik' : 'Kapali')}
+                  </button>
+                </div>
+              </div>
+
+              {/* Limit Settings */}
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <h3 className="text-emerald-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <Search size={14} />
+                  LiMiT AYARLARI
+                </h3>
+
+                <div className="space-y-2.5">
+                  {USER_CLASS_KEYS.map(classKey => {
+                    const classInfo = searchLimits.classLimits[classKey];
+                    return (
+                      <div key={classKey} className="rounded-lg border border-slate-700/40 bg-slate-900/50 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="text-[11px] font-semibold text-slate-200">{classInfo.label}</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Gunluk limitler</p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500 font-bold block mb-1">GLOBAL ARAMA</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={classLimitInputs[classKey].dailyGlobalSearchLimit}
+                              onChange={e => setClassLimitInputs(prev => ({
+                                ...prev,
+                                [classKey]: {
+                                  ...prev[classKey],
+                                  dailyGlobalSearchLimit: e.target.value,
+                                },
+                              }))}
+                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500/50"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500 font-bold block mb-1">MESAJ</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={classLimitInputs[classKey].dailyMessageLimit}
+                              onChange={e => setClassLimitInputs(prev => ({
+                                ...prev,
+                                [classKey]: {
+                                  ...prev[classKey],
+                                  dailyMessageLimit: e.target.value,
+                                },
+                              }))}
+                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="text-[10px] text-slate-500">
+                    Kullanici bazli global arama override ayarlari <span className="text-slate-200 font-semibold">Kullanicilar</span> sekmesinde kalmaya devam eder.
+                  </div>
+                  <button
+                    onClick={handleSaveClassLimits}
+                    disabled={limitSaving}
+                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {limitSaving ? 'Kaydediliyor...' : 'Limitleri Kaydet'}
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* AUTOCOMPLETE TAB */}
+          {activeTab === 'autocomplete' && (
+            <div className="space-y-4 max-w-2xl mx-auto">
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <input
                   ref={enchantmentImportInputRef}
@@ -1585,97 +1822,119 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              {/* Messaging System */}
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                <h3 className="text-cyan-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
-                  <MessageCircle size={14} />
-                  MESAJLASMA SiSTEMi
-                </h3>
+                <input
+                  ref={potionImportInputRef}
+                  type="file"
+                  accept=".csv,.txt,text/csv,text/plain"
+                  className="hidden"
+                  onChange={handleImportPotionsFile}
+                />
 
-                <div className="flex items-center justify-between gap-3 bg-slate-900/50 rounded-lg border border-slate-700/40 px-3 py-2.5">
-                  <div className="text-[11px]">
-                    <p className="text-slate-200 font-semibold">Kullanici Mesajlasmasi</p>
-                    <p className="text-[10px] text-slate-500">Kapaliyken sadece yoneticiler mesaj gonderebilir.</p>
-                  </div>
-                  <button
-                    onClick={handleToggleMessagingSystem}
-                    disabled={messageSystemSaving}
-                    className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${directMessagingEnabled ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40' : 'bg-red-950/40 text-red-300 border-red-900/50 hover:bg-red-900/40'} disabled:opacity-50`}
-                  >
-                    {directMessagingEnabled ? <Unlock size={11} /> : <Lock size={11} />}
-                    {messageSystemSaving ? 'Kaydediliyor...' : (directMessagingEnabled ? 'Acik' : 'Kapali')}
-                  </button>
-                </div>
-              </div>
-
-              {/* Limit Settings */}
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                <h3 className="text-emerald-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                <h3 className="text-emerald-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
-                  LiMiT AYARLARI
+                  IKSIR OTO TAMAMLAMA
                 </h3>
 
-                <div className="space-y-2.5">
-                  {USER_CLASS_KEYS.map(classKey => {
-                    const classInfo = searchLimits.classLimits[classKey];
-                    return (
-                      <div key={classKey} className="rounded-lg border border-slate-700/40 bg-slate-900/50 px-3 py-2.5">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <p className="text-[11px] font-semibold text-slate-200">{classInfo.label}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Gunluk limitler</p>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[10px] text-slate-500 font-bold block mb-1">GLOBAL ARAMA</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={classLimitInputs[classKey].dailyGlobalSearchLimit}
-                              onChange={e => setClassLimitInputs(prev => ({
-                                ...prev,
-                                [classKey]: {
-                                  ...prev[classKey],
-                                  dailyGlobalSearchLimit: e.target.value,
-                                },
-                              }))}
-                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500/50"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-slate-500 font-bold block mb-1">MESAJ</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={classLimitInputs[classKey].dailyMessageLimit}
-                              onChange={e => setClassLimitInputs(prev => ({
-                                ...prev,
-                                [classKey]: {
-                                  ...prev[classKey],
-                                  dailyMessageLimit: e.target.value,
-                                },
-                              }))}
-                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <p className="text-[10px] text-slate-500 mb-2.5">
+                  Bu listedeki isimler iksir ekleme ekranindaki Iksir Ismi alaninda otomatik onerilerde gorunur.
+                </p>
 
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <div className="text-[10px] text-slate-500">
-                    Kullanici bazli global arama override ayarlari <span className="text-slate-200 font-semibold">Kullanicilar</span> sekmesinde kalmaya devam eder.
+                <div className="space-y-2">
+                  <textarea
+                    value={potionTextInput}
+                    onChange={e => setPotionTextInput(e.target.value)}
+                    rows={4}
+                    placeholder="Her satira bir iksir yazin. Ornek:&#10;Yasam Iksiri&#10;Mana Iksiri"
+                    className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500/50 placeholder-slate-600 resize-y"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleAddPotionsFromText}
+                      disabled={potionSaving || potionImporting || !potionTextInput.trim()}
+                      className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Plus size={12} />
+                      Metinden Ekle
+                    </button>
+                    <button
+                      onClick={handleOpenPotionImportPicker}
+                      disabled={potionSaving || potionImporting}
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Upload size={12} />
+                      {potionImporting ? 'Import...' : 'CSV/TXT Import'}
+                    </button>
                   </div>
-                  <button
-                    onClick={handleSaveClassLimits}
-                    disabled={limitSaving}
-                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    {limitSaving ? 'Kaydediliyor...' : 'Limitleri Kaydet'}
-                  </button>
                 </div>
 
+                <div className="mt-3 rounded-lg border border-slate-700/40 bg-slate-900/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={potionListSearch}
+                      onChange={e => setPotionListSearch(e.target.value)}
+                      placeholder="Listede ara..."
+                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50 placeholder-slate-600"
+                    />
+                    <span className="text-[10px] text-slate-500">{managedPotions.length} kayit</span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {filteredManagedPotions.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek iksir yok.</div>
+                    ) : (
+                      filteredManagedPotions.map(name => (
+                        <div key={name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingPotion === name ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editingPotionInput}
+                                onChange={e => setEditingPotionInput(e.target.value)}
+                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-500/50"
+                              />
+                              <button
+                                onClick={handleSaveEditedPotion}
+                                disabled={potionSaving || potionImporting}
+                                className="px-2 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Save size={10} />
+                                Kaydet
+                              </button>
+                              <button
+                                onClick={handleCancelEditPotion}
+                                disabled={potionSaving || potionImporting}
+                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded transition-colors disabled:opacity-50"
+                              >
+                                Vazgec
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{name}</span>
+                              <button
+                                onClick={() => handleStartEditPotion(name)}
+                                disabled={potionSaving || potionImporting}
+                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Pencil size={10} />
+                                Duzenle
+                              </button>
+                              <button
+                                onClick={() => handleDeletePotion(name)}
+                                disabled={potionSaving || potionImporting}
+                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
+                              >
+                                Sil
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}

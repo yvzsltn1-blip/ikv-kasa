@@ -144,6 +144,7 @@ export default function App() {
 
   // Global Enchantment Suggestions
   const [globalEnchantments, setGlobalEnchantments] = useState<string[]>([]);
+  const [globalPotions, setGlobalPotions] = useState<string[]>([]);
 
   // UI State
   const [activeCharIndex, setActiveCharIndex] = useState(0);
@@ -373,9 +374,23 @@ export default function App() {
             const enchDoc = await getDoc(doc(db, "metadata", "enchantments"));
             if (enchDoc.exists()) {
               setGlobalEnchantments(enchDoc.data().names || []);
+            } else {
+              setGlobalEnchantments([]);
             }
           } catch (e) {
             console.warn("Global enchantments yüklenemedi:", e);
+          }
+
+          // Global iksir önerilerini yükle
+          try {
+            const potionsDoc = await getDoc(doc(db, "metadata", "potions"));
+            if (potionsDoc.exists()) {
+              setGlobalPotions(potionsDoc.data().names || []);
+            } else {
+              setGlobalPotions([]);
+            }
+          } catch (e) {
+            console.warn("Global potions yüklenemedi:", e);
           }
 
         } catch (error) {
@@ -395,6 +410,7 @@ export default function App() {
         setUsername(null);
         setSocialLink('');
         setGlobalEnchantments([]);
+        setGlobalPotions([]);
         setUserPermissions(DEFAULT_USER_PERMISSIONS);
         setUserBlockInfo(DEFAULT_USER_BLOCK_INFO);
         setBlockedTemplateId(BLOCKED_CONTACT_TEMPLATES[0].id);
@@ -705,6 +721,15 @@ export default function App() {
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
   }, [globalEnchantments]);
 
+  const potionSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    globalPotions.forEach(name => {
+      const normalized = (name || '').trim();
+      if (normalized) set.add(normalized);
+    });
+    return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+  }, [globalPotions]);
+
   const weaponTypeSuggestions = useMemo(() => {
     const set = new Set<string>();
     accounts.forEach(acc => {
@@ -908,7 +933,10 @@ export default function App() {
   const handleCloseAdminPanel = async () => {
     setShowAdminPanel(false);
     try {
-      const enchDoc = await getDoc(doc(db, "metadata", "enchantments"));
+      const [enchDoc, potionsDoc] = await Promise.all([
+        getDoc(doc(db, "metadata", "enchantments")),
+        getDoc(doc(db, "metadata", "potions")),
+      ]);
       if (enchDoc.exists()) {
         const rawNames = enchDoc.data().names;
         const names = Array.isArray(rawNames)
@@ -918,8 +946,18 @@ export default function App() {
       } else {
         setGlobalEnchantments([]);
       }
+
+      if (potionsDoc.exists()) {
+        const rawNames = potionsDoc.data().names;
+        const names = Array.isArray(rawNames)
+          ? rawNames.filter((value): value is string => typeof value === 'string')
+          : [];
+        setGlobalPotions(names);
+      } else {
+        setGlobalPotions([]);
+      }
     } catch (error) {
-      console.warn("Global enchantments yenilenemedi:", error);
+      console.warn("Global autocomplete listeleri yenilenemedi:", error);
     }
   };
 
@@ -2916,6 +2954,7 @@ export default function App() {
         onRead={handleReadRecipe}
         existingItem={getCurrentItem()}
         enchantmentSuggestions={enchantmentSuggestions}
+        potionSuggestions={potionSuggestions}
         weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
@@ -2958,6 +2997,7 @@ export default function App() {
         onDelete={handleDeleteEditedRecipe}
         existingItem={editingRecipe}
         enchantmentSuggestions={enchantmentSuggestions}
+        potionSuggestions={potionSuggestions}
         weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}

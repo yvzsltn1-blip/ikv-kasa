@@ -12,12 +12,13 @@ interface ItemModalProps {
   onRead?: (item: ItemData) => void;
   existingItem: ItemData | null;
   enchantmentSuggestions?: string[];
+  potionSuggestions?: string[];
   weaponTypeSuggestions?: string[];
   globalSetLookup?: Map<string, GlobalSetInfo>;
   globalSetMap?: Map<string, SetItemLocation[]>;
 }
 
-export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], weaponTypeSuggestions = [], globalSetLookup, globalSetMap }) => {
+export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], potionSuggestions = [], weaponTypeSuggestions = [], globalSetLookup, globalSetMap }) => {
   const [step, setStep] = useState(1);
   const [activeField, setActiveField] = useState<'enchantment1' | 'enchantment2' | 'weaponType' | null>(null);
   const [formData, setFormData] = useState<Partial<ItemData>>({
@@ -65,14 +66,16 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     if (!activeField) return [];
     const text = (formData[activeField] || '').trim().toLocaleLowerCase('tr');
     if (!text) return [];
-    const pool = activeField === 'weaponType' ? weaponTypeSuggestions : enchantmentSuggestions;
+    const pool = activeField === 'weaponType'
+      ? weaponTypeSuggestions
+      : (formData.category === 'İksir' && activeField === 'enchantment1' ? potionSuggestions : enchantmentSuggestions);
     return pool
       .filter(s => {
         const lower = s.toLocaleLowerCase('tr');
         return lower !== text && lower.includes(text);
       })
       .slice(0, 5);
-  }, [activeField, formData.enchantment1, formData.enchantment2, formData.weaponType, enchantmentSuggestions, weaponTypeSuggestions]);
+  }, [activeField, formData.category, formData.enchantment1, formData.enchantment2, formData.weaponType, enchantmentSuggestions, potionSuggestions, weaponTypeSuggestions]);
 
   const blurTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -103,11 +106,13 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
       const normalizedHeroClass = isClassless ? 'Tüm Sınıflar' : (formData.heroClass || 'Savaşçı');
       const normalizedLevel = Math.min(59, Math.max(1, Number(formData.level) || 1));
       const normalizedBound = isBindableItemCategory ? Boolean(formData.isBound) : false;
+      const normalizedEnchantment2 = formData.category === 'İksir' ? '' : (formData.enchantment2 || '');
       onSave({
         ...formData as ItemData,
         gender: normalizedGender,
         heroClass: normalizedHeroClass,
         level: normalizedLevel,
+        enchantment2: normalizedEnchantment2,
         isBound: normalizedBound,
         id: existingItem?.id || crypto.randomUUID(),
       });
@@ -485,6 +490,37 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                       onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
                       onBlur={handleFieldBlur}
                       className="w-full bg-slate-900 border border-orange-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-orange-500 focus:outline-none placeholder-slate-600 text-orange-100"
+                    />
+                    {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
+                      <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
+                        {filteredSuggestions.map(s => (
+                          <button
+                            key={s}
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handleSuggestionClick('enchantment1', s)}
+                            className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                          >
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : formData.category === 'İksir' ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-emerald-400">İksir İsmi</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Örn: Yaşam İksiri, Mana İksiri..."
+                      value={formData.enchantment1}
+                      maxLength={100}
+                      onChange={(e) => setFormData({...formData, enchantment1: e.target.value, enchantment2: ''})}
+                      onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('enchantment1'); }}
+                      onBlur={handleFieldBlur}
+                      className="w-full bg-slate-900 border border-emerald-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-emerald-500 focus:outline-none placeholder-slate-600 text-emerald-100"
                     />
                     {activeField === 'enchantment1' && filteredSuggestions.length > 0 && (
                       <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
