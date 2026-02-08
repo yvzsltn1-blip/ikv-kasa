@@ -84,13 +84,15 @@ metadata/enchantments
 - **Migration**: Eski format (account.characters) -> yeni format (account.servers) otomatik migration var (App.tsx migrateAccount)
 
 ### Cinsiyet & Sinif Kurallari (ItemModal.tsx)
-- **Silah**: Erkek, Kadin, Tum Cinsiyetler (3 secenek) + Savasci, Buyucu, Sifaci
-- **Ceket, Pantolon, Eldiven, Ayakkabi, Gozluk, Zirh**: Sadece Erkek, Kadin (Tum Cinsiyetler YOK) + Savasci, Buyucu, Sifaci
+- **Silah**: Sabit "Tum Cinsiyetler" (secim yok) + Savasci, Buyucu, Sifaci
+- **Gozluk**: Erkek/Kadin secimi var + sabit "Tum Siniflar" (sinif secimi yok)
+- **Ceket, Pantolon, Eldiven, Ayakkabi, Zirh**: Sadece Erkek, Kadin (Tum Cinsiyetler YOK) + Savasci, Buyucu, Sifaci
 - **Yuzuk, Kolye, Iksir, Maden, Diger**: Sabit "Tum Cinsiyetler" (secim yok) + Sabit "Tum Siniflar" (secim yok)
 - **Tilsim**: Sabit "Tum Cinsiyetler" + Savasci, Buyucu, Sifaci (sinif secimi var)
+- **Recete kategori kisiti**: Recete olustururken Gozluk, Yuzuk, Kolye secenekleri gizlenir
 - **Renkli butonlar**: Erkek=mavi, Kadin=pembe, Tum Cins.=indigo | Savasci=mavi, Buyucu=kirmizi, Sifaci=yesil
-- `isGenderless` = ['Yuzuk', 'Kolye', 'Tilsim', 'Iksir', 'Maden', 'Diger'] -> cinsiyet alani gorunur ama sabit "Tum Cinsiyetler"
-- `isClassless` = ['Yuzuk', 'Kolye', 'Iksir', 'Maden', 'Diger'] -> sinif alani gorunur ama sabit "Tum Siniflar"
+- `isGenderless` = ['Silah', 'Yuzuk', 'Kolye', 'Tilsim', 'Iksir', 'Maden', 'Diger'] -> cinsiyet alani gorunur ama sabit "Tum Cinsiyetler"
+- `isClassless` = ['Gozluk', 'Yuzuk', 'Kolye', 'Iksir', 'Maden', 'Diger'] -> sinif alani gorunur ama sabit "Tum Siniflar"
 - Kategori degistirirken: genderless'tan gendered'a geciste "Tum Cinsiyetler" -> "Erkek", classless'tan classed'a geciste "Tum Siniflar" -> "Savasci"
 
 ### Tilsim Duplikasyon Uyarisi
@@ -126,23 +128,19 @@ metadata/enchantments
 - Batch scriptler: `firebase-guncelle.bat`, `github-guncelle.bat`
 
 ## Son Guncelleme
-- **Tarih**: 2026-02-07
-- **Versiyon**: v4.7
+- **Tarih**: 2026-02-08
+- **Versiyon**: v4.8
 - **Son yapilanlar**:
-  - Admin paneli > Kullanicilar sekmesine "Veri Girisi" ve "Global Arama" yetki toggle'lari eklendi
-  - `users/{uid}.permissions` modeli eklendi (`canDataEntry`, `canGlobalSearch`) ve eski kayitlar icin default tamamlama yapildi
-  - Veri girisi kapali kullanicilar icin hesap/esya/recete islemleri ve kaydetme akislari uygulama tarafinda kilitlendi (salt-okunur mod)
-  - Global arama yetkisi kapali kullanicilar icin GlobalSearchModal'da global sekme devre disi birakildi
-  - Firestore kurallari yetki bazli guncellendi: globalItems ve metadata/enchantments yazma/okuma kontrolleri, users permissions alaninin kullanici tarafindan degistirilememesi
-  - Yetki ve sistem mesajlari `alert` yerine tasarimli modal pencerelere tasindi (App + GlobalSearchModal)
-  - Tilsim duplikasyon uyarisi eklendi (I ve II kademe, 3+ adet, renkli glow efekti)
-  - Detay penceresinde tilsim duplikasyon konum bilgisi (K1 3X8 formati)
-  - Cinsiyet/sinif secim kurallari yeniden duzenlendi (kategoriye gore farkli secenekler)
-  - Sinif secim butonlari renklendirildi (Savasci=mavi, Buyucu=kirmizi, Sifaci=yesil)
-  - Cinsiyet secim butonlari renklendirildi (Erkek=mavi, Kadin=pembe)
-  - Sinif sirasi degistirildi: Savasci, Buyucu, Sifaci
-  - ItemModal mobil layout kompaktlastirildi (tek ekranda gorunecek sekilde)
-  - Tur/Sinif ozeti yan yana ve ortali yapildi
+  - Hesap seciminde sira degistirme eklendi (`handleMoveAccount`), desktop ve mobil UI'ya tasindi
+  - Silah kategorisinde cinsiyet secimi kaldirildi; sadece "Tum Cinsiyetler" kaldi
+  - Gozluk kategorisinde sinif secimi kaldirildi; sadece "Tum Siniflar" kaldi
+  - Recete olusturmada kategori listesinden Gozluk / Yuzuk / Kolye kaldirildi
+  - ItemModal submit asamasinda `gender` ve `heroClass` kategoriye gore normalize edilmeye baslandi
+  - Excel import kurallari yeni cinsiyet/sinif mantigina gore guncellendi (`genderlessCategories`, `classlessCategories`)
+  - Silah Cinsi alanina efsun benzeri otomatik oneriler eklendi (`weaponTypeSuggestions`)
+  - Mobil ust bar hesap aksiyonlari (`Yukari/Asagi/Ekle/Sil`) tek bir `...` menusu altina tasindi
+  - Mobil ust bar buton/ikon hizalari ve boyutlari optik olarak duzenlendi
+  - Desktop'ta hesap aksiyonlari tekrar yanyana butonlara alindi; admin butonu tekrar gorunur hale getirildi
 
 > **NOT**: Buyuk degisiklikler yapildiginda oturum sonunda "CLAUDE.md'yi guncelle" deyin.
 

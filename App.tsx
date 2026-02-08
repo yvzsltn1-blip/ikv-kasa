@@ -113,9 +113,11 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
   const [isMobileAccountMenuOpen, setIsMobileAccountMenuOpen] = useState(false);
+  const [isMobileAccountActionsOpen, setIsMobileAccountActionsOpen] = useState(false);
   const [isMobileQuickMenuOpen, setIsMobileQuickMenuOpen] = useState(false);
   const [isImportingExcel, setIsImportingExcel] = useState(false);
   const mobileAccountMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const mobileAccountActionsRef = React.useRef<HTMLDivElement | null>(null);
   const mobileQuickMenuRef = React.useRef<HTMLDivElement | null>(null);
   const excelImportInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -1726,6 +1728,25 @@ export default function App() {
     };
   }, [isMobileQuickMenuOpen]);
 
+  useEffect(() => {
+    if (!isMobileAccountActionsOpen) return;
+
+    const handleOutside = (event: MouseEvent | TouchEvent) => {
+      if (!mobileAccountActionsRef.current) return;
+      if (mobileAccountActionsRef.current.contains(event.target as Node)) return;
+      setIsMobileAccountActionsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [isMobileAccountActionsOpen]);
+
+
+
   // --- RENDER MANTIĞI ---
 
   if (loading) {
@@ -1803,13 +1824,14 @@ export default function App() {
 
             <div className="px-2 pb-1.5 flex items-stretch gap-2">
               <div ref={mobileAccountMenuRef} className="relative flex-1 min-w-0">
-                <div className="flex items-stretch gap-1.5">
+                <div className="flex items-center gap-1">
                   <button
                     onClick={() => {
+                      setIsMobileAccountActionsOpen(false);
                       setIsMobileQuickMenuOpen(false);
                       setIsMobileAccountMenuOpen((prev) => !prev);
                     }}
-                    className="h-9 flex-1 min-w-0 bg-slate-900/55 text-slate-200 rounded-xl border border-slate-600/40 px-3 flex items-center justify-between gap-2 active:bg-slate-800/90 transition-colors"
+                    className="h-8 flex-1 min-w-0 bg-slate-900/55 text-slate-200 rounded-lg border border-slate-600/40 px-3 flex items-center justify-between gap-2 active:bg-slate-800/90 transition-colors"
                     title="Hesap Sec"
                   >
                     <div className="min-w-0 text-left">
@@ -1818,48 +1840,73 @@ export default function App() {
                     </div>
                     <ChevronDown size={12} className={`shrink-0 text-slate-400 transition-transform ${isMobileAccountMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
-                  <button
-                    onClick={() => handleMoveAccount('up')}
-                    disabled={!canEditData || !canMoveAccountUp}
-                    className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
-                      canEditData && canMoveAccountUp
-                        ? 'text-amber-300 border-amber-700/40 bg-amber-900/15 active:bg-amber-900/35'
-                        : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'
-                    }`}
-                    title="Hesabi Yukari Tasi"
-                  >
-                    <ChevronUp size={15} />
-                  </button>
-                  <button
-                    onClick={() => handleMoveAccount('down')}
-                    disabled={!canEditData || !canMoveAccountDown}
-                    className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
-                      canEditData && canMoveAccountDown
-                        ? 'text-amber-300 border-amber-700/40 bg-amber-900/15 active:bg-amber-900/35'
-                        : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'
-                    }`}
-                    title="Hesabi Asagi Tasi"
-                  >
-                    <ChevronDown size={15} />
-                  </button>
-                  <button
-                    onClick={handleAddAccount}
-                    disabled={!canEditData}
-                    className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${canEditData ? 'text-green-400 border-green-700/40 bg-green-900/15 active:bg-green-900/35' : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'}`}
-                    title="Hesap Ekle"
-                  >
-                    <Plus size={15} />
-                  </button>
-                  {accounts.length > 1 && (
+                  <div ref={mobileAccountActionsRef} className="relative shrink-0">
                     <button
-                      onClick={handleDeleteAccount}
-                      disabled={!canEditData}
-                      className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${canEditData ? 'text-red-400 border-red-800/40 bg-red-900/15 active:bg-red-900/35' : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'}`}
-                      title="Hesap Sil"
+                      onClick={() => {
+                        setIsMobileAccountMenuOpen(false);
+                        setIsMobileQuickMenuOpen(false);
+                        setIsMobileAccountActionsOpen((prev) => !prev);
+                      }}
+                      className="h-8 w-8 rounded-lg border border-slate-600/40 bg-slate-900/55 text-slate-300 flex items-center justify-center active:bg-slate-800/90 transition-colors"
+                      title="Hesap Islemleri"
                     >
-                      <Trash2 size={15} />
+                      <MoreVertical size={13} />
                     </button>
-                  )}
+                    {isMobileAccountActionsOpen && (
+                      <div className="absolute right-0 top-full mt-1.5 z-[90] min-w-[170px] rounded-xl border border-slate-600/40 bg-slate-900/95 backdrop-blur p-1.5 shadow-2xl space-y-1">
+                        <button
+                          onClick={() => { handleMoveAccount('up'); setIsMobileAccountActionsOpen(false); }}
+                          disabled={!canEditData || !canMoveAccountUp}
+                          className={`w-full rounded-lg border px-2.5 py-2 text-left text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                            canEditData && canMoveAccountUp
+                              ? 'border-slate-700/40 bg-slate-800/70 text-slate-100 active:bg-slate-700/80'
+                              : 'border-slate-700/25 bg-slate-800/35 text-slate-500 cursor-not-allowed opacity-70'
+                          }`}
+                        >
+                          <span>Hesabi Yukari Tasi</span>
+                          <ChevronUp size={12} className="text-amber-300" />
+                        </button>
+                        <button
+                          onClick={() => { handleMoveAccount('down'); setIsMobileAccountActionsOpen(false); }}
+                          disabled={!canEditData || !canMoveAccountDown}
+                          className={`w-full rounded-lg border px-2.5 py-2 text-left text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                            canEditData && canMoveAccountDown
+                              ? 'border-slate-700/40 bg-slate-800/70 text-slate-100 active:bg-slate-700/80'
+                              : 'border-slate-700/25 bg-slate-800/35 text-slate-500 cursor-not-allowed opacity-70'
+                          }`}
+                        >
+                          <span>Hesabi Asagi Tasi</span>
+                          <ChevronDown size={12} className="text-amber-300" />
+                        </button>
+                        <button
+                          onClick={() => { handleAddAccount(); setIsMobileAccountActionsOpen(false); }}
+                          disabled={!canEditData}
+                          className={`w-full rounded-lg border px-2.5 py-2 text-left text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                            canEditData
+                              ? 'border-slate-700/40 bg-slate-800/70 text-slate-100 active:bg-slate-700/80'
+                              : 'border-slate-700/25 bg-slate-800/35 text-slate-500 cursor-not-allowed opacity-70'
+                          }`}
+                        >
+                          <span>Hesap Ekle</span>
+                          <Plus size={12} className="text-emerald-300" />
+                        </button>
+                        {accounts.length > 1 && (
+                          <button
+                            onClick={() => { handleDeleteAccount(); setIsMobileAccountActionsOpen(false); }}
+                            disabled={!canEditData}
+                            className={`w-full rounded-lg border px-2.5 py-2 text-left text-[11px] flex items-center justify-between gap-2 transition-colors ${
+                              canEditData
+                                ? 'border-red-900/35 bg-red-950/20 text-red-200 active:bg-red-900/30'
+                                : 'border-slate-700/25 bg-slate-800/35 text-slate-500 cursor-not-allowed opacity-70'
+                            }`}
+                          >
+                            <span>Hesap Sil</span>
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {isMobileAccountMenuOpen && (
@@ -1906,13 +1953,11 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                {userRole === 'admin' && (
-                  <button onClick={() => setShowAdminPanel(true)} className="h-7 w-7 flex items-center justify-center text-red-400 active:bg-red-600/20 rounded-lg transition-colors"><Crown size={14} /></button>
-                )}
                 <div ref={mobileQuickMenuRef} className="relative">
                   <button
                     onClick={() => {
                       setIsMobileAccountMenuOpen(false);
+                      setIsMobileAccountActionsOpen(false);
                       setIsMobileQuickMenuOpen((prev) => !prev);
                     }}
                     className="relative h-7 w-7 flex items-center justify-center text-slate-300 active:bg-slate-700/40 rounded-lg transition-colors"
@@ -1941,6 +1986,15 @@ export default function App() {
                           )}
                         </div>
                       </button>
+                      {userRole === 'admin' && (
+                        <button
+                          onClick={() => { setShowAdminPanel(true); setIsMobileQuickMenuOpen(false); }}
+                          className="w-full rounded-lg border border-red-900/35 bg-red-950/20 px-2.5 py-2 text-left text-[11px] text-red-200 active:bg-red-900/30 flex items-center justify-between gap-2"
+                        >
+                          <span>Admin Paneli</span>
+                          <Crown size={13} className="text-red-300" />
+                        </button>
+                      )}
                       <button
                         onClick={() => { handleExportExcel(); setIsMobileQuickMenuOpen(false); }}
                         className="w-full rounded-lg border border-slate-700/40 bg-slate-800/70 px-2.5 py-2 text-left text-[11px] text-slate-100 active:bg-slate-700/80 flex items-center justify-between gap-2"
@@ -2030,52 +2084,52 @@ export default function App() {
                     {userRole === 'user' && <span className="text-[9px] text-amber-400/70 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider uppercase">Kullanıcı</span>}
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                     <div className="relative">
-                        <select
-                          value={selectedAccountId}
-                          onChange={(e) => {
-                            setSelectedAccountId(e.target.value);
-                            setSelectedServerIndex(0);
-                            setActiveCharIndex(0);
-                            setCurrentViewIndex(0);
-                          }}
-                          className="appearance-none bg-slate-900/60 hover:bg-slate-700 text-slate-300 text-[11px] py-1 pl-2.5 pr-6 rounded-md border border-slate-600/50 focus:outline-none focus:border-yellow-600/50 cursor-pointer transition-colors"
-                        >
-                          {accounts.map(acc => (
-                            <option key={acc.id} value={acc.id}>{acc.name}</option>
-                          ))}
-                         </select>
-                         <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
-                      </div>
-                      <button
-                        onClick={() => handleMoveAccount('up')}
-                        disabled={!canEditData || !canMoveAccountUp}
-                        className={`p-1 rounded transition-colors ${
-                          canEditData && canMoveAccountUp
-                            ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-900/20'
-                            : 'text-slate-600 cursor-not-allowed opacity-60'
-                        }`}
-                        title="Hesabi Yukari Tasi"
+                  <div className="flex items-center gap-1">
+                    <div className="relative">
+                      <select
+                        value={selectedAccountId}
+                        onChange={(e) => {
+                          setSelectedAccountId(e.target.value);
+                          setSelectedServerIndex(0);
+                          setActiveCharIndex(0);
+                          setCurrentViewIndex(0);
+                        }}
+                        className="appearance-none bg-slate-900/60 hover:bg-slate-700 text-slate-300 text-[11px] py-1 pl-2.5 pr-6 rounded-md border border-slate-600/50 focus:outline-none focus:border-yellow-600/50 cursor-pointer transition-colors"
                       >
-                        <ChevronUp size={14} />
-                      </button>
-                      <button
-                        onClick={() => handleMoveAccount('down')}
-                        disabled={!canEditData || !canMoveAccountDown}
-                        className={`p-1 rounded transition-colors ${
-                          canEditData && canMoveAccountDown
-                            ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-900/20'
-                            : 'text-slate-600 cursor-not-allowed opacity-60'
-                        }`}
-                        title="Hesabi Asagi Tasi"
-                      >
-                        <ChevronDown size={14} />
-                      </button>
-                      <button onClick={handleAddAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-green-500/70 hover:text-green-400 hover:bg-green-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Ekle"><Plus size={14} /></button>
-                     {accounts.length > 1 && (
-                       <button onClick={handleDeleteAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-red-800/70 hover:text-red-400 hover:bg-red-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Sil"><Trash2 size={14} /></button>
-                     )}
+                        {accounts.map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+                    </div>
+                    <button
+                      onClick={() => handleMoveAccount('up')}
+                      disabled={!canEditData || !canMoveAccountUp}
+                      className={`p-1 rounded transition-colors ${
+                        canEditData && canMoveAccountUp
+                          ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-900/20'
+                          : 'text-slate-600 cursor-not-allowed opacity-60'
+                      }`}
+                      title="Hesabi Yukari Tasi"
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      onClick={() => handleMoveAccount('down')}
+                      disabled={!canEditData || !canMoveAccountDown}
+                      className={`p-1 rounded transition-colors ${
+                        canEditData && canMoveAccountDown
+                          ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-900/20'
+                          : 'text-slate-600 cursor-not-allowed opacity-60'
+                      }`}
+                      title="Hesabi Asagi Tasi"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
+                    <button onClick={handleAddAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-green-500/70 hover:text-green-400 hover:bg-green-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Ekle"><Plus size={14} /></button>
+                    {accounts.length > 1 && (
+                      <button onClick={handleDeleteAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-red-800/70 hover:text-red-400 hover:bg-red-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Sil"><Trash2 size={14} /></button>
+                    )}
                   </div>
                </div>
             </div>
@@ -2109,7 +2163,6 @@ export default function App() {
               {userRole === 'admin' && (
                 <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all"><Crown size={13} /><span>Admin</span></button>
               )}
-              <div className="w-px h-6 bg-slate-600/30 mx-1"></div>
               <button onClick={handleLogout} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-md border border-transparent hover:border-red-800/30 transition-all" title="Çıkış"><LogOut size={14} /></button>
             </div>
           </div>
