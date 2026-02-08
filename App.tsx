@@ -2047,22 +2047,22 @@ export default function App() {
           </div>
 
           {/* DESKTOP TOP BAR */}
-          <div className="hidden md:flex bg-gradient-to-r from-slate-800 via-slate-800/95 to-slate-800 px-4 py-2 justify-between items-center gap-4 border-b border-slate-700/50">
+          <div className="hidden md:flex bg-gradient-to-r from-slate-800 via-slate-800/95 to-slate-800 px-3 lg:px-4 py-2 justify-between items-start xl:items-center gap-3 lg:gap-4 border-b border-slate-700/50 flex-wrap xl:flex-nowrap">
             {/* Left: Logo + Account */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 lg:gap-3 min-w-0 flex-1">
                <div className="bg-gradient-to-br from-yellow-500/20 to-yellow-700/10 p-2 rounded-lg border border-yellow-500/30 shadow-lg shadow-yellow-900/20">
                  <Shield size={20} className="text-yellow-500" />
                </div>
 
-               <div className="flex flex-col gap-0.5">
-                  <div className="flex items-center gap-2 group/acc whitespace-nowrap">
+               <div className="flex flex-col gap-0.5 min-w-0">
+                  <div className="flex items-center gap-2 group/acc flex-nowrap whitespace-nowrap overflow-x-auto no-scrollbar pr-1">
                     <div className="flex items-center gap-1.5">
                       <input
                         value={tempAccountName}
                         onChange={(e) => setTempAccountName(e.target.value)}
                         onBlur={commitAccountName}
                         readOnly={!canEditData}
-                        className="bg-transparent text-yellow-400 font-bold text-base outline-none w-auto min-w-[12ch] placeholder-slate-600 border-b border-dashed border-yellow-700/30 focus:border-yellow-600/50 focus:border-solid transition-all"
+                        className="bg-transparent text-yellow-400 font-bold text-sm lg:text-base outline-none w-auto min-w-[10ch] placeholder-slate-600 border-b border-dashed border-yellow-700/30 focus:border-yellow-600/50 focus:border-solid transition-all"
                         style={{ width: `${Math.max(12, tempAccountName.length)}ch` }}
                         placeholder="Hesap Adı"
                         maxLength={30}
@@ -2085,7 +2085,7 @@ export default function App() {
                     {userRole === 'user' && <span className="text-[9px] text-amber-400/70 bg-amber-900/20 border border-amber-700/30 rounded-full px-2 py-0.5 tracking-wider uppercase">Kullanıcı</span>}
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 min-w-0">
                     <div className="relative">
                       <select
                         value={selectedAccountId}
@@ -2095,7 +2095,7 @@ export default function App() {
                           setActiveCharIndex(0);
                           setCurrentViewIndex(0);
                         }}
-                        className="appearance-none bg-slate-900/60 hover:bg-slate-700 text-slate-300 text-[11px] py-1 pl-2.5 pr-6 rounded-md border border-slate-600/50 focus:outline-none focus:border-yellow-600/50 cursor-pointer transition-colors"
+                        className="appearance-none bg-slate-900/60 hover:bg-slate-700 text-slate-300 text-[11px] py-1 pl-2.5 pr-6 rounded-md border border-slate-600/50 focus:outline-none focus:border-yellow-600/50 cursor-pointer transition-colors max-w-[120px] lg:max-w-[170px] truncate"
                       >
                         {accounts.map(acc => (
                           <option key={acc.id} value={acc.id}>{acc.name}</option>
@@ -2136,33 +2136,34 @@ export default function App() {
             </div>
 
             {/* Right: Action Buttons */}
-            <div className="flex items-center gap-1.5">
-              <button onClick={handleOpenSearch} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all"><Search size={13} /><span>Ara</span></button>
-              <button onClick={() => setIsMessagingOpen(true)} className="relative flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-cyan-700 text-cyan-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-cyan-500 transition-all">
+            <div className="flex items-center gap-1.5 flex-wrap justify-end max-w-full">
+              <button onClick={handleOpenSearch} className="flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all" title="Ara"><Search size={13} /><span className="hidden xl:inline">Ara</span></button>
+              <button onClick={() => setIsMessagingOpen(true)} className="relative flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-slate-700/50 hover:bg-cyan-700 text-cyan-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-cyan-500 transition-all" title="Mesaj">
                 <MessageCircle size={13} />
-                <span>Mesaj</span>
+                <span className="hidden xl:inline">Mesaj</span>
                 {unreadMessageSenderCount > 0 && (
                   <span className="ml-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] leading-4 font-bold text-center border border-red-300/60 shadow">
                     {unreadMessageSenderCount > 99 ? '99+' : unreadMessageSenderCount}
                   </span>
                 )}
               </button>
-              <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all"><FileSpreadsheet size={13} /><span>Excel</span></button>
+              <button onClick={handleExportExcel} className="flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-slate-700/50 hover:bg-emerald-700 text-emerald-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-emerald-500 transition-all" title="Excel"><FileSpreadsheet size={13} /><span className="hidden xl:inline">Excel</span></button>
               <button
                 onClick={openExcelImportPicker}
                 disabled={!canEditData || isImportingExcel}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${
+                className={`flex items-center gap-1.5 px-2 xl:px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${
                   !canEditData || isImportingExcel
                     ? 'bg-slate-800/40 text-slate-600 border-slate-700/35 cursor-not-allowed opacity-70'
                     : 'bg-slate-700/50 hover:bg-amber-700 text-amber-300 hover:text-white border-slate-600/40 hover:border-amber-500'
                 }`}
+                title={isImportingExcel ? 'Import...' : 'Ice Aktar'}
               >
                 <Upload size={13} className={isImportingExcel ? 'animate-pulse' : ''} />
-                <span>{isImportingExcel ? 'Import...' : 'Ice Aktar'}</span>
+                <span className="hidden xl:inline">{isImportingExcel ? 'Import...' : 'Ice Aktar'}</span>
               </button>
-              <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`}><Save size={13} /><span>Kaydet</span></button>
+              <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-2 xl:px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`} title="Kaydet"><Save size={13} /><span className="hidden xl:inline">Kaydet</span></button>
               {userRole === 'admin' && (
-                <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all"><Crown size={13} /><span>Admin</span></button>
+                <button onClick={() => setShowAdminPanel(true)} className="flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all" title="Admin"><Crown size={13} /><span className="hidden xl:inline">Admin</span></button>
               )}
               <button onClick={handleLogout} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-md border border-transparent hover:border-red-800/30 transition-all" title="Çıkış"><LogOut size={14} /></button>
             </div>
