@@ -7,7 +7,7 @@ import { ItemDetailModal } from './components/ItemDetailModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle, MoreVertical, Upload } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, ChevronUp, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle, MoreVertical, Upload } from 'lucide-react';
 import { AdminPanel } from './components/AdminPanel';
 import { MessagingModal } from './components/MessagingModal';
 
@@ -527,6 +527,9 @@ export default function App() {
   };
 
   // --- Sync Temp States when Active Data Changes ---
+  const activeAccountIndex = accounts.findIndex(a => a.id === selectedAccountId);
+  const canMoveAccountUp = activeAccountIndex > 0;
+  const canMoveAccountDown = activeAccountIndex >= 0 && activeAccountIndex < accounts.length - 1;
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
   const activeServer = activeAccount?.servers[selectedServerIndex];
   const activeChar = activeServer?.characters[activeCharIndex];
@@ -615,6 +618,30 @@ export default function App() {
     globalEnchantments.forEach(e => { if (e?.trim()) set.add(e.trim()); });
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
   }, [accounts, globalEnchantments]);
+
+  const weaponTypeSuggestions = useMemo(() => {
+    const set = new Set<string>();
+    accounts.forEach(acc => {
+      acc.servers.forEach(server => {
+        server.characters.forEach(char => {
+          [char.bank1, char.bank2, char.bag].forEach(container => {
+            container.slots.forEach(slot => {
+              const item = slot.item;
+              if (item?.category === 'Silah' && item.weaponType?.trim()) {
+                set.add(item.weaponType.trim());
+              }
+            });
+          });
+          (char.learnedRecipes || []).forEach(recipe => {
+            if (recipe.category === 'Silah' && recipe.weaponType?.trim()) {
+              set.add(recipe.weaponType.trim());
+            }
+          });
+        });
+      });
+    });
+    return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+  }, [accounts]);
 
   // Global set lookup: tüm hesaplar/sunucular/karakterler genelinde efsun çiftine göre set durumu
   const { globalSetLookup, globalSetMap } = useMemo(() => {
@@ -820,6 +847,20 @@ export default function App() {
     setHasUnsavedChanges(true);
   };
 
+  const handleMoveAccount = (direction: 'up' | 'down') => {
+    if (!ensureCanEditData()) return;
+    const currentIndex = accounts.findIndex(acc => acc.id === selectedAccountId);
+    if (currentIndex < 0) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= accounts.length) return;
+
+    const newAccounts = [...accounts];
+    [newAccounts[currentIndex], newAccounts[targetIndex]] = [newAccounts[targetIndex], newAccounts[currentIndex]];
+    setAccounts(newAccounts);
+    setHasUnsavedChanges(true);
+  };
+
   type ImportContainerKey = 'bank1' | 'bank2' | 'bag' | 'learned';
   type ParsedImportRow = Record<string, string>;
 
@@ -1003,8 +1044,8 @@ export default function App() {
       const defaultGender = GENDER_OPTIONS[0] as ItemData['gender'];
       const allGender = (GENDER_OPTIONS.find(g => normalizeImportText(g) === 'tumcinsiyetler') || defaultGender) as ItemData['gender'];
 
-      const genderlessCategories = new Set(['yuzuk', 'kolye', 'tilsim', 'iksir', 'maden', 'diger']);
-      const classlessCategories = new Set(['yuzuk', 'kolye', 'iksir', 'maden', 'diger']);
+      const genderlessCategories = new Set(['silah', 'yuzuk', 'kolye', 'tilsim', 'iksir', 'maden', 'diger']);
+      const classlessCategories = new Set(['gozluk', 'yuzuk', 'kolye', 'iksir', 'maden', 'diger']);
 
       const newEnchantments = new Set<string>();
       const issues: string[] = [];
@@ -1778,6 +1819,30 @@ export default function App() {
                     <ChevronDown size={12} className={`shrink-0 text-slate-400 transition-transform ${isMobileAccountMenuOpen ? 'rotate-180' : ''}`} />
                   </button>
                   <button
+                    onClick={() => handleMoveAccount('up')}
+                    disabled={!canEditData || !canMoveAccountUp}
+                    className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                      canEditData && canMoveAccountUp
+                        ? 'text-amber-300 border-amber-700/40 bg-amber-900/15 active:bg-amber-900/35'
+                        : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'
+                    }`}
+                    title="Hesabi Yukari Tasi"
+                  >
+                    <ChevronUp size={15} />
+                  </button>
+                  <button
+                    onClick={() => handleMoveAccount('down')}
+                    disabled={!canEditData || !canMoveAccountDown}
+                    className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+                      canEditData && canMoveAccountDown
+                        ? 'text-amber-300 border-amber-700/40 bg-amber-900/15 active:bg-amber-900/35'
+                        : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'
+                    }`}
+                    title="Hesabi Asagi Tasi"
+                  >
+                    <ChevronDown size={15} />
+                  </button>
+                  <button
                     onClick={handleAddAccount}
                     disabled={!canEditData}
                     className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${canEditData ? 'text-green-400 border-green-700/40 bg-green-900/15 active:bg-green-900/35' : 'text-slate-600 border-slate-700/30 bg-slate-800/20 cursor-not-allowed opacity-60'}`}
@@ -1980,10 +2045,34 @@ export default function App() {
                           {accounts.map(acc => (
                             <option key={acc.id} value={acc.id}>{acc.name}</option>
                           ))}
-                        </select>
-                        <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
-                     </div>
-                     <button onClick={handleAddAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-green-500/70 hover:text-green-400 hover:bg-green-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Ekle"><Plus size={14} /></button>
+                         </select>
+                         <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500"/>
+                      </div>
+                      <button
+                        onClick={() => handleMoveAccount('up')}
+                        disabled={!canEditData || !canMoveAccountUp}
+                        className={`p-1 rounded transition-colors ${
+                          canEditData && canMoveAccountUp
+                            ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-900/20'
+                            : 'text-slate-600 cursor-not-allowed opacity-60'
+                        }`}
+                        title="Hesabi Yukari Tasi"
+                      >
+                        <ChevronUp size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleMoveAccount('down')}
+                        disabled={!canEditData || !canMoveAccountDown}
+                        className={`p-1 rounded transition-colors ${
+                          canEditData && canMoveAccountDown
+                            ? 'text-amber-400/80 hover:text-amber-300 hover:bg-amber-900/20'
+                            : 'text-slate-600 cursor-not-allowed opacity-60'
+                        }`}
+                        title="Hesabi Asagi Tasi"
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                      <button onClick={handleAddAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-green-500/70 hover:text-green-400 hover:bg-green-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Ekle"><Plus size={14} /></button>
                      {accounts.length > 1 && (
                        <button onClick={handleDeleteAccount} disabled={!canEditData} className={`p-1 rounded transition-colors ${canEditData ? 'text-red-800/70 hover:text-red-400 hover:bg-red-900/20' : 'text-slate-600 cursor-not-allowed opacity-60'}`} title="Hesap Sil"><Trash2 size={14} /></button>
                      )}
@@ -2511,6 +2600,7 @@ export default function App() {
         onRead={handleReadRecipe}
         existingItem={getCurrentItem()}
         enchantmentSuggestions={enchantmentSuggestions}
+        weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
       />
@@ -2552,6 +2642,7 @@ export default function App() {
         onDelete={handleDeleteEditedRecipe}
         existingItem={editingRecipe}
         enchantmentSuggestions={enchantmentSuggestions}
+        weaponTypeSuggestions={weaponTypeSuggestions}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
       />

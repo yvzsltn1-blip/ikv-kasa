@@ -12,13 +12,14 @@ interface ItemModalProps {
   onRead?: (item: ItemData) => void;
   existingItem: ItemData | null;
   enchantmentSuggestions?: string[];
+  weaponTypeSuggestions?: string[];
   globalSetLookup?: Map<string, GlobalSetInfo>;
   globalSetMap?: Map<string, SetItemLocation[]>;
 }
 
-export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], globalSetLookup, globalSetMap }) => {
+export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, onDelete, onRead, existingItem, enchantmentSuggestions = [], weaponTypeSuggestions = [], globalSetLookup, globalSetMap }) => {
   const [step, setStep] = useState(1);
-  const [activeField, setActiveField] = useState<'enchantment1' | 'enchantment2' | null>(null);
+  const [activeField, setActiveField] = useState<'enchantment1' | 'enchantment2' | 'weaponType' | null>(null);
   const [formData, setFormData] = useState<Partial<ItemData>>({
     type: 'Item',
     category: '',
@@ -62,13 +63,14 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
     if (!activeField) return [];
     const text = (formData[activeField] || '').trim().toLocaleLowerCase('tr');
     if (!text) return [];
-    return enchantmentSuggestions
+    const pool = activeField === 'weaponType' ? weaponTypeSuggestions : enchantmentSuggestions;
+    return pool
       .filter(s => {
         const lower = s.toLocaleLowerCase('tr');
         return lower !== text && lower.includes(text);
       })
       .slice(0, 5);
-  }, [activeField, formData.enchantment1, formData.enchantment2, enchantmentSuggestions]);
+  }, [activeField, formData.enchantment1, formData.enchantment2, formData.weaponType, enchantmentSuggestions, weaponTypeSuggestions]);
 
   const blurTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -95,8 +97,12 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.category && formData.type) {
+      const normalizedGender = isGenderless ? 'Tüm Cinsiyetler' : (formData.gender || 'Erkek');
+      const normalizedHeroClass = isClassless ? 'Tüm Sınıflar' : (formData.heroClass || 'Savaşçı');
       onSave({
         ...formData as ItemData,
+        gender: normalizedGender,
+        heroClass: normalizedHeroClass,
         id: existingItem?.id || crypto.randomUUID(),
       });
       onClose();
@@ -114,15 +120,21 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
   const isStackable = formData.category === 'Maden' || formData.category === 'İksir' || formData.category === 'Diğer';
   // Determine if item is a Weapon
   const isWeapon = formData.category === 'Silah';
+  const genderlessCategories = ['Silah', 'Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden', 'Diğer'];
+  const classlessCategories = ['Gözlük', 'Yüzük', 'Kolye', 'İksir', 'Maden', 'Diğer'];
+  const recipeBlockedCategories = ['Gözlük', 'Yüzük', 'Kolye'];
+  const selectableCategories = formData.type === 'Recipe'
+    ? CATEGORY_OPTIONS.filter(cat => !recipeBlockedCategories.includes(cat))
+    : CATEGORY_OPTIONS;
   // Categories that don't have gender selection
-  const isGenderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden', 'Diğer'].includes(formData.category || '');
+  const isGenderless = genderlessCategories.includes(formData.category || '');
   // Categories that don't have class selection
-  const isClassless = ['Yüzük', 'Kolye', 'İksir', 'Maden', 'Diğer'].includes(formData.category || '');
+  const isClassless = classlessCategories.includes(formData.category || '');
 
   const handleFieldBlur = () => {
     blurTimeout.current = setTimeout(() => setActiveField(null), 150);
   };
-  const handleSuggestionClick = (field: 'enchantment1' | 'enchantment2', value: string) => {
+  const handleSuggestionClick = (field: 'enchantment1' | 'enchantment2' | 'weaponType', value: string) => {
     if (blurTimeout.current) clearTimeout(blurTimeout.current);
     setFormData({ ...formData, [field]: value });
     setActiveField(null);
@@ -207,12 +219,12 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
 
                <h3 className="text-center mb-2 font-semibold text-slate-300">Sınıf Seçiniz</h3>
                <div className="grid grid-cols-4 sm:grid-cols-3 gap-1.5 sm:gap-2">
-                 {CATEGORY_OPTIONS.map((cat) => (
-                   <button
-                    key={cat}
-                    onClick={() => {
-                      const genderless = ['Yüzük', 'Kolye', 'Tılsım', 'İksir', 'Maden', 'Diğer'].includes(cat);
-                      const classless = ['Yüzük', 'Kolye', 'İksir', 'Maden', 'Diğer'].includes(cat);
+                 {selectableCategories.map((cat) => (
+                    <button
+                     key={cat}
+                     onClick={() => {
+                      const genderless = genderlessCategories.includes(cat);
+                      const classless = classlessCategories.includes(cat);
                       setFormData({
                         ...formData,
                         category: cat,
@@ -369,14 +381,33 @@ export const ItemModal: React.FC<ItemModalProps> = ({ isOpen, onClose, onSave, o
                      <label className="block text-xs font-bold mb-1 text-red-400 flex items-center gap-1">
                         <Sword size={12} /> Silah Cinsi
                      </label>
-                     <input 
-                        type="text" 
-                        placeholder="Örn: Balta, Çifte, Hızar, Kafa Koparan..."
-                        value={formData.weaponType || ''}
-                        maxLength={50}
-                        onChange={(e) => setFormData({...formData, weaponType: e.target.value})}
-                        className="w-full bg-slate-900 border border-red-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-red-500 focus:outline-none placeholder-slate-600 text-red-100"
-                      />
+                     <div className="relative">
+                       <input
+                         type="text"
+                         placeholder="Örn: Balta, Çifte, Hızar, Kafa Koparan..."
+                         value={formData.weaponType || ''}
+                         maxLength={50}
+                         onChange={(e) => setFormData({...formData, weaponType: e.target.value})}
+                         onFocus={() => { if (blurTimeout.current) clearTimeout(blurTimeout.current); setActiveField('weaponType'); }}
+                         onBlur={handleFieldBlur}
+                         className="w-full bg-slate-900 border border-red-900/60 rounded px-2 py-1 text-xs sm:text-sm focus:border-red-500 focus:outline-none placeholder-slate-600 text-red-100"
+                       />
+                       {activeField === 'weaponType' && filteredSuggestions.length > 0 && (
+                         <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg max-h-28 overflow-y-auto">
+                           {filteredSuggestions.map(s => (
+                             <button
+                               key={s}
+                               type="button"
+                               onMouseDown={(e) => e.preventDefault()}
+                               onClick={() => handleSuggestionClick('weaponType', s)}
+                               className="w-full text-left px-2 py-1.5 text-xs sm:text-sm text-slate-200 hover:bg-yellow-600 hover:text-black"
+                             >
+                               {s}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
                   </div>
               )}
 
