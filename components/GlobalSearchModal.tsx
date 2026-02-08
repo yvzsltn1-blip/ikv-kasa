@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, USER_CLASS_QUOTAS, shouldShowBoundMarker } from '../types';
+import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, resolveUserClassQuotas, shouldShowBoundMarker } from '../types';
 import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers, AlertTriangle } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { SetDetailModal } from './SetDetailModal';
@@ -123,11 +123,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     );
   };
 
-  const getClassSearchLimit = (rawClass: unknown) => {
-    const resolvedClass = normalizeUserClass(rawClass);
-    return USER_CLASS_QUOTAS[resolvedClass].dailyGlobalSearchLimit;
-  };
-
   const refreshQuota = async (consumeOne: boolean) => {
     if (!globalSearchEnabled) {
       setSearchLimitReached(true);
@@ -153,6 +148,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
 
     let defaultLimit = 50;
     let overrideLimit: number | null = null;
+    let classLimits = resolveUserClassQuotas(null);
     try {
       const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
       if (limitsDoc.exists()) {
@@ -166,6 +162,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         if (typeof userOverrides[currentUserUid] === 'number' && Number.isFinite(userOverrides[currentUserUid]) && userOverrides[currentUserUid] > 0) {
           overrideLimit = Math.floor(userOverrides[currentUserUid]);
         }
+        classLimits = resolveUserClassQuotas(limitsData.classLimits);
       }
     } catch {
       // If limits cannot be read, continue with default limit.
@@ -175,7 +172,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     const todayKey = getLocalDayKey();
     const resolveLimitFromUserData = (userData: { userClass?: unknown }) => {
       if (overrideLimit !== null) return overrideLimit;
-      const classLimit = getClassSearchLimit(userData.userClass);
+      const resolvedClass = normalizeUserClass(userData.userClass);
+      const classLimit = classLimits[resolvedClass].dailyGlobalSearchLimit;
       return (typeof classLimit === 'number' && Number.isFinite(classLimit) && classLimit > 0)
         ? classLimit
         : defaultLimit;

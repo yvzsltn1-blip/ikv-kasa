@@ -3,6 +3,7 @@
     "rules": "firestore.rules"
   },
   "hosting": {
+    "target": "kasa-app",
     "public": "dist",
     "ignore": [
       "firebase.json",

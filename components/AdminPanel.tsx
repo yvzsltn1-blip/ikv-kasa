@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserBlockInfo, UserClass, DEFAULT_USER_CLASS, normalizeUserClass, USER_CLASS_QUOTAS } from '../types';
+import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserBlockInfo, UserClass, DEFAULT_USER_CLASS, normalizeUserClass, resolveUserClassQuotas, USER_CLASS_KEYS } from '../types';
 import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle, UserX, UserCheck, AtSign } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, query, where, writeBatch, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
@@ -25,7 +25,25 @@ const BLOCK_REASON_OPTIONS = [
   { value: 'security_review', label: 'Guvenlik incelemesi' },
 ];
 
+type ClassLimitInputs = Record<UserClass, { dailyMessageLimit: string; dailyGlobalSearchLimit: string }>;
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
+  const defaultClassLimits = resolveUserClassQuotas(null);
+  const toClassLimitInputs = (classLimits: SearchLimitsConfig['classLimits']): ClassLimitInputs => ({
+    user: {
+      dailyMessageLimit: String(classLimits.user.dailyMessageLimit),
+      dailyGlobalSearchLimit: String(classLimits.user.dailyGlobalSearchLimit),
+    },
+    premium: {
+      dailyMessageLimit: String(classLimits.premium.dailyMessageLimit),
+      dailyGlobalSearchLimit: String(classLimits.premium.dailyGlobalSearchLimit),
+    },
+    pro: {
+      dailyMessageLimit: String(classLimits.pro.dailyMessageLimit),
+      dailyGlobalSearchLimit: String(classLimits.pro.dailyGlobalSearchLimit),
+    },
+  });
+
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -41,8 +59,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [adminEmails, setAdminEmails] = useState<string[]>([]);
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [adminLoading, setAdminLoading] = useState(false);
-  const [searchLimits, setSearchLimits] = useState<SearchLimitsConfig>({ defaultLimit: 50, userOverrides: {} });
-  const [newLimitValue, setNewLimitValue] = useState('50');
+  const [searchLimits, setSearchLimits] = useState<SearchLimitsConfig>({
+    defaultLimit: 50,
+    userOverrides: {},
+    classLimits: defaultClassLimits,
+  });
+  const [classLimitInputs, setClassLimitInputs] = useState<ClassLimitInputs>(() => toClassLimitInputs(defaultClassLimits));
   const [limitSaving, setLimitSaving] = useState(false);
   const [directMessagingEnabled, setDirectMessagingEnabled] = useState(true);
   const [messageSystemSaving, setMessageSystemSaving] = useState(false);
@@ -216,27 +238,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           const resolvedOverrides = (data.userOverrides && typeof data.userOverrides === 'object')
             ? data.userOverrides as Record<string, number>
             : {};
+          const resolvedClassLimits = resolveUserClassQuotas(data.classLimits);
           setSearchLimits({
             defaultLimit: resolvedDefaultLimit,
             userOverrides: resolvedOverrides,
+            classLimits: resolvedClassLimits,
           });
-          setNewLimitValue(String(resolvedDefaultLimit));
+          setClassLimitInputs(toClassLimitInputs(resolvedClassLimits));
           setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
             const overrideValue = resolvedOverrides[userInfo.uid];
             acc[userInfo.uid] = overrideValue !== undefined ? String(overrideValue) : '';
             return acc;
           }, {}));
         } else {
-          setSearchLimits({ defaultLimit: 50, userOverrides: {} });
-          setNewLimitValue('50');
+          setSearchLimits({ defaultLimit: 50, userOverrides: {}, classLimits: defaultClassLimits });
+          setClassLimitInputs(toClassLimitInputs(defaultClassLimits));
           setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
             acc[userInfo.uid] = '';
             return acc;
           }, {}));
         }
       } catch {
-        setSearchLimits({ defaultLimit: 50, userOverrides: {} });
-        setNewLimitValue('50');
+        setSearchLimits({ defaultLimit: 50, userOverrides: {}, classLimits: defaultClassLimits });
+        setClassLimitInputs(toClassLimitInputs(defaultClassLimits));
         setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
           acc[userInfo.uid] = '';
           return acc;
@@ -460,7 +484,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   };
 
   const getUserClassLimits = (userClassValue: UserClass) => {
-    return USER_CLASS_QUOTAS[userClassValue] || USER_CLASS_QUOTAS[DEFAULT_USER_CLASS];
+    return searchLimits.classLimits[userClassValue] || searchLimits.classLimits[DEFAULT_USER_CLASS];
   };
 
   const getEffectiveGlobalSearchLimit = (user: AdminUserInfo) => {
@@ -682,17 +706,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
-  // Search limits
-  const handleSaveDefaultLimit = async () => {
-    const val = parseInt(newLimitValue);
-    if (isNaN(val) || val < 1) return;
+  // Limit settings
+  const handleSaveClassLimits = async () => {
+    const rawLimits = {
+      user: {
+        dailyMessageLimit: parseInt(classLimitInputs.user.dailyMessageLimit, 10),
+        dailyGlobalSearchLimit: parseInt(classLimitInputs.user.dailyGlobalSearchLimit, 10),
+      },
+      premium: {
+        dailyMessageLimit: parseInt(classLimitInputs.premium.dailyMessageLimit, 10),
+        dailyGlobalSearchLimit: parseInt(classLimitInputs.premium.dailyGlobalSearchLimit, 10),
+      },
+      pro: {
+        dailyMessageLimit: parseInt(classLimitInputs.pro.dailyMessageLimit, 10),
+        dailyGlobalSearchLimit: parseInt(classLimitInputs.pro.dailyGlobalSearchLimit, 10),
+      },
+    };
+
+    const hasInvalidLimit = USER_CLASS_KEYS.some(classKey => (
+      Number.isNaN(rawLimits[classKey].dailyMessageLimit) ||
+      rawLimits[classKey].dailyMessageLimit < 1 ||
+      Number.isNaN(rawLimits[classKey].dailyGlobalSearchLimit) ||
+      rawLimits[classKey].dailyGlobalSearchLimit < 1
+    ));
+
+    if (hasInvalidLimit) {
+      alert("Tum limitler en az 1 olmalidir.");
+      return;
+    }
+
+    const nextClassLimits = resolveUserClassQuotas(rawLimits);
 
     setLimitSaving(true);
     try {
-      await setDoc(doc(db, "metadata", "searchLimits"), { defaultLimit: val, userOverrides: searchLimits.userOverrides }, { merge: true });
-      setSearchLimits(prev => ({ ...prev, defaultLimit: val }));
+      await setDoc(doc(db, "metadata", "searchLimits"), {
+        defaultLimit: searchLimits.defaultLimit,
+        userOverrides: searchLimits.userOverrides,
+        classLimits: nextClassLimits,
+      }, { merge: true });
+      setSearchLimits(prev => ({ ...prev, classLimits: nextClassLimits }));
+      setClassLimitInputs(toClassLimitInputs(nextClassLimits));
     } catch (error) {
-      console.error("Limit kaydetme hatası:", error);
+      console.error("Limit kaydetme hatasi:", error);
+      alert("Limit ayarlari kaydedilirken hata olustu.");
     } finally {
       setLimitSaving(false);
     }
@@ -1013,7 +1069,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-[11px]">
                             <p className="text-slate-200 font-semibold">Kullanici Sinifi</p>
-                            <p className="text-[10px] text-slate-500">Mesaj ve global arama limitleri sinifa gore otomatik atanir.</p>
+                            <p className="text-[10px] text-slate-500">Mesaj ve global arama limitleri sinifa gore otomatik atanir. Degerleri Limit Ayarlari sekmesinden degistirebilirsiniz.</p>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <select
@@ -1259,37 +1315,74 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              {/* Search Limits */}
+              {/* Limit Settings */}
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <h3 className="text-emerald-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
-                  GLOBAL ARAMA LiMiTi
+                  LiMiT AYARLARI
                 </h3>
 
-                {/* Default limit */}
-                <div className="mb-4">
-                  <label className="text-[10px] text-slate-500 font-bold block mb-1">VARSAYILAN GÜNLÜK LiMiT</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={newLimitValue}
-                      onChange={e => setNewLimitValue(e.target.value)}
-                      className="w-24 bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500/50"
-                      min="1"
-                    />
-                    <button
-                      onClick={handleSaveDefaultLimit}
-                      disabled={limitSaving}
-                      className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
-                    >
-                      {limitSaving ? 'Kaydediliyor...' : 'Kaydet'}
-                    </button>
-                  </div>
+                <div className="space-y-2.5">
+                  {USER_CLASS_KEYS.map(classKey => {
+                    const classInfo = searchLimits.classLimits[classKey];
+                    return (
+                      <div key={classKey} className="rounded-lg border border-slate-700/40 bg-slate-900/50 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="text-[11px] font-semibold text-slate-200">{classInfo.label}</p>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Gunluk limitler</p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500 font-bold block mb-1">GLOBAL ARAMA</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={classLimitInputs[classKey].dailyGlobalSearchLimit}
+                              onChange={e => setClassLimitInputs(prev => ({
+                                ...prev,
+                                [classKey]: {
+                                  ...prev[classKey],
+                                  dailyGlobalSearchLimit: e.target.value,
+                                },
+                              }))}
+                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500/50"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500 font-bold block mb-1">MESAJ</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={classLimitInputs[classKey].dailyMessageLimit}
+                              onChange={e => setClassLimitInputs(prev => ({
+                                ...prev,
+                                [classKey]: {
+                                  ...prev[classKey],
+                                  dailyMessageLimit: e.target.value,
+                                },
+                              }))}
+                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div className="bg-slate-900/50 rounded-lg border border-slate-700/40 px-3 py-2 text-[11px] text-slate-400">
-                  Kullanici bazli global arama override ayarlari <span className="text-slate-200 font-semibold">Kullanicilar</span> sekmesine tasindi.
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className="text-[10px] text-slate-500">
+                    Kullanici bazli global arama override ayarlari <span className="text-slate-200 font-semibold">Kullanicilar</span> sekmesinde kalmaya devam eder.
+                  </div>
+                  <button
+                    onClick={handleSaveClassLimits}
+                    disabled={limitSaving}
+                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {limitSaving ? 'Kaydediliyor...' : 'Limitleri Kaydet'}
+                  </button>
                 </div>
+
               </div>
             </div>
           )}

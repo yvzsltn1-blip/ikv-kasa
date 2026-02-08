@@ -28,6 +28,7 @@ export type Gender = 'Erkek' | 'Kadın' | 'Tüm Cinsiyetler';
 export type UserRole = 'admin' | 'user' | null;
 
 export type UserClass = 'user' | 'premium' | 'pro';
+export const USER_CLASS_KEYS: UserClass[] = ['user', 'premium', 'pro'];
 
 export interface UserClassQuota {
   label: string;
@@ -53,6 +54,37 @@ export const USER_CLASS_QUOTAS: Record<UserClass, UserClassQuota> = {
     dailyMessageLimit: 50,
     dailyGlobalSearchLimit: 50,
   },
+};
+
+const toPositiveLimit = (value: unknown, fallback: number) => {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
+  }
+  return fallback;
+};
+
+export const resolveUserClassQuotas = (raw: unknown): Record<UserClass, UserClassQuota> => {
+  const source = (raw && typeof raw === 'object')
+    ? raw as Partial<Record<UserClass, Partial<UserClassQuota>>>
+    : {};
+
+  return {
+    user: {
+      label: USER_CLASS_QUOTAS.user.label,
+      dailyMessageLimit: toPositiveLimit(source.user?.dailyMessageLimit, USER_CLASS_QUOTAS.user.dailyMessageLimit),
+      dailyGlobalSearchLimit: toPositiveLimit(source.user?.dailyGlobalSearchLimit, USER_CLASS_QUOTAS.user.dailyGlobalSearchLimit),
+    },
+    premium: {
+      label: USER_CLASS_QUOTAS.premium.label,
+      dailyMessageLimit: toPositiveLimit(source.premium?.dailyMessageLimit, USER_CLASS_QUOTAS.premium.dailyMessageLimit),
+      dailyGlobalSearchLimit: toPositiveLimit(source.premium?.dailyGlobalSearchLimit, USER_CLASS_QUOTAS.premium.dailyGlobalSearchLimit),
+    },
+    pro: {
+      label: USER_CLASS_QUOTAS.pro.label,
+      dailyMessageLimit: toPositiveLimit(source.pro?.dailyMessageLimit, USER_CLASS_QUOTAS.pro.dailyMessageLimit),
+      dailyGlobalSearchLimit: toPositiveLimit(source.pro?.dailyGlobalSearchLimit, USER_CLASS_QUOTAS.pro.dailyGlobalSearchLimit),
+    },
+  };
 };
 
 export const normalizeUserClass = (raw: unknown): UserClass => {
@@ -198,4 +230,5 @@ export interface AdminUserInfo {
 export interface SearchLimitsConfig {
   defaultLimit: number;
   userOverrides: Record<string, number>;
+  classLimits: Record<UserClass, UserClassQuota>;
 }

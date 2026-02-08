@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Lock, MessageCircle, Search, Send, Shield, Trash2, User, X } from 'lucide-react';
 import { db } from '../firebase';
 import { arrayUnion, collection, deleteDoc, doc, documentId, endAt, getDoc, getDocs, limit, onSnapshot, orderBy, query, runTransaction, setDoc, startAt, where, writeBatch } from 'firebase/firestore';
-import { UserRole, normalizeUserClass, USER_CLASS_QUOTAS } from '../types';
+import { UserRole, normalizeUserClass, resolveUserClassQuotas } from '../types';
 
 interface MessagingModalProps {
   isOpen: boolean;
@@ -40,6 +40,7 @@ interface ChatMessage {
 type ConversationDeleteAction = 'me' | 'all';
 
 const DEFAULT_DAILY_MESSAGE_LIMIT = 5;
+const DEFAULT_CLASS_LIMITS = resolveUserClassQuotas(null);
 
 const getLocalDayKey = () => {
   const now = new Date();
@@ -63,12 +64,15 @@ const formatDuration = (ms: number) => {
   return `${hours}s ${minutes}d ${seconds}sn`;
 };
 
-const toMessageLimit = (rawData: unknown) => {
+const toMessageLimit = (
+  rawData: unknown,
+  classLimits: ReturnType<typeof resolveUserClassQuotas> = DEFAULT_CLASS_LIMITS,
+) => {
   const data = (rawData && typeof rawData === 'object')
     ? rawData as { userClass?: unknown }
     : {};
   const userClass = normalizeUserClass(data.userClass);
-  return USER_CLASS_QUOTAS[userClass].dailyMessageLimit;
+  return classLimits[userClass].dailyMessageLimit;
 };
 
 const buildConversationId = (uidA: string, uidB: string) => [uidA, uidB].sort().join('__');
@@ -137,9 +141,16 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
     }
     try {
       const userRef = doc(db, 'users', currentUserUid);
-      const userSnap = await getDoc(userRef);
+      const limitsRef = doc(db, 'metadata', 'searchLimits');
+      const [userSnap, limitsSnap] = await Promise.all([
+        getDoc(userRef),
+        getDoc(limitsRef),
+      ]);
       const userData = userSnap.exists() ? userSnap.data() : {};
-      const dailyLimit = toMessageLimit(userData);
+      const classLimits = limitsSnap.exists()
+        ? resolveUserClassQuotas((limitsSnap.data() as { classLimits?: unknown }).classLimits)
+        : DEFAULT_CLASS_LIMITS;
+      const dailyLimit = toMessageLimit(userData, classLimits);
       const todayKey = getLocalDayKey();
       const quota = (userData?.messageQuota?.direct || {}) as { day?: string; used?: number };
       const usedToday = quota.day === todayKey ? Math.max(0, quota.used || 0) : 0;
@@ -567,6 +578,7 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
 
     const selectedLabel = selectedPeer?.label || selectedPeerUid;
     const senderRef = doc(db, 'users', currentUserUid);
+    const limitsRef = doc(db, 'metadata', 'searchLimits');
     const peerPrefRef = doc(db, 'messagePrefs', selectedPeerUid);
 
     setSending(true);
@@ -597,8 +609,12 @@ export const MessagingModal: React.FC<MessagingModalProps> = ({
       const txResult = await runTransaction(db, async (transaction) => {
         const senderSnap = await transaction.get(senderRef);
         const senderData = senderSnap.exists() ? senderSnap.data() : {};
+        const limitsSnap = await transaction.get(limitsRef);
+        const classLimits = limitsSnap.exists()
+          ? resolveUserClassQuotas((limitsSnap.data() as { classLimits?: unknown }).classLimits)
+          : DEFAULT_CLASS_LIMITS;
 
-        const messageLimit = toMessageLimit(senderData);
+        const messageLimit = toMessageLimit(senderData, classLimits);
         const todayKey = getLocalDayKey();
         const quota = (senderData?.messageQuota?.direct || {}) as { day?: string; used?: number };
         const usedToday = quota.day === todayKey ? Math.max(0, quota.used || 0) : 0;
