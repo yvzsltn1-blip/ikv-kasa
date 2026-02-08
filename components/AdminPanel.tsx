@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserBlockInfo, UserClass, DEFAULT_USER_CLASS, normalizeUserClass, resolveUserClassQuotas, USER_CLASS_KEYS } from '../types';
-import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle, UserX, UserCheck, AtSign } from 'lucide-react';
+import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle, UserX, UserCheck, AtSign, Upload, Pencil, Save } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, query, where, writeBatch, arrayUnion, arrayRemove, runTransaction } from 'firebase/firestore';
 
@@ -68,6 +68,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [limitSaving, setLimitSaving] = useState(false);
   const [directMessagingEnabled, setDirectMessagingEnabled] = useState(true);
   const [messageSystemSaving, setMessageSystemSaving] = useState(false);
+  const [managedEnchantments, setManagedEnchantments] = useState<string[]>([]);
+  const [enchantmentTextInput, setEnchantmentTextInput] = useState('');
+  const [enchantmentListSearch, setEnchantmentListSearch] = useState('');
+  const [editingEnchantment, setEditingEnchantment] = useState<string | null>(null);
+  const [editingEnchantmentInput, setEditingEnchantmentInput] = useState('');
+  const [enchantmentSaving, setEnchantmentSaving] = useState(false);
+  const [enchantmentImporting, setEnchantmentImporting] = useState(false);
+  const enchantmentImportInputRef = React.useRef<HTMLInputElement | null>(null);
 
   // Users tab
   const [userSearch, setUserSearch] = useState('');
@@ -112,6 +120,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       }
     }
     return undefined;
+  };
+
+  const normalizeEnchantmentName = (value: unknown) => String(value ?? '').replace(/^\uFEFF/, '').trim();
+
+  const toUniqueSortedEnchantments = (names: string[]): string[] => {
+    const seen = new Set<string>();
+    const unique: string[] = [];
+    names.forEach(rawName => {
+      const normalized = normalizeEnchantmentName(rawName);
+      if (!normalized) return;
+      const key = normalized.toLocaleLowerCase('tr');
+      if (seen.has(key)) return;
+      seen.add(key);
+      unique.push(normalized);
+    });
+    return unique.sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
+  };
+
+  const extractEnchantmentNamesFromText = (rawText: string): string[] => {
+    const sanitized = rawText.replace(/^\uFEFF/, '');
+    const values: string[] = [];
+
+    sanitized.split(/\r?\n/).forEach(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
+
+      const cells = trimmedLine
+        .split(/[;,\t]/)
+        .map(cell => cell.trim().replace(/^"|"$/g, ''));
+      const candidate = (cells.find(cell => cell !== '') || '').trim();
+      if (!candidate) return;
+
+      const token = candidate.toLocaleLowerCase('tr');
+      if (token === 'efsun' || token === 'enchantment' || token === 'name') return;
+      values.push(candidate);
+    });
+
+    return toUniqueSortedEnchantments(values);
+  };
+
+  const saveManagedEnchantments = async (nextNames: string[]): Promise<boolean> => {
+    const normalizedNames = toUniqueSortedEnchantments(nextNames);
+    setEnchantmentSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "enchantments"), {
+        names: normalizedNames,
+        updatedAt: Date.now(),
+      }, { merge: true });
+      setManagedEnchantments(normalizedNames);
+      return true;
+    } catch (error) {
+      console.error("Efsun onerileri kaydetme hatasi:", error);
+      alert("Efsun onerileri kaydedilirken hata olustu.");
+      return false;
+    } finally {
+      setEnchantmentSaving(false);
+    }
   };
 
   const fetchAllData = async () => {
@@ -226,6 +291,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           setAdminEmails(adminsDoc.data().emails || []);
         }
       } catch { /* no admins doc yet */ }
+
+      // Fetch managed enchantment suggestions
+      try {
+        const enchantmentsDoc = await getDoc(doc(db, "metadata", "enchantments"));
+        if (enchantmentsDoc.exists()) {
+          const rawNames = enchantmentsDoc.data().names;
+          const names = Array.isArray(rawNames)
+            ? rawNames.filter((value): value is string => typeof value === 'string')
+            : [];
+          setManagedEnchantments(toUniqueSortedEnchantments(names));
+        } else {
+          setManagedEnchantments([]);
+        }
+      } catch {
+        setManagedEnchantments([]);
+      }
 
       // Fetch search limits
       try {
@@ -382,6 +463,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       u.uid.toLocaleLowerCase('tr').includes(q)
     );
   }, [allUsers, userSearch]);
+
+  const filteredManagedEnchantments = useMemo(() => {
+    const queryText = enchantmentListSearch.trim().toLocaleLowerCase('tr');
+    if (!queryText) return managedEnchantments;
+    return managedEnchantments.filter(name => name.toLocaleLowerCase('tr').includes(queryText));
+  }, [managedEnchantments, enchantmentListSearch]);
 
   // Delete user
   const handleDeleteUser = async (user: AdminUserInfo) => {
@@ -703,6 +790,96 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       console.error("Admin kaldırma hatası:", error);
     } finally {
       setAdminLoading(false);
+    }
+  };
+
+  const handleOpenEnchantmentImportPicker = () => {
+    enchantmentImportInputRef.current?.click();
+  };
+
+  const handleAddEnchantmentsFromText = async () => {
+    const parsedNames = extractEnchantmentNamesFromText(enchantmentTextInput);
+    if (parsedNames.length === 0) {
+      alert("Eklenebilir efsun adi bulunamadi. Her satira bir isim yazin.");
+      return;
+    }
+
+    const merged = toUniqueSortedEnchantments([...managedEnchantments, ...parsedNames]);
+    if (merged.length === managedEnchantments.length) {
+      alert("Listede zaten mevcut olan isimler girildi.");
+      return;
+    }
+
+    const saved = await saveManagedEnchantments(merged);
+    if (saved) {
+      setEnchantmentTextInput('');
+    }
+  };
+
+  const handleImportEnchantmentsFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setEnchantmentImporting(true);
+    try {
+      const fileNameLower = file.name.toLocaleLowerCase();
+      if (!fileNameLower.endsWith('.csv') && !fileNameLower.endsWith('.txt')) {
+        alert("Su an sadece CSV/TXT import destekleniyor. Excel dosyanizi CSV olarak kaydedip tekrar yukleyin.");
+        return;
+      }
+
+      const rawText = await file.text();
+      const parsedNames = extractEnchantmentNamesFromText(rawText);
+      if (parsedNames.length === 0) {
+        alert("Dosyada eklenebilir efsun adi bulunamadi.");
+        return;
+      }
+
+      const merged = toUniqueSortedEnchantments([...managedEnchantments, ...parsedNames]);
+      if (merged.length === managedEnchantments.length) {
+        alert("Dosyadaki tum isimler zaten listede mevcut.");
+        return;
+      }
+
+      await saveManagedEnchantments(merged);
+    } finally {
+      event.target.value = '';
+      setEnchantmentImporting(false);
+    }
+  };
+
+  const handleStartEditEnchantment = (name: string) => {
+    setEditingEnchantment(name);
+    setEditingEnchantmentInput(name);
+  };
+
+  const handleCancelEditEnchantment = () => {
+    setEditingEnchantment(null);
+    setEditingEnchantmentInput('');
+  };
+
+  const handleSaveEditedEnchantment = async () => {
+    if (!editingEnchantment) return;
+    const nextValue = normalizeEnchantmentName(editingEnchantmentInput);
+    if (!nextValue) {
+      alert("Efsun adi bos birakilamaz.");
+      return;
+    }
+
+    const nextList = managedEnchantments.map(name => (
+      name === editingEnchantment ? nextValue : name
+    ));
+    const saved = await saveManagedEnchantments(nextList);
+    if (saved) {
+      handleCancelEditEnchantment();
+    }
+  };
+
+  const handleDeleteEnchantment = async (name: string) => {
+    const nextList = managedEnchantments.filter(itemName => itemName !== name);
+    await saveManagedEnchantments(nextList);
+    if (editingEnchantment === name) {
+      handleCancelEditEnchantment();
     }
   };
 
@@ -1289,6 +1466,122 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     <Plus size={14} />
                     Ekle
                   </button>
+                </div>
+              </div>
+
+              {/* Enchantment Suggestions Management */}
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <input
+                  ref={enchantmentImportInputRef}
+                  type="file"
+                  accept=".csv,.txt,text/csv,text/plain"
+                  className="hidden"
+                  onChange={handleImportEnchantmentsFile}
+                />
+
+                <h3 className="text-amber-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <Search size={14} />
+                  EFSUN OTO TAMAMLAMA
+                </h3>
+
+                <p className="text-[10px] text-slate-500 mb-2.5">
+                  Bu listedeki isimler item ekleme ekraninda otomatik onerilerde gorunur. Listeden silinen isimler kasadaki itemlardan silinmez, sadece oneriden kalkar.
+                </p>
+
+                <div className="space-y-2">
+                  <textarea
+                    value={enchantmentTextInput}
+                    onChange={e => setEnchantmentTextInput(e.target.value)}
+                    rows={4}
+                    placeholder="Her satira bir efsun yazin. Ornek:&#10;Alman Modeli&#10;Dis Sehir Modeli"
+                    className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500/50 placeholder-slate-600 resize-y"
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={handleAddEnchantmentsFromText}
+                      disabled={enchantmentSaving || enchantmentImporting || !enchantmentTextInput.trim()}
+                      className="px-3 py-1.5 bg-amber-800 hover:bg-amber-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Plus size={12} />
+                      Metinden Ekle
+                    </button>
+                    <button
+                      onClick={handleOpenEnchantmentImportPicker}
+                      disabled={enchantmentSaving || enchantmentImporting}
+                      className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Upload size={12} />
+                      {enchantmentImporting ? 'Import...' : 'CSV/TXT Import'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-3 rounded-lg border border-slate-700/40 bg-slate-900/50 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={enchantmentListSearch}
+                      onChange={e => setEnchantmentListSearch(e.target.value)}
+                      placeholder="Listede ara..."
+                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500/50 placeholder-slate-600"
+                    />
+                    <span className="text-[10px] text-slate-500">{managedEnchantments.length} kayit</span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {filteredManagedEnchantments.length === 0 ? (
+                      <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek efsun yok.</div>
+                    ) : (
+                      filteredManagedEnchantments.map(name => (
+                        <div key={name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                          {editingEnchantment === name ? (
+                            <>
+                              <input
+                                type="text"
+                                value={editingEnchantmentInput}
+                                onChange={e => setEditingEnchantmentInput(e.target.value)}
+                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-amber-500/50"
+                              />
+                              <button
+                                onClick={handleSaveEditedEnchantment}
+                                disabled={enchantmentSaving || enchantmentImporting}
+                                className="px-2 py-1 bg-emerald-800 hover:bg-emerald-700 text-white text-[10px] font-bold rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Save size={10} />
+                                Kaydet
+                              </button>
+                              <button
+                                onClick={handleCancelEditEnchantment}
+                                disabled={enchantmentSaving || enchantmentImporting}
+                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-bold rounded transition-colors disabled:opacity-50"
+                              >
+                                Vazgec
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="flex-1 text-xs text-slate-200 break-all">{name}</span>
+                              <button
+                                onClick={() => handleStartEditEnchantment(name)}
+                                disabled={enchantmentSaving || enchantmentImporting}
+                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                              >
+                                <Pencil size={10} />
+                                Duzenle
+                              </button>
+                              <button
+                                onClick={() => handleDeleteEnchantment(name)}
+                                disabled={enchantmentSaving || enchantmentImporting}
+                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
+                              >
+                                Sil
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
 

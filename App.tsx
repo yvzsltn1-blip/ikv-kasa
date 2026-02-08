@@ -14,7 +14,7 @@ import { MessagingModal } from './components/MessagingModal';
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, where, getDocs, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, where, getDocs, updateDoc, onSnapshot } from 'firebase/firestore';
 
 // View sequence
 const VIEW_ORDER = ['bank1', 'bank2', 'bag'] as const;
@@ -698,29 +698,12 @@ export default function App() {
 
   const enchantmentSuggestions = useMemo(() => {
     const set = new Set<string>();
-    // Lokal: kullanıcının kendi itemlerinden
-    accounts.forEach(acc => {
-      acc.servers.forEach(server => {
-        server.characters.forEach(char => {
-          [char.bank1, char.bank2, char.bag].forEach(container => {
-            container.slots.forEach(slot => {
-              if (slot.item) {
-                if (slot.item.enchantment1?.trim()) set.add(slot.item.enchantment1.trim());
-                if (slot.item.enchantment2?.trim()) set.add(slot.item.enchantment2.trim());
-              }
-            });
-          });
-          (char.learnedRecipes || []).forEach(recipe => {
-            if (recipe.enchantment1?.trim()) set.add(recipe.enchantment1.trim());
-            if (recipe.enchantment2?.trim()) set.add(recipe.enchantment2.trim());
-          });
-        });
-      });
+    globalEnchantments.forEach(e => {
+      const normalized = (e || '').trim();
+      if (normalized) set.add(normalized);
     });
-    // Global: tüm kullanıcılardan
-    globalEnchantments.forEach(e => { if (e?.trim()) set.add(e.trim()); });
     return [...set].sort((a, b) => a.toLocaleLowerCase('tr').localeCompare(b.toLocaleLowerCase('tr'), 'tr'));
-  }, [accounts, globalEnchantments]);
+  }, [globalEnchantments]);
 
   const weaponTypeSuggestions = useMemo(() => {
     const set = new Set<string>();
@@ -920,6 +903,24 @@ export default function App() {
   const handleOpenAdminPanel = () => {
     setShowAdminPanel(true);
     markAdminNotificationsRead().catch(() => {});
+  };
+
+  const handleCloseAdminPanel = async () => {
+    setShowAdminPanel(false);
+    try {
+      const enchDoc = await getDoc(doc(db, "metadata", "enchantments"));
+      if (enchDoc.exists()) {
+        const rawNames = enchDoc.data().names;
+        const names = Array.isArray(rawNames)
+          ? rawNames.filter((value): value is string => typeof value === 'string')
+          : [];
+        setGlobalEnchantments(names);
+      } else {
+        setGlobalEnchantments([]);
+      }
+    } catch (error) {
+      console.warn("Global enchantments yenilenemedi:", error);
+    }
   };
 
   const handleSendBlockedTemplateMessage = async () => {
@@ -1246,7 +1247,6 @@ export default function App() {
       const genderlessCategories = new Set(['silah', 'yuzuk', 'kolye', 'tilsim', 'iksir', 'maden', 'diger']);
       const classlessCategories = new Set(['gozluk', 'yuzuk', 'kolye', 'iksir', 'maden', 'diger']);
 
-      const newEnchantments = new Set<string>();
       const issues: string[] = [];
       let appliedCount = 0;
       let skippedCount = 0;
@@ -1326,8 +1326,6 @@ export default function App() {
 
         const enchantment1 = getImportField(parsedRow, ['efsun1', 'enchantment1']).replace(/^-+$/, '').trim();
         const enchantment2 = getImportField(parsedRow, ['efsun2', 'enchantment2']).replace(/^-+$/, '').trim();
-        if (enchantment1) newEnchantments.add(enchantment1);
-        if (enchantment2) newEnchantments.add(enchantment2);
 
         const categoryToken = normalizeImportText(category);
         const heroClassRaw = getImportField(parsedRow, ['sinif', 'class', 'heroclass']);
@@ -1423,16 +1421,6 @@ export default function App() {
 
       setAccounts(nextAccounts);
       setHasUnsavedChanges(true);
-
-      if (newEnchantments.size > 0) {
-        const enchantmentArray = Array.from(newEnchantments);
-        setDoc(doc(db, "metadata", "enchantments"), { names: arrayUnion(...enchantmentArray) }, { merge: true }).catch(() => {});
-        setGlobalEnchantments(prev => {
-          const merged = new Set(prev);
-          enchantmentArray.forEach(e => merged.add(e));
-          return [...merged];
-        });
-      }
 
       const currentUser = auth.currentUser;
       if (!currentUser) {
@@ -1835,20 +1823,6 @@ export default function App() {
     // Sync global item
     syncGlobalItem(item);
 
-    // Efsun isimlerini global metadata'ya kaydet
-    const newEnchantments: string[] = [];
-    if (item.enchantment1?.trim()) newEnchantments.push(item.enchantment1.trim());
-    if (item.enchantment2?.trim()) newEnchantments.push(item.enchantment2.trim());
-    if (newEnchantments.length > 0) {
-      setDoc(doc(db, "metadata", "enchantments"), { names: arrayUnion(...newEnchantments) }, { merge: true }).catch(() => {});
-      // Lokal state'i de anında güncelle
-      setGlobalEnchantments(prev => {
-        const set = new Set(prev);
-        newEnchantments.forEach(e => set.add(e));
-        return set.size !== prev.length ? [...set] : prev;
-      });
-    }
-
     showToast('Kaydetmek için disket butonuna basmayı unutmayın!');
   };
 
@@ -2044,7 +2018,7 @@ export default function App() {
   }
 
   if (showAdminPanel && userRole === 'admin') {
-    return <AdminPanel onBack={() => setShowAdminPanel(false)} />;
+    return <AdminPanel onBack={() => { handleCloseAdminPanel().catch(() => {}); }} />;
   }
 
   if (!activeAccount || !activeServer || !activeChar) return <div className="text-white p-10">Hesap verisi yüklenemedi. Lütfen sayfayı yenileyin.</div>;
