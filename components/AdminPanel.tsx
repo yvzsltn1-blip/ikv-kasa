@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AdminUserInfo, SearchLimitsConfig, Account, UserPermissions, UserMessageSettings } from '../types';
 import { CATEGORY_OPTIONS } from '../types';
-import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock } from 'lucide-react';
+import { Shield, ArrowLeft, Users, Settings, BarChart3, Search, Trash2, Crown, Plus, X, Loader2, ChevronDown, ChevronUp, AlertTriangle, RotateCcw, Lock, Unlock, MessageCircle } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, getDocs, doc, getDoc, setDoc, deleteDoc, query, where, writeBatch, arrayUnion, arrayRemove } from 'firebase/firestore';
 
@@ -41,6 +41,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [limitSaving, setLimitSaving] = useState(false);
   const [newOverrideUid, setNewOverrideUid] = useState('');
   const [newOverrideLimit, setNewOverrideLimit] = useState('');
+  const [directMessagingEnabled, setDirectMessagingEnabled] = useState(true);
+  const [messageSystemSaving, setMessageSystemSaving] = useState(false);
 
   // Users tab
   const [userSearch, setUserSearch] = useState('');
@@ -197,6 +199,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           setNewLimitValue(String(data.defaultLimit || 50));
         }
       } catch { /* no limits doc yet */ }
+
+      // Fetch global messaging setting
+      try {
+        const messageSettingsDoc = await getDoc(doc(db, "metadata", "messageSettings"));
+        if (messageSettingsDoc.exists()) {
+          const data = messageSettingsDoc.data() as { directMessagesEnabled?: unknown };
+          setDirectMessagingEnabled(data.directMessagesEnabled !== false);
+        } else {
+          setDirectMessagingEnabled(true);
+        }
+      } catch {
+        setDirectMessagingEnabled(true);
+      }
 
     } catch (error) {
       setLoadError("Veriler yuklenirken hata olustu. Firestore izinlerini ve kullanici kayit verilerini kontrol edin.");
@@ -500,6 +515,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       console.error("Override kaldırma hatası:", error);
     } finally {
       setLimitSaving(false);
+    }
+  };
+
+  const handleToggleMessagingSystem = async () => {
+    if (messageSystemSaving) return;
+
+    const nextValue = !directMessagingEnabled;
+    setMessageSystemSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "messageSettings"), {
+        directMessagesEnabled: nextValue,
+        updatedAt: Date.now(),
+      }, { merge: true });
+      setDirectMessagingEnabled(nextValue);
+    } catch (error) {
+      console.error("Mesajlasma sistemi ayar hatasi:", error);
+      alert("Mesajlasma ayari guncellenirken hata olustu.");
+    } finally {
+      setMessageSystemSaving(false);
     }
   };
 
@@ -900,6 +934,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   >
                     <Plus size={14} />
                     Ekle
+                  </button>
+                </div>
+              </div>
+
+              {/* Messaging System */}
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+                <h3 className="text-cyan-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <MessageCircle size={14} />
+                  MESAJLASMA SiSTEMi
+                </h3>
+
+                <div className="flex items-center justify-between gap-3 bg-slate-900/50 rounded-lg border border-slate-700/40 px-3 py-2.5">
+                  <div className="text-[11px]">
+                    <p className="text-slate-200 font-semibold">Kullanici Mesajlasmasi</p>
+                    <p className="text-[10px] text-slate-500">Kapaliyken sadece yoneticiler mesaj gonderebilir.</p>
+                  </div>
+                  <button
+                    onClick={handleToggleMessagingSystem}
+                    disabled={messageSystemSaving}
+                    className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${directMessagingEnabled ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40' : 'bg-red-950/40 text-red-300 border-red-900/50 hover:bg-red-900/40'} disabled:opacity-50`}
+                  >
+                    {directMessagingEnabled ? <Unlock size={11} /> : <Lock size={11} />}
+                    {messageSystemSaving ? 'Kaydediliyor...' : (directMessagingEnabled ? 'Acik' : 'Kapali')}
                   </button>
                 </div>
               </div>

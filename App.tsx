@@ -348,12 +348,17 @@ export default function App() {
       const senderSet = new Set<string>();
 
       snapshot.forEach(docSnap => {
-        const data = docSnap.data() as { senderUid?: string; readBy?: unknown };
+        const data = docSnap.data() as { senderUid?: string; readBy?: unknown; deletedFor?: unknown };
         if (!data.senderUid || data.senderUid === uid) return;
 
         const readBy = Array.isArray(data.readBy)
           ? data.readBy.filter((value): value is string => typeof value === 'string')
           : [];
+        const deletedFor = Array.isArray(data.deletedFor)
+          ? data.deletedFor.filter((value): value is string => typeof value === 'string')
+          : [];
+
+        if (deletedFor.includes(uid)) return;
 
         if (!readBy.includes(uid)) {
           senderSet.add(data.senderUid);
