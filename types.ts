@@ -131,6 +131,20 @@ export const shouldShowBoundMarker = (
   return item.type === 'Item' && isBindableCategory(item.category) && item.isBound === true;
 };
 
+const normalizeSetEnchantmentToken = (value: unknown): string => (
+  String(value ?? '').trim().toLocaleLowerCase('tr')
+);
+
+export const createSetEnchantmentKey = (enchantment1: unknown, enchantment2: unknown): string => {
+  const normalized = [
+    normalizeSetEnchantmentToken(enchantment1),
+    normalizeSetEnchantmentToken(enchantment2),
+  ];
+
+  normalized.sort((a, b) => a.localeCompare(b, 'tr'));
+  return `${normalized[0]}|${normalized[1]}`;
+};
+
 export interface SlotData {
   id: number; // 0 to 63 or 0 to 23
   item: ItemData | null;

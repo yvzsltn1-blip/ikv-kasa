@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { CATEGORY_OPTIONS, HeroClass, ItemData, SetItemLocation, GlobalSetInfo, isBindableCategory } from '../types';
+import { CATEGORY_OPTIONS, HeroClass, ItemData, SetItemLocation, GlobalSetInfo, isBindableCategory, createSetEnchantmentKey } from '../types';
 import { HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { X, BookOpen, CheckCircle, Circle, Layers, Sword, Globe, Lock } from 'lucide-react';
 import { SetDetailModal } from './SetDetailModal';
@@ -173,7 +173,7 @@ export const ItemModal: React.FC<ItemModalProps> = ({
     if (!globalSetLookup || !formData.category || !SET_CATEGORIES.includes(formData.category)) return null;
     if (!formData.enchantment1 || formData.enchantment1.trim() === '') return null;
 
-    const enchKey = `${(formData.enchantment1 || '').toLocaleLowerCase('tr')}|${(formData.enchantment2 || '').toLocaleLowerCase('tr')}`;
+    const enchKey = createSetEnchantmentKey(formData.enchantment1 || '', formData.enchantment2 || '');
     const globalKey = `${enchKey}|${formData.gender || 'Tüm Cinsiyetler'}|${formData.heroClass || 'Savaşçı'}`;
     const info = globalSetLookup.get(globalKey);
     return info ? { info, globalKey } : null;

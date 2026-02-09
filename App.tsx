@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, HeroClass, DEFAULT_USER_CLASS, normalizeUserClass, isBindableCategory, shouldShowBoundMarker } from './types';
+import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, HeroClass, DEFAULT_USER_CLASS, normalizeUserClass, isBindableCategory, shouldShowBoundMarker, createSetEnchantmentKey } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
 import { BAG_SLOT_COUNT, getContainerSlotIdFromPosition, getContainerSlotPosition, normalizeBagContainerLayout } from './containerLayout';
 import { ContainerGrid } from './components/ContainerGrid';
@@ -1178,7 +1178,7 @@ export default function App() {
     // Efsun çiftine göre grupla
     const enchGroups = new Map<string, typeof allSetItems>();
     allSetItems.forEach(entry => {
-      const enchKey = `${entry.item.enchantment1.toLocaleLowerCase('tr')}|${entry.item.enchantment2.toLocaleLowerCase('tr')}`;
+      const enchKey = createSetEnchantmentKey(entry.item.enchantment1, entry.item.enchantment2);
       const group = enchGroups.get(enchKey) || [];
       group.push(entry);
       enchGroups.set(enchKey, group);
@@ -3334,6 +3334,8 @@ export default function App() {
         onClose={() => { setDetailItem(null); setDetailSlot(null); }}
         onEdit={handleEditFromDetail}
         talismanLocations={talismanLocations}
+        globalSetLookup={globalSetLookup}
+        globalSetMap={globalSetMap}
       />
 
       <ItemModal

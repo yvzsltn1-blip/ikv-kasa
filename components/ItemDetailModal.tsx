@@ -1,7 +1,8 @@
 import React from 'react';
-import { ItemData, shouldShowBoundMarker } from '../types';
-import { CATEGORY_COLORS, CLASS_COLORS } from '../constants';
+import { ItemData, GlobalSetInfo, SetItemLocation, shouldShowBoundMarker, createSetEnchantmentKey } from '../types';
+import { CATEGORY_COLORS, CLASS_COLORS, SET_CATEGORIES } from '../constants';
 import { X, Pencil, Scroll, Shield, Sword, Gem, Component, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe, Globe, AlertTriangle } from 'lucide-react';
+import { SetDetailModal } from './SetDetailModal';
 
 interface TalismanLocation {
   containerName: string;
@@ -14,6 +15,8 @@ interface ItemDetailModalProps {
   onClose: () => void;
   onEdit: () => void;
   talismanLocations?: TalismanLocation[] | null;
+  globalSetLookup?: Map<string, GlobalSetInfo>;
+  globalSetMap?: Map<string, SetItemLocation[]>;
 }
 
 const getCategoryIcon = (category: string) => {
@@ -54,7 +57,26 @@ const resolveTalismanColor = (item: Pick<ItemData, 'enchantment2'>): 'Mavi' | 'K
   return 'Mavi';
 };
 
-export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit, talismanLocations }) => {
+export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit, talismanLocations, globalSetLookup, globalSetMap }) => {
+  const [showSetDetail, setShowSetDetail] = React.useState(false);
+  const [setDetailKey, setSetDetailKey] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setShowSetDetail(false);
+    setSetDetailKey(null);
+  }, [item?.id]);
+
+  const currentSetInfo = React.useMemo(() => {
+    if (!item) return null;
+    if (!globalSetLookup || !SET_CATEGORIES.includes(item.category)) return null;
+    if (!item.enchantment1 || item.enchantment1.trim() === '') return null;
+
+    const enchKey = createSetEnchantmentKey(item.enchantment1, item.enchantment2);
+    const globalKey = `${enchKey}|${item.gender}|${item.heroClass}`;
+    const info = globalSetLookup.get(globalKey);
+    return info ? { info, globalKey } : null;
+  }, [globalSetLookup, item]);
+
   if (!item) return null;
 
   const colorClass = CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
@@ -132,6 +154,32 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
             <span className={`font-bold ${gender.color}`}>{gender.text}</span>
           </div>
 
+          {/* Set progress */}
+          {currentSetInfo && globalSetMap && (
+            <button
+              type="button"
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg border cursor-pointer hover:brightness-125 transition-all ${
+                currentSetInfo.info.count >= 8
+                  ? 'bg-emerald-950/60 border-emerald-700'
+                  : currentSetInfo.info.count >= 4
+                    ? 'bg-amber-950/60 border-amber-700'
+                    : 'bg-slate-900/60 border-slate-700'
+              }`}
+              onClick={() => { setSetDetailKey(currentSetInfo.globalKey); setShowSetDetail(true); }}
+            >
+              <span className="text-[10px] font-bold text-slate-400 shrink-0">SET</span>
+              <div className="flex-1 bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${currentSetInfo.info.count >= 8 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                  style={{ width: `${(currentSetInfo.info.count / 8) * 100}%` }}
+                />
+              </div>
+              <span className={`text-[11px] font-bold shrink-0 ${currentSetInfo.info.count >= 8 ? 'text-emerald-400' : currentSetInfo.info.count >= 4 ? 'text-amber-400' : 'text-slate-400'}`}>
+                {currentSetInfo.info.count}/8
+              </span>
+            </button>
+          )}
+
           {/* Recipe status */}
           {item.type === 'Recipe' && (
             <div className={`text-xs font-bold px-2 py-1 rounded inline-block ${item.isRead ? 'bg-purple-900 border border-purple-600 text-purple-200' : 'bg-slate-800 border border-slate-600 text-slate-400'}`}>
@@ -198,6 +246,15 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
             Düzenle
           </button>
         </div>
+
+        {globalSetMap && (
+          <SetDetailModal
+            isOpen={showSetDetail}
+            onClose={() => { setShowSetDetail(false); setSetDetailKey(null); }}
+            setKey={setDetailKey}
+            setMap={globalSetMap}
+          />
+        )}
       </div>
     </div>
   );

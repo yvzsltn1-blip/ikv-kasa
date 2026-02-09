@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, resolveUserClassQuotas, shouldShowBoundMarker } from '../types';
+import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, resolveUserClassQuotas, shouldShowBoundMarker, createSetEnchantmentKey } from '../types';
 import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers, AlertTriangle } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
 import { getContainerSlotPosition } from '../containerLayout';
@@ -565,7 +565,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
     if (!SET_CATEGORIES.includes(item.category)) return null;
     if (!item.enchantment1 || item.enchantment1.trim() === '') return null;
 
-    const enchKey = `${item.enchantment1.toLocaleLowerCase('tr')}|${item.enchantment2.toLocaleLowerCase('tr')}`;
+    const enchKey = createSetEnchantmentKey(item.enchantment1, item.enchantment2);
     const globalKey = `${enchKey}|${item.gender}|${item.heroClass}`;
     const info = globalSetLookup.get(globalKey);
     return info ? { info, globalKey } : null;
