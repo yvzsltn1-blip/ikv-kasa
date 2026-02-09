@@ -1,4 +1,5 @@
 import { HeroClass, Account, Server } from './types';
+import { BAG_GRID_COLS, BAG_GRID_ROWS, BAG_SLOT_COUNT } from './containerLayout';
 
 export const HERO_CLASSES: HeroClass[] = ['Savaşçı', 'Büyücü', 'Şifacı', 'Tüm Sınıflar'];
 
@@ -48,8 +49,8 @@ export const createCharacter = (id: number): any => ({
   // 8 rows x 8 cols = 64 slots (Square grid structure, but visual slots will be rectangular)
   bank1: { id: `char_${id}_bank1`, name: 'Kasa 1', rows: 8, cols: 8, slots: createEmptySlots(64) },
   bank2: { id: `char_${id}_bank2`, name: 'Kasa 2', rows: 8, cols: 8, slots: createEmptySlots(64) },
-  // 6 rows x 4 cols = 24 slots (Updated to vertical layout)
-  bag: { id: `char_${id}_bag`, name: 'Çanta', rows: 6, cols: 4, slots: createEmptySlots(24) },
+  // 33 slots: base 24 (4x6) + top extension 9 (3/4/2)
+  bag: { id: `char_${id}_bag`, name: 'Çanta', rows: BAG_GRID_ROWS, cols: BAG_GRID_COLS, slots: createEmptySlots(BAG_SLOT_COUNT) },
   learnedRecipes: [], // Start with empty recipe book
 });
 

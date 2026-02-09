@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Account, ItemData } from '../types';
 import { X, Search, Layers, User, Package, Book, MapPin, Filter, Globe } from 'lucide-react';
+import { getContainerSlotPosition } from '../containerLayout';
 
 type SummaryScope = 'all' | 'account' | 'character';
 type SummaryTypeFilter = 'all' | 'item' | 'recipe';
@@ -173,6 +174,8 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
           ].forEach(({ container, containerId }) => {
             container.slots.forEach(slot => {
               if (!slot.item) return;
+              const position = getContainerSlotPosition(container, slot.id);
+              if (!position) return;
               entries.push({
                 item: slot.item,
                 quantity: toQuantity(slot.item),
@@ -184,8 +187,8 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
                 charName: character.name,
                 containerId,
                 containerName: container.name,
-                row: Math.floor(slot.id / container.cols) + 1,
-                col: (slot.id % container.cols) + 1,
+                row: position.row,
+                col: position.col,
               });
             });
           });

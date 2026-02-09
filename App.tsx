@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, HeroClass, DEFAULT_USER_CLASS, normalizeUserClass, isBindableCategory, shouldShowBoundMarker } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
+import { BAG_SLOT_COUNT, getContainerSlotIdFromPosition, getContainerSlotPosition, normalizeBagContainerLayout } from './containerLayout';
 import { ContainerGrid } from './components/ContainerGrid';
 import { ItemModal } from './components/ItemModal';
 import { ItemDetailModal } from './components/ItemDetailModal';
@@ -21,17 +22,97 @@ import { doc, getDoc, setDoc, deleteDoc, runTransaction, collection, query, wher
 const VIEW_ORDER = ['bank1', 'bank2', 'bag'] as const;
 type ViewType = typeof VIEW_ORDER[number];
 
-// Migration helper for old account format (characters → servers)
-const migrateAccount = (acc: any): Account => {
-  if (acc.servers && acc.servers.length > 0) return acc as Account;
-  const oldChars = acc.characters || Array.from({ length: 4 }, (_, i) => createCharacter(i));
+const normalizeContainerSlots = (rawSlots: unknown, minCount: number) => {
+  const slots = Array.isArray(rawSlots) ? rawSlots : [];
+  const count = Math.max(minCount, slots.length);
+  return Array.from({ length: count }, (_, index) => {
+    const slot = slots[index] as { item?: unknown } | undefined;
+    return {
+      id: index,
+      item: (slot && typeof slot === 'object' && 'item' in slot) ? (slot.item as ItemData | null) ?? null : null,
+    };
+  });
+};
+
+const normalizeStandardContainer = (rawContainer: unknown, fallback: Container): Container => {
+  const container = (rawContainer && typeof rawContainer === 'object') ? rawContainer as Partial<Container> : {};
   return {
-    id: acc.id,
-    name: acc.name,
+    id: typeof container.id === 'string' ? container.id : fallback.id,
+    name: typeof container.name === 'string' ? container.name : fallback.name,
+    rows: (typeof container.rows === 'number' && Number.isFinite(container.rows) && container.rows > 0)
+      ? Math.floor(container.rows)
+      : fallback.rows,
+    cols: (typeof container.cols === 'number' && Number.isFinite(container.cols) && container.cols > 0)
+      ? Math.floor(container.cols)
+      : fallback.cols,
+    slots: normalizeContainerSlots(container.slots, fallback.slots.length),
+  };
+};
+
+const normalizeBagContainer = (rawContainer: unknown, fallback: Container): Container => {
+  const container = (rawContainer && typeof rawContainer === 'object') ? rawContainer as Partial<Container> : {};
+  return normalizeBagContainerLayout({
+    id: typeof container.id === 'string' ? container.id : fallback.id,
+    name: typeof container.name === 'string' ? container.name : fallback.name,
+    rows: fallback.rows,
+    cols: fallback.cols,
+    slots: normalizeContainerSlots(container.slots, BAG_SLOT_COUNT),
+  });
+};
+
+const normalizeCharacterData = (rawChar: unknown, charIndex: number) => {
+  const fallback = createCharacter(charIndex);
+  const char = (rawChar && typeof rawChar === 'object') ? rawChar as Partial<ReturnType<typeof createCharacter>> : {};
+
+  return {
+    ...fallback,
+    ...char,
+    id: typeof char.id === 'number' ? char.id : fallback.id,
+    name: typeof char.name === 'string' ? char.name : fallback.name,
+    bank1: normalizeStandardContainer(char.bank1, fallback.bank1),
+    bank2: normalizeStandardContainer(char.bank2, fallback.bank2),
+    bag: normalizeBagContainer(char.bag, fallback.bag),
+    learnedRecipes: Array.isArray(char.learnedRecipes) ? char.learnedRecipes : [],
+  };
+};
+
+// Migration + normalization helper for old/new account formats.
+const migrateAccount = (acc: any): Account => {
+  const accountId = typeof acc?.id === 'string' ? acc.id : crypto.randomUUID();
+  const accountName = typeof acc?.name === 'string' ? acc.name : 'Hesap';
+  const normalizeChars = (chars: unknown[]) => chars.map((char, idx) => normalizeCharacterData(char, idx));
+
+  if (Array.isArray(acc?.servers) && acc.servers.length > 0) {
+    return {
+      id: accountId,
+      name: accountName,
+      servers: acc.servers.map((server: any, idx: number) => {
+        const fallbackCharacters = Array.from({ length: 4 }, (_, i) => createCharacter(i));
+        const rawChars = Array.isArray(server?.characters) && server.characters.length > 0
+          ? server.characters
+          : fallbackCharacters;
+        return {
+          id: typeof server?.id === 'string' ? server.id : `${accountId}_server_${idx}`,
+          name: typeof server?.name === 'string' ? server.name : (SERVER_NAMES[idx] || `Sunucu ${idx + 1}`),
+          characters: normalizeChars(rawChars),
+        };
+      }),
+    };
+  }
+
+  const oldChars = Array.isArray(acc?.characters) && acc.characters.length > 0
+    ? acc.characters
+    : Array.from({ length: 4 }, (_, i) => createCharacter(i));
+
+  return {
+    id: accountId,
+    name: accountName,
     servers: SERVER_NAMES.map((serverName, idx) => ({
-      id: `${acc.id}_server_${idx}`,
+      id: `${accountId}_server_${idx}`,
       name: serverName,
-      characters: idx === 0 ? oldChars : Array.from({ length: 4 }, (_, i) => createCharacter(i)),
+      characters: idx === 0
+        ? normalizeChars(oldChars)
+        : Array.from({ length: 4 }, (_, i) => normalizeCharacterData(createCharacter(i), i)),
     })),
   };
 };
@@ -905,7 +986,10 @@ export default function App() {
           const slotTier = resolveItemTalismanTier(slot.item);
           const slotKey = `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${slotTier.toLocaleLowerCase('tr')}|${slot.item.heroClass}`;
           if (slotKey === key) {
-            locations.push({ containerName: name, row: Math.floor(slot.id / data.cols) + 1, col: (slot.id % data.cols) + 1 });
+            const position = getContainerSlotPosition(data, slot.id);
+            if (position) {
+              locations.push({ containerName: name, row: position.row, col: position.col });
+            }
           }
         }
       });
@@ -1059,14 +1143,16 @@ export default function App() {
           containers.forEach(({ data, name }) => {
             data.slots.forEach(slot => {
               if (slot.item && SET_CATEGORIES.includes(slot.item.category) && slot.item.enchantment1 && slot.item.enchantment1.trim() !== '') {
+                const position = getContainerSlotPosition(data, slot.id);
+                if (!position) return;
                 allSetItems.push({
                   item: slot.item,
                   accountName: acc.name,
                   serverName: server.name,
                   charName: char.name,
                   containerName: name,
-                  row: Math.floor(slot.id / data.cols) + 1,
-                  col: (slot.id % data.cols) + 1,
+                  row: position.row,
+                  col: position.col,
                 });
               }
             });
@@ -1728,10 +1814,8 @@ export default function App() {
           containerKey === 'bank2' ? targetChar.bank2 :
           targetChar.bag;
 
-        const rowIndex = rowValue - 1;
-        const colIndex = colValue - 1;
-        const slotIndex = (rowIndex * targetContainer.cols) + colIndex;
-        if (rowIndex < 0 || colIndex < 0 || rowIndex >= targetContainer.rows || colIndex >= targetContainer.cols || slotIndex >= targetContainer.slots.length) {
+        const slotIndex = getContainerSlotIdFromPosition(targetContainer, rowValue, colValue);
+        if (slotIndex === null || slotIndex < 0 || slotIndex >= targetContainer.slots.length) {
           skippedCount++;
           if (issues.length < 6) issues.push(`Satir ${rowNo}: Slot konumu kasa boyutunu asiyor.`);
           return;
@@ -1814,8 +1898,10 @@ export default function App() {
         [char.bank1, char.bank2, char.bag].forEach(container => {
           container.slots.forEach(slot => {
             if (slot.item) {
-              const row = Math.floor(slot.id / container.cols) + 1;
-              const col = (slot.id % container.cols) + 1;
+              const position = getContainerSlotPosition(container, slot.id);
+              if (!position) return;
+              const row = position.row;
+              const col = position.col;
               rows.push([
                 activeAccount.name, server.name, char.name, container.name, row.toString(), col.toString(),
                 slot.item.enchantment1 || "-", slot.item.enchantment2 || "-",

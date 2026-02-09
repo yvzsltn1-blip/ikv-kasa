@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Container, SlotData, ItemData } from '../types';
 import { SlotItem } from './SlotItem';
 import { ArrowRight, Maximize2, Minimize2 } from 'lucide-react';
+import { getContainerGridDimensions, getContainerSlotPosition } from '../containerLayout';
 
 const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): '-' | 'I' | 'II' | 'III' => {
   const direct = String(item.talismanTier || '').trim().toUpperCase();
@@ -26,9 +27,10 @@ interface ContainerGridProps {
 }
 
 export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates, isFullscreen = false, onToggleFullscreen }) => {
+  const { cols: gridCols, rows: gridRows } = getContainerGridDimensions(container);
   const gridStyle = {
-    gridTemplateColumns: `repeat(${container.cols}, minmax(0, 1fr))`,
-    gridTemplateRows: `repeat(${container.rows}, minmax(0, 1fr))`,
+    gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
   };
 
   // Touch drag visual state (for floating item indicator)
@@ -238,6 +240,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
+            const slotPosition = getContainerSlotPosition(container, slot.id);
             const talismanKey = slot.item?.category === 'Tılsım' && slot.item.enchantment1?.trim()
               ? `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${resolveTalismanTier(slot.item).toLocaleLowerCase('tr')}|${slot.item.heroClass}`
               : null;
@@ -254,6 +257,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                 onMouseEnter={(e) => onSlotHover(slot.item, e)}
                 onMouseLeave={(e) => onSlotHover(null, e)}
                 onTouchStart={(e) => handleTouchStart(slot, e)}
+                style={slotPosition ? { gridColumnStart: slotPosition.col, gridRowStart: slotPosition.row } : undefined}
                 className={`
                   relative bg-black/40 border border-slate-700/50
                   transition-colors group

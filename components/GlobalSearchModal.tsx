@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Account, ItemData, CATEGORY_OPTIONS, SetItemLocation, GlobalSetInfo, UserRole, normalizeUserClass, resolveUserClassQuotas, shouldShowBoundMarker } from '../types';
 import { Search, MapPin, X, ArrowRight, Package, Filter, ChevronDown, ChevronUp, RotateCcw, Book, FileSpreadsheet, Globe, User, Loader2, ExternalLink, Sword, Layers, AlertTriangle } from 'lucide-react';
 import { CATEGORY_COLORS, CLASS_COLORS, HERO_CLASSES, GENDER_OPTIONS, SET_CATEGORIES } from '../constants';
+import { getContainerSlotPosition } from '../containerLayout';
 import { SetDetailModal } from './SetDetailModal';
 import { db } from '../firebase';
 import { collection, getDocs, query as fsQuery, where, limit, QueryConstraint, doc, getDoc, runTransaction } from 'firebase/firestore';
@@ -475,8 +476,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
               }
 
               if (match) {
-                const row = Math.floor(slot.id / data.cols) + 1;
-                const col = (slot.id % data.cols) + 1;
+                const position = getContainerSlotPosition(data, slot.id);
+                if (!position) return;
                 found.push({
                   accountId: acc.id,
                   accountName: acc.name,
@@ -488,8 +489,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                   containerName: data.name,
                   containerKey: key,
                   slotId: slot.id,
-                  row,
-                  col,
+                  row: position.row,
+                  col: position.col,
                   item
                 });
               }
