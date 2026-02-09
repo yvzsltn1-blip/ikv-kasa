@@ -1089,7 +1089,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
                     </div>
 
                     {/* Social Link */}
-                    {gItem.socialLink && gItem.socialLink.trim() !== '' && (
+                    {gItem.socialLink && gItem.socialLink.trim() !== '' && /^https?:\/\//i.test(gItem.socialLink.trim()) && (
                       <a
                         href={gItem.socialLink}
                         target="_blank"

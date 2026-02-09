@@ -126,14 +126,29 @@ service cloud.firestore {
         request.resource.data.uid is string &&
         request.resource.data.uid == userId &&
         request.resource.data.username is string &&
-        request.resource.data.emailLower is string;
+        request.resource.data.username.size() <= 100 &&
+        request.resource.data.emailLower is string &&
+        request.resource.data.emailLower.size() <= 200;
       allow delete: if request.auth != null && (request.auth.uid == userId || isAdmin());
     }
 
-    // Global item sharing
+    // Global item sharing (field size limits to prevent DB bloat)
     match /globalItems/{itemId} {
       allow read: if request.auth != null && (isAdmin() || canGlobalSearch());
-      allow create, update: if request.auth != null && request.resource.data.uid == request.auth.uid && canDataEntry();
+      allow create, update: if request.auth != null &&
+        request.resource.data.uid == request.auth.uid &&
+        canDataEntry() &&
+        request.resource.data.username is string &&
+        request.resource.data.username.size() <= 100 &&
+        request.resource.data.accountName is string &&
+        request.resource.data.accountName.size() <= 100 &&
+        request.resource.data.serverName is string &&
+        request.resource.data.serverName.size() <= 100 &&
+        request.resource.data.charName is string &&
+        request.resource.data.charName.size() <= 100 &&
+        request.resource.data.containerName is string &&
+        request.resource.data.containerName.size() <= 50 &&
+        (!('socialLink' in request.resource.data) || !request.resource.data.socialLink.matches('.+') || request.resource.data.socialLink.size() <= 500);
       allow delete: if request.auth != null && (isAdmin() || (resource.data.uid == request.auth.uid && canDataEntry()));
     }
 
@@ -210,14 +225,19 @@ service cloud.firestore {
         request.resource.data.senderUid == request.auth.uid &&
         request.resource.data.receiverUid is string &&
         request.resource.data.conversationId is string &&
+        request.resource.data.conversationId.size() <= 200 &&
         request.resource.data.text is string &&
+        request.resource.data.text.size() >= 1 &&
+        request.resource.data.text.size() <= 1500 &&
         request.resource.data.createdAt is number &&
         request.resource.data.participants is list &&
         request.resource.data.participants.size() == 2 &&
         request.resource.data.readBy is list &&
+        request.resource.data.readBy.size() <= 2 &&
         request.auth.uid in request.resource.data.readBy &&
         request.auth.uid in request.resource.data.participants &&
         request.resource.data.receiverUid in request.resource.data.participants &&
+        request.resource.data.keys().hasOnly(['conversationId', 'participants', 'senderUid', 'receiverUid', 'senderDisplay', 'receiverDisplay', 'text', 'createdAt', 'readBy']) &&
         (isAdmin() || (!isCurrentUserBlocked() && isDirectMessagingEnabled())) &&
         receiverAcceptsMessage(request.resource.data.receiverUid);
       allow update: if request.auth != null && (
@@ -270,10 +290,14 @@ service cloud.firestore {
           request.resource.data.recipientEmail is string &&
           isAdminEmail(request.resource.data.recipientEmail) &&
           request.resource.data.templateId is string &&
+          request.resource.data.templateId.size() <= 100 &&
           request.resource.data.templateLabel is string &&
+          request.resource.data.templateLabel.size() <= 200 &&
           request.resource.data.templateMessage is string &&
+          request.resource.data.templateMessage.size() <= 2000 &&
           request.resource.data.createdAt is number &&
-          request.resource.data.read == false
+          request.resource.data.read == false &&
+          request.resource.data.keys().hasOnly(['type', 'senderUid', 'recipientEmail', 'templateId', 'templateLabel', 'templateMessage', 'createdAt', 'read'])
         )
       );
       allow update: if request.auth != null && (

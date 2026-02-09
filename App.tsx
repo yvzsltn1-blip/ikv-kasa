@@ -398,6 +398,9 @@ export default function App() {
   const [socialLinkInput, setSocialLinkInput] = useState('');
   const [socialLinkSaving, setSocialLinkSaving] = useState(false);
 
+  // App-wide limits (fetched from metadata/searchLimits)
+  const [maxAccounts, setMaxAccounts] = useState(10);
+
   // Global Enchantment Suggestions
   const [globalEnchantments, setGlobalEnchantments] = useState<string[]>([]);
   const [globalPotions, setGlobalPotions] = useState<NamedLevelSuggestion[]>([]);
@@ -663,6 +666,19 @@ export default function App() {
             console.warn("Global autocomplete verileri yuklenemedi:", e);
           }
 
+          // Uygulama limitleri (maxAccounts vb.)
+          try {
+            const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
+            if (limitsDoc.exists()) {
+              const limitsData = limitsDoc.data();
+              if (typeof limitsData.maxAccounts === 'number' && Number.isFinite(limitsData.maxAccounts) && limitsData.maxAccounts >= 1) {
+                setMaxAccounts(Math.floor(limitsData.maxAccounts));
+              }
+            }
+          } catch {
+            // Limit okunamazsa varsayilan 10 kalir
+          }
+
         } catch (error) {
           showSystemAlert({
             tone: 'error',
@@ -862,6 +878,11 @@ export default function App() {
     if (!ensureCanEditData()) return;
 
     const trimmed = socialLinkInput.trim();
+
+    if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+      showToast('Link https:// veya http:// ile başlamalıdır.');
+      return;
+    }
 
     setSocialLinkSaving(true);
     try {
@@ -1246,6 +1267,14 @@ export default function App() {
 
   const handleAddAccount = () => {
     if (!ensureCanEditData()) return;
+    if (accounts.length >= maxAccounts) {
+      showSystemAlert({
+        tone: 'warning',
+        title: 'Hesap Limiti',
+        message: `En fazla ${maxAccounts} hesap olusturabilirsiniz.`,
+      });
+      return;
+    }
     const newId = crypto.randomUUID();
     const name = `Hesap ${accounts.length + 1}`;
     const newAccount = createAccount(newId, name);

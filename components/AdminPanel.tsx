@@ -71,6 +71,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   });
   const [classLimitInputs, setClassLimitInputs] = useState<ClassLimitInputs>(() => toClassLimitInputs(defaultClassLimits));
   const [limitSaving, setLimitSaving] = useState(false);
+  const [maxAccounts, setMaxAccounts] = useState(10);
+  const [maxAccountsInput, setMaxAccountsInput] = useState('10');
+  const [maxAccountsSaving, setMaxAccountsSaving] = useState(false);
   const [directMessagingEnabled, setDirectMessagingEnabled] = useState(true);
   const [messageSystemSaving, setMessageSystemSaving] = useState(false);
   const [managedEnchantments, setManagedEnchantments] = useState<string[]>([]);
@@ -857,6 +860,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             classLimits: resolvedClassLimits,
           });
           setClassLimitInputs(toClassLimitInputs(resolvedClassLimits));
+          const resolvedMaxAccounts = (typeof data.maxAccounts === 'number' && Number.isFinite(data.maxAccounts) && data.maxAccounts >= 1)
+            ? Math.floor(data.maxAccounts)
+            : 10;
+          setMaxAccounts(resolvedMaxAccounts);
+          setMaxAccountsInput(String(resolvedMaxAccounts));
           setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
             const overrideValue = resolvedOverrides[userInfo.uid];
             acc[userInfo.uid] = overrideValue !== undefined ? String(overrideValue) : '';
@@ -865,6 +873,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         } else {
           setSearchLimits({ defaultLimit: 50, userOverrides: {}, classLimits: defaultClassLimits });
           setClassLimitInputs(toClassLimitInputs(defaultClassLimits));
+          setMaxAccounts(10);
+          setMaxAccountsInput('10');
           setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
             acc[userInfo.uid] = '';
             return acc;
@@ -2029,6 +2039,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     }
   };
 
+  const handleSaveMaxAccounts = async () => {
+    const parsed = parseInt(maxAccountsInput, 10);
+    if (Number.isNaN(parsed) || parsed < 1 || parsed > 100) {
+      alert("Hesap limiti 1 ile 100 arasinda olmalidir.");
+      return;
+    }
+
+    setMaxAccountsSaving(true);
+    try {
+      await setDoc(doc(db, "metadata", "searchLimits"), {
+        maxAccounts: parsed,
+      }, { merge: true });
+      setMaxAccounts(parsed);
+    } catch (error) {
+      console.error("Max accounts kaydetme hatasi:", error);
+      alert("Hesap limiti kaydedilirken hata olustu.");
+    } finally {
+      setMaxAccountsSaving(false);
+    }
+  };
+
   const handleToggleMessagingSystem = async () => {
     if (messageSystemSaving) return;
 
@@ -2590,6 +2621,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     {directMessagingEnabled ? <Unlock size={10} /> : <Lock size={10} />}
                     {messageSystemSaving ? 'Kaydediliyor...' : (directMessagingEnabled ? 'Acik' : 'Kapali')}
                   </button>
+                </div>
+              </div>
+
+              {/* Max Accounts */}
+              <div className="admin-settings-card bg-slate-800/55 border border-slate-700/55 rounded-xl p-3.5 md:p-4">
+                <h3 className="text-amber-400 text-[11px] md:text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+                  <Shield size={14} />
+                  HESAP LiMiTi
+                </h3>
+
+                <div className="flex items-center justify-between gap-3 bg-slate-900/50 rounded-lg border border-slate-700/40 px-3 py-2.5">
+                  <div className="text-[10px]">
+                    <p className="text-slate-200 font-semibold">Maksimum Hesap Sayisi</p>
+                    <p className="text-[9px] text-slate-500">Her kullanicinin olusturabilecegi en fazla hesap adedi.</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={maxAccountsInput}
+                      onChange={e => setMaxAccountsInput(e.target.value)}
+                      className="w-16 bg-slate-950/80 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500/50 text-center"
+                    />
+                    <button
+                      onClick={handleSaveMaxAccounts}
+                      disabled={maxAccountsSaving || String(maxAccounts) === maxAccountsInput}
+                      className="px-2.5 py-1.5 rounded-md text-[9px] font-bold border transition-colors bg-amber-950/40 text-amber-300 border-amber-800/50 hover:bg-amber-900/40 disabled:opacity-50"
+                    >
+                      {maxAccountsSaving ? 'Kaydediliyor...' : 'Kaydet'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
