@@ -6,6 +6,7 @@ import { ItemModal } from './components/ItemModal';
 import { ItemDetailModal } from './components/ItemDetailModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
+import { InventorySummaryModal } from './components/InventorySummaryModal';
 import { LoginScreen } from './components/LoginScreen';
 import { User, Save, Plus, Trash2, ChevronDown, ChevronUp, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle, MoreVertical, Upload } from 'lucide-react';
 import { AdminPanel } from './components/AdminPanel';
@@ -330,6 +331,7 @@ export default function App() {
   const [currentViewIndex, setCurrentViewIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isRecipeBookOpen, setIsRecipeBookOpen] = useState(false);
+  const [isInventorySummaryOpen, setIsInventorySummaryOpen] = useState(false);
   const [isMessagingOpen, setIsMessagingOpen] = useState(false);
   const [unreadMessageSenderCount, setUnreadMessageSenderCount] = useState(0);
   const [unreadAdminNotificationCount, setUnreadAdminNotificationCount] = useState(0);
@@ -413,6 +415,10 @@ export default function App() {
 
   const handleOpenSearch = () => {
     setIsSearchOpen(true);
+  };
+
+  const handleOpenInventorySummary = () => {
+    setIsInventorySummaryOpen(true);
   };
 
   // --- BAŞLANGIÇ: VERİLERİ BULUTTAN ÇEKME ---
@@ -2585,6 +2591,13 @@ export default function App() {
                         </button>
                       )}
                       <button
+                        onClick={() => { handleOpenInventorySummary(); setIsMobileQuickMenuOpen(false); }}
+                        className="w-full rounded-lg border border-slate-700/40 bg-slate-800/70 px-2.5 py-2 text-left text-[11px] text-slate-100 active:bg-slate-700/80 flex items-center justify-between gap-2"
+                      >
+                        <span>Ozet Tablosu</span>
+                        <FileSpreadsheet size={13} className="text-cyan-300" />
+                      </button>
+                      <button
                         onClick={() => { handleExportExcel(); setIsMobileQuickMenuOpen(false); }}
                         className="w-full rounded-lg border border-slate-700/40 bg-slate-800/70 px-2.5 py-2 text-left text-[11px] text-slate-100 active:bg-slate-700/80 flex items-center justify-between gap-2"
                       >
@@ -2727,6 +2740,7 @@ export default function App() {
             {/* Right: Action Buttons */}
             <div className="flex items-center gap-1.5 flex-wrap justify-end max-w-full">
               <button onClick={handleOpenSearch} className="flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-slate-700/50 hover:bg-yellow-600 hover:text-black text-yellow-500 text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-yellow-500 transition-all" title="Ara"><Search size={13} /><span className="hidden xl:inline">Ara</span></button>
+              <button onClick={handleOpenInventorySummary} className="flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-slate-700/50 hover:bg-cyan-700 text-cyan-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-cyan-500 transition-all" title="Ozet Tablosu"><FileSpreadsheet size={13} /><span className="hidden xl:inline">Ozet</span></button>
               <button onClick={() => setIsMessagingOpen(true)} className="relative flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-slate-700/50 hover:bg-cyan-700 text-cyan-300 hover:text-white text-[11px] font-bold rounded-md border border-slate-600/40 hover:border-cyan-500 transition-all" title="Mesaj">
                 <MessageCircle size={13} />
                 <span className="hidden xl:inline">Mesaj</span>
@@ -3269,6 +3283,15 @@ export default function App() {
         currentUserUid={auth.currentUser?.uid || ''}
         currentUserRole={userRole}
         canUseGlobalSearch={canUseGlobalSearch}
+      />
+
+      <InventorySummaryModal
+        isOpen={isInventorySummaryOpen}
+        onClose={() => setIsInventorySummaryOpen(false)}
+        accounts={accounts}
+        selectedAccountId={selectedAccountId}
+        selectedServerIndex={selectedServerIndex}
+        activeCharIndex={activeCharIndex}
       />
 
       <MessagingModal

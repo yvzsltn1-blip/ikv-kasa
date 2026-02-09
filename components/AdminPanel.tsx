@@ -119,6 +119,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [editingTalismanColorInput, setEditingTalismanColorInput] = useState<TalismanColor>('Mavi');
   const [editingTalismanClassInput, setEditingTalismanClassInput] = useState<TalismanHeroClass>('Savaşçı');
   const [talismanSaving, setTalismanSaving] = useState(false);
+  const [isAutocompleteCompact, setIsAutocompleteCompact] = useState(true);
 
   // Users tab
   const [userSearch, setUserSearch] = useState('');
@@ -140,6 +141,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('admin_autocomplete_compact');
+      if (stored === '0') setIsAutocompleteCompact(false);
+      if (stored === '1') setIsAutocompleteCompact(true);
+    } catch {
+      // ignore local storage read failures
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('admin_autocomplete_compact', isAutocompleteCompact ? '1' : '0');
+    } catch {
+      // ignore local storage write failures
+    }
+  }, [isAutocompleteCompact]);
 
   const normalizeAccounts = (raw: unknown): Account[] => {
     if (Array.isArray(raw)) return raw as Account[];
@@ -2058,12 +2077,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     );
   }
 
+  const autocompleteCompactClass = isAutocompleteCompact ? 'admin-ac-compact space-y-2.5' : '';
+
   return (
-    <div className="min-h-screen w-screen bg-slate-950 md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 flex md:items-center md:justify-center md:h-screen md:overflow-hidden">
-      <div className="w-full md:w-[98vw] min-h-screen md:min-h-0 md:h-[98vh] bg-slate-900/95 border-0 md:border-2 md:border-red-900/50 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(220,38,38,0.15)] md:overflow-hidden flex flex-col">
+    <div className="min-h-screen w-screen overflow-x-hidden bg-slate-950 md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 flex md:items-center md:justify-center md:h-screen md:overflow-hidden">
+      <div className="w-full md:w-[98vw] min-h-screen md:min-h-0 md:h-[98vh] overflow-x-hidden bg-slate-900/95 border-0 md:border-2 md:border-red-900/50 rounded-none md:rounded-lg shadow-none md:shadow-[0_0_50px_rgba(220,38,38,0.15)] md:overflow-hidden flex flex-col">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-red-950/80 via-slate-800 to-red-950/80 px-4 py-3 flex items-center gap-3 border-b-2 border-red-900/50 shrink-0">
+        <div className="bg-gradient-to-r from-red-950/80 via-slate-800 to-red-950/80 px-3 md:px-4 py-2.5 md:py-3 flex items-center gap-2.5 md:gap-3 border-b-2 border-red-900/50 shrink-0">
           <button onClick={onBack} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors">
             <ArrowLeft size={18} />
           </button>
@@ -2075,13 +2096,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             <p className="text-slate-500 text-[9px]">Sistem Yönetimi</p>
           </div>
           <div className="flex-1" />
-          <button onClick={fetchAllData} className="text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors">
+          <button onClick={fetchAllData} className="admin-refresh-btn text-[9px] md:text-[10px] text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 md:px-3 py-1 md:py-1.5 rounded-md md:rounded-lg border border-slate-700 transition-colors">
             Yenile
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="bg-slate-800/60 px-4 py-1.5 flex gap-1.5 border-b border-slate-700/50 shrink-0">
+        <div className="bg-slate-800/60 px-2.5 md:px-4 py-1.5 flex gap-1.5 border-b border-slate-700/50 shrink-0 overflow-x-auto no-scrollbar">
           {([
             { key: 'dashboard' as TabType, label: 'Panel', icon: BarChart3 },
             { key: 'users' as TabType, label: 'Kullanıcılar', icon: Users },
@@ -2091,7 +2112,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`admin-mobile-tab-btn shrink-0 flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 rounded-lg text-[11px] md:text-xs font-bold transition-all ${
                 activeTab === tab.key
                   ? 'bg-red-900/40 text-red-300 border border-red-700/40'
                   : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800 border border-transparent'
@@ -2104,7 +2125,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 md:p-4 custom-scrollbar">
 
           {/* DASHBOARD TAB */}
           {activeTab === 'dashboard' && (
@@ -2496,7 +2517,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && (
-            <div className="space-y-4 max-w-2xl mx-auto">
+            <div className="space-y-3 md:space-y-4 max-w-2xl mx-auto w-full">
 
               {/* Admin Management */}
               <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
@@ -2646,8 +2667,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
           {/* AUTOCOMPLETE TAB */}
           {activeTab === 'autocomplete' && (
-            <div className="space-y-4 max-w-2xl mx-auto">
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+            <div className={`admin-ac-root space-y-4 max-w-2xl mx-auto w-full ${autocompleteCompactClass}`}>
+              <div className="md:hidden bg-slate-800/45 border border-slate-700/50 rounded-lg px-3 py-2 flex items-center justify-between gap-2">
+                <span className="text-[10px] text-slate-400">Mobil Kompakt Mod</span>
+                <button
+                  onClick={() => setIsAutocompleteCompact(prev => !prev)}
+                  className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition-colors ${
+                    isAutocompleteCompact
+                      ? 'bg-emerald-900/35 border-emerald-700/45 text-emerald-200'
+                      : 'bg-slate-800/80 border-slate-600/50 text-slate-300'
+                  }`}
+                >
+                  {isAutocompleteCompact ? 'Acik' : 'Kapali'}
+                </button>
+              </div>
+
+              <div className="ac-card bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <input
                   ref={autocompleteBulkImportInputRef}
                   type="file"
@@ -2662,7 +2697,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <p className="text-[10px] text-slate-500 mb-2.5">
                   Tum oto tamamlama listelerini tek dosyada disa aktarabilir ve ayni formatla toplu ice aktarabilirsiniz.
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <div className="ac-action-row flex flex-wrap gap-2">
                   <button
                     onClick={handleExportAllAutocomplete}
                     disabled={isAnyAutocompleteBusy}
@@ -2682,7 +2717,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+              <div className="ac-card bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <input
                   ref={enchantmentImportInputRef}
                   type="file"
@@ -2708,7 +2743,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     placeholder="Her satira bir efsun yazin. Ornek:&#10;Alman Modeli&#10;Dis Sehir Modeli"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-amber-500/50 placeholder-slate-600 resize-y"
                   />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="ac-action-row flex flex-wrap gap-2">
                     <button
                       onClick={handleAddEnchantmentsFromText}
                       disabled={enchantmentSaving || enchantmentImporting || !enchantmentTextInput.trim()}
@@ -2751,7 +2786,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       value={enchantmentListSearch}
                       onChange={e => setEnchantmentListSearch(e.target.value)}
                       placeholder="Listede ara..."
-                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500/50 placeholder-slate-600"
+                      className="flex-1 min-w-0 sm:min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-500/50 placeholder-slate-600"
                     />
                     <span className="text-[10px] text-slate-500">{managedEnchantments.length} kayit</span>
                   </div>
@@ -2761,14 +2796,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek efsun yok.</div>
                     ) : (
                       filteredManagedEnchantments.map(name => (
-                        <div key={name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                        <div key={name} className="ac-item-row flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
                           {editingEnchantment === name ? (
                             <>
                               <input
                                 type="text"
                                 value={editingEnchantmentInput}
                                 onChange={e => setEditingEnchantmentInput(e.target.value)}
-                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-amber-500/50"
+                                className="flex-1 min-w-0 basis-full sm:basis-auto bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-amber-500/50"
                               />
                               <button
                                 onClick={handleSaveEditedEnchantment}
@@ -2787,24 +2822,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               </button>
                             </>
                           ) : (
-                            <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{name}</span>
-                              <button
-                                onClick={() => handleStartEditEnchantment(name)}
-                                disabled={enchantmentSaving || enchantmentImporting}
-                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
-                              >
-                                <Pencil size={10} />
-                                Duzenle
-                              </button>
-                              <button
-                                onClick={() => handleDeleteEnchantment(name)}
-                                disabled={enchantmentSaving || enchantmentImporting}
-                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
-                              >
-                                Sil
-                              </button>
-                            </>
+                            <div className="ac-item-view">
+                              <span className="ac-item-name flex-1 min-w-0 text-xs text-slate-200 break-all">{name}</span>
+                              <div className="ac-item-actions">
+                                <button
+                                  onClick={() => handleStartEditEnchantment(name)}
+                                  disabled={enchantmentSaving || enchantmentImporting}
+                                  className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Pencil size={10} />
+                                  <span className="ac-action-label">Duzenle</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteEnchantment(name)}
+                                  disabled={enchantmentSaving || enchantmentImporting}
+                                  className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Trash2 size={10} />
+                                  <span className="ac-action-label">Sil</span>
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))
@@ -2813,7 +2851,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+              <div className="ac-card bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <h3 className="text-emerald-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   IKSIR OTO TAMAMLAMA
@@ -2831,7 +2869,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     placeholder="Alman Modeli Iksir:35&#10;Yasam Iksiri:25"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-emerald-500/50 placeholder-slate-600 resize-y"
                   />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="ac-action-row flex flex-wrap gap-2">
                     <button
                       onClick={handleAddPotionsFromText}
                       disabled={potionSaving || !potionTextInput.trim()}
@@ -2866,7 +2904,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       value={potionListSearch}
                       onChange={e => setPotionListSearch(e.target.value)}
                       placeholder="Listede ara..."
-                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50 placeholder-slate-600"
+                      className="flex-1 min-w-0 sm:min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50 placeholder-slate-600"
                     />
                     <span className="text-[10px] text-slate-500">{managedPotions.length} kayit</span>
                   </div>
@@ -2876,14 +2914,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek iksir yok.</div>
                     ) : (
                       filteredManagedPotions.map(entry => (
-                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                        <div key={entry.name} className="ac-item-row flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
                           {editingPotion === entry.name ? (
                             <>
                               <input
                                 type="text"
                                 value={editingPotionNameInput}
                                 onChange={e => setEditingPotionNameInput(e.target.value)}
-                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-500/50"
+                                className="flex-1 min-w-0 basis-full sm:basis-auto bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-emerald-500/50"
                               />
                               <input
                                 type="number"
@@ -2910,25 +2948,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               </button>
                             </>
                           ) : (
-                            <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
-                              <span className="px-2 py-0.5 rounded bg-emerald-900/35 border border-emerald-800/40 text-[10px] text-emerald-200 font-bold">Lv.{entry.level}</span>
-                              <button
-                                onClick={() => handleStartEditPotion(entry)}
-                                disabled={potionSaving}
-                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
-                              >
-                                <Pencil size={10} />
-                                Duzenle
-                              </button>
-                              <button
-                                onClick={() => handleDeletePotion(entry.name)}
-                                disabled={potionSaving}
-                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
-                              >
-                                Sil
-                              </button>
-                            </>
+                            <div className="ac-item-view">
+                              <span className="ac-item-name flex-1 min-w-0 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <div className="ac-item-actions">
+                                <span className="ac-item-lvl px-2 py-0.5 rounded bg-emerald-900/35 border border-emerald-800/40 text-[10px] text-emerald-200 font-bold">Lv.{entry.level}</span>
+                                <button
+                                  onClick={() => handleStartEditPotion(entry)}
+                                  disabled={potionSaving}
+                                  className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Pencil size={10} />
+                                  <span className="ac-action-label">Duzenle</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeletePotion(entry.name)}
+                                  disabled={potionSaving}
+                                  className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Trash2 size={10} />
+                                  <span className="ac-action-label">Sil</span>
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))
@@ -2937,7 +2978,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+              <div className="ac-card bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <h3 className="text-orange-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   MADEN OTO TAMAMLAMA
@@ -2955,7 +2996,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     placeholder="Osmiridyum:45&#10;Mithril:30"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-orange-500/50 placeholder-slate-600 resize-y"
                   />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="ac-action-row flex flex-wrap gap-2">
                     <button
                       onClick={handleAddMinesFromText}
                       disabled={mineSaving || !mineTextInput.trim()}
@@ -2990,7 +3031,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       value={mineListSearch}
                       onChange={e => setMineListSearch(e.target.value)}
                       placeholder="Listede ara..."
-                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-orange-500/50 placeholder-slate-600"
+                      className="flex-1 min-w-0 sm:min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-orange-500/50 placeholder-slate-600"
                     />
                     <span className="text-[10px] text-slate-500">{managedMines.length} kayit</span>
                   </div>
@@ -3000,14 +3041,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek maden yok.</div>
                     ) : (
                       filteredManagedMines.map(entry => (
-                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                        <div key={entry.name} className="ac-item-row flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
                           {editingMine === entry.name ? (
                             <>
                               <input
                                 type="text"
                                 value={editingMineNameInput}
                                 onChange={e => setEditingMineNameInput(e.target.value)}
-                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-orange-500/50"
+                                className="flex-1 min-w-0 basis-full sm:basis-auto bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-orange-500/50"
                               />
                               <input
                                 type="number"
@@ -3034,25 +3075,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               </button>
                             </>
                           ) : (
-                            <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
-                              <span className="px-2 py-0.5 rounded bg-orange-900/35 border border-orange-800/40 text-[10px] text-orange-200 font-bold">Lv.{entry.level}</span>
-                              <button
-                                onClick={() => handleStartEditMine(entry)}
-                                disabled={mineSaving}
-                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
-                              >
-                                <Pencil size={10} />
-                                Duzenle
-                              </button>
-                              <button
-                                onClick={() => handleDeleteMine(entry.name)}
-                                disabled={mineSaving}
-                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
-                              >
-                                Sil
-                              </button>
-                            </>
+                            <div className="ac-item-view">
+                              <span className="ac-item-name flex-1 min-w-0 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <div className="ac-item-actions">
+                                <span className="ac-item-lvl px-2 py-0.5 rounded bg-orange-900/35 border border-orange-800/40 text-[10px] text-orange-200 font-bold">Lv.{entry.level}</span>
+                                <button
+                                  onClick={() => handleStartEditMine(entry)}
+                                  disabled={mineSaving}
+                                  className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Pencil size={10} />
+                                  <span className="ac-action-label">Duzenle</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMine(entry.name)}
+                                  disabled={mineSaving}
+                                  className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Trash2 size={10} />
+                                  <span className="ac-action-label">Sil</span>
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))
@@ -3061,7 +3105,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+              <div className="ac-card bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <h3 className="text-slate-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   DIGER OTO TAMAMLAMA
@@ -3079,7 +3123,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     placeholder="Denim:25&#10;Kurt Kurku:37"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-slate-500/60 placeholder-slate-600 resize-y"
                   />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="ac-action-row flex flex-wrap gap-2">
                     <button
                       onClick={handleAddOthersFromText}
                       disabled={otherSaving || !otherTextInput.trim()}
@@ -3114,7 +3158,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       value={otherListSearch}
                       onChange={e => setOtherListSearch(e.target.value)}
                       placeholder="Listede ara..."
-                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-500/60 placeholder-slate-600"
+                      className="flex-1 min-w-0 sm:min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-500/60 placeholder-slate-600"
                     />
                     <span className="text-[10px] text-slate-500">{managedOthers.length} kayit</span>
                   </div>
@@ -3124,14 +3168,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek diger kaydi yok.</div>
                     ) : (
                       filteredManagedOthers.map(entry => (
-                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                        <div key={entry.name} className="ac-item-row flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
                           {editingOther === entry.name ? (
                             <>
                               <input
                                 type="text"
                                 value={editingOtherNameInput}
                                 onChange={e => setEditingOtherNameInput(e.target.value)}
-                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-slate-500/60"
+                                className="flex-1 min-w-0 basis-full sm:basis-auto bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-slate-500/60"
                               />
                               <input
                                 type="number"
@@ -3158,25 +3202,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               </button>
                             </>
                           ) : (
-                            <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
-                              <span className="px-2 py-0.5 rounded bg-slate-700/40 border border-slate-600/50 text-[10px] text-slate-100 font-bold">Lv.{entry.level}</span>
-                              <button
-                                onClick={() => handleStartEditOther(entry)}
-                                disabled={otherSaving}
-                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
-                              >
-                                <Pencil size={10} />
-                                Duzenle
-                              </button>
-                              <button
-                                onClick={() => handleDeleteOther(entry.name)}
-                                disabled={otherSaving}
-                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
-                              >
-                                Sil
-                              </button>
-                            </>
+                            <div className="ac-item-view">
+                              <span className="ac-item-name flex-1 min-w-0 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <div className="ac-item-actions">
+                                <span className="ac-item-lvl px-2 py-0.5 rounded bg-slate-700/40 border border-slate-600/50 text-[10px] text-slate-100 font-bold">Lv.{entry.level}</span>
+                                <button
+                                  onClick={() => handleStartEditOther(entry)}
+                                  disabled={otherSaving}
+                                  className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Pencil size={10} />
+                                  <span className="ac-action-label">Duzenle</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteOther(entry.name)}
+                                  disabled={otherSaving}
+                                  className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Trash2 size={10} />
+                                  <span className="ac-action-label">Sil</span>
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))
@@ -3185,7 +3232,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+              <div className="ac-card bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <h3 className="text-cyan-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   GOZLUK OTO TAMAMLAMA
@@ -3203,7 +3250,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     placeholder="Kumlu Gozluk:52&#10;Canavar Gozlugu:40"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-500/50 placeholder-slate-600 resize-y"
                   />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="ac-action-row flex flex-wrap gap-2">
                     <button
                       onClick={handleAddGlassesFromText}
                       disabled={glassesSaving || !glassesTextInput.trim()}
@@ -3238,7 +3285,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       value={glassesListSearch}
                       onChange={e => setGlassesListSearch(e.target.value)}
                       placeholder="Listede ara..."
-                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-cyan-500/50 placeholder-slate-600"
+                      className="flex-1 min-w-0 sm:min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-cyan-500/50 placeholder-slate-600"
                     />
                     <span className="text-[10px] text-slate-500">{managedGlasses.length} kayit</span>
                   </div>
@@ -3248,14 +3295,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek gozluk yok.</div>
                     ) : (
                       filteredManagedGlasses.map(entry => (
-                        <div key={entry.name} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                        <div key={entry.name} className="ac-item-row flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
                           {editingGlasses === entry.name ? (
                             <>
                               <input
                                 type="text"
                                 value={editingGlassesNameInput}
                                 onChange={e => setEditingGlassesNameInput(e.target.value)}
-                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-cyan-500/50"
+                                className="flex-1 min-w-0 basis-full sm:basis-auto bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-cyan-500/50"
                               />
                               <input
                                 type="number"
@@ -3282,25 +3329,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               </button>
                             </>
                           ) : (
-                            <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
-                              <span className="px-2 py-0.5 rounded bg-cyan-900/35 border border-cyan-800/40 text-[10px] text-cyan-200 font-bold">Lv.{entry.level}</span>
-                              <button
-                                onClick={() => handleStartEditGlasses(entry)}
-                                disabled={glassesSaving}
-                                className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
-                              >
-                                <Pencil size={10} />
-                                Duzenle
-                              </button>
-                              <button
-                                onClick={() => handleDeleteGlasses(entry.name)}
-                                disabled={glassesSaving}
-                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
-                              >
-                                Sil
-                              </button>
-                            </>
+                            <div className="ac-item-view">
+                              <span className="ac-item-name flex-1 min-w-0 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <div className="ac-item-actions">
+                                <span className="ac-item-lvl px-2 py-0.5 rounded bg-cyan-900/35 border border-cyan-800/40 text-[10px] text-cyan-200 font-bold">Lv.{entry.level}</span>
+                                <button
+                                  onClick={() => handleStartEditGlasses(entry)}
+                                  disabled={glassesSaving}
+                                  className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Pencil size={10} />
+                                  <span className="ac-action-label">Duzenle</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteGlasses(entry.name)}
+                                  disabled={glassesSaving}
+                                  className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  <Trash2 size={10} />
+                                  <span className="ac-action-label">Sil</span>
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))
@@ -3309,7 +3359,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
               </div>
 
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
+              <div className="ac-card bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
                 <h3 className="text-violet-300 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   TILSIM OTO TAMAMLAMA
@@ -3327,7 +3377,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     placeholder="Asit Saldirisi 1:Kirmizi:Sifaci&#10;Asit Saldirisi 2:Mavi:Sifaci&#10;Direnc Kirma Alani 1:Mavi:Buyucu"
                     className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-violet-500/50 placeholder-slate-600 resize-y"
                   />
-                  <div className="flex flex-wrap gap-2">
+                  <div className="ac-action-row flex flex-wrap gap-2">
                     <button
                       onClick={handleAddTalismansFromText}
                       disabled={talismanSaving || !talismanTextInput.trim()}
@@ -3362,7 +3412,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       value={talismanListSearch}
                       onChange={e => setTalismanListSearch(e.target.value)}
                       placeholder="Listede ara..."
-                      className="flex-1 min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-violet-500/50 placeholder-slate-600"
+                      className="flex-1 min-w-0 sm:min-w-[160px] bg-slate-950/80 border border-slate-700 rounded-md px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-violet-500/50 placeholder-slate-600"
                     />
                     <span className="text-[10px] text-slate-500">{managedTalismans.length} kayit</span>
                   </div>
@@ -3372,14 +3422,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       <div className="text-[11px] text-slate-500 px-2 py-1">Goruntulenecek tilsim yok.</div>
                     ) : (
                       filteredManagedTalismans.map(entry => (
-                        <div key={`${entry.name}|${entry.color}|${entry.heroClass}`} className="flex items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
+                        <div key={`${entry.name}|${entry.color}|${entry.heroClass}`} className="ac-item-row flex flex-wrap sm:flex-nowrap items-start sm:items-center gap-2 bg-slate-950/55 border border-slate-700/40 rounded-md px-2 py-1.5">
                           {editingTalisman === `${entry.name}|${entry.color}|${entry.heroClass}` ? (
                             <>
                               <input
                                 type="text"
                                 value={editingTalismanNameInput}
                                 onChange={e => setEditingTalismanNameInput(e.target.value)}
-                                className="flex-1 bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-violet-500/50"
+                                className="flex-1 min-w-0 basis-full sm:basis-auto bg-slate-900/80 border border-slate-600 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-violet-500/50"
                               />
                               <select
                                 value={editingTalismanColorInput}
@@ -3415,26 +3465,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               </button>
                             </>
                           ) : (
-                            <>
-                              <span className="flex-1 text-xs text-slate-200 break-all">{entry.name}</span>
+                            <div className="ac-item-view">
+                              <span className="ac-item-name flex-1 min-w-0 text-xs text-slate-200 break-all">{entry.name}</span>
+                              <div className="ac-item-actions">
                               <span className={`px-2 py-0.5 rounded border text-[10px] font-bold ${entry.color === 'Kırmızı' ? 'bg-red-900/35 border-red-800/45 text-red-200' : 'bg-blue-900/35 border-blue-800/45 text-blue-200'}`}>{entry.color}</span>
-                              <span className="px-2 py-0.5 rounded bg-violet-900/35 border border-violet-800/45 text-[10px] text-violet-200 font-bold">{entry.heroClass}</span>
+                              <span className="ac-item-meta px-2 py-0.5 rounded bg-violet-900/35 border border-violet-800/45 text-[10px] text-violet-200 font-bold">{entry.heroClass}</span>
                               <button
                                 onClick={() => handleStartEditTalisman(entry)}
                                 disabled={talismanSaving}
                                 className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                               >
                                 <Pencil size={10} />
-                                Duzenle
+                                <span className="ac-action-label">Duzenle</span>
                               </button>
                               <button
                                 onClick={() => handleDeleteTalisman(entry)}
                                 disabled={talismanSaving}
-                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50"
+                                className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                               >
-                                Sil
+                                <Trash2 size={10} />
+                                <span className="ac-action-label">Sil</span>
                               </button>
-                            </>
+                              </div>
+                            </div>
                           )}
                         </div>
                       ))
