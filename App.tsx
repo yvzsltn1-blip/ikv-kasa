@@ -2440,6 +2440,10 @@ export default function App() {
     setCurrentViewIndex((prev) => (prev + 1) % VIEW_ORDER.length);
   };
 
+  const handlePrevView = () => {
+    setCurrentViewIndex((prev) => (prev - 1 + VIEW_ORDER.length) % VIEW_ORDER.length);
+  };
+
   const toggleContainerFullscreen = () => {
     setIsContainerFullscreen((prev) => !prev);
   };
@@ -3169,51 +3173,27 @@ export default function App() {
         {/* Content Area */}
         <div className={`bg-slate-800/50 flex-1 flex flex-col min-h-0 ${isContainerFullscreen ? 'p-0' : 'p-1'}`}>
            <div className="flex-1 w-full h-full min-h-0">
-              {currentView === 'bag' ? (
-                 <div className="w-full h-full min-h-0 flex items-center justify-center animate-in fade-in zoom-in duration-300">
-                    <div className={`w-full h-full min-h-0 bg-[#1a1510] p-1 rounded-xl shadow-2xl relative flex flex-col ${isContainerFullscreen ? 'border-0 rounded-none' : 'max-w-[90%] md:max-h-[80%] border-4 border-[#3e3428]'}`}>
-                        <ContainerGrid
-                            container={activeContainer}
-                            onSlotClick={handleSlotClick}
-                            onSlotHover={handleSlotHover}
-                            onMoveItem={handleMoveItem}
-                            searchQuery={""}
-                            onNext={handleNextView}
-                            talismanDuplicates={talismanDuplicates}
-                            isFullscreen={isContainerFullscreen}
-                            onToggleFullscreen={toggleContainerFullscreen}
-                            hasClipboard={clipboardItems.length > 0}
-                            multiSelectMode={multiSelectMode}
-                            selectedSlotIds={selectedSlotIds}
-                            onToggleMultiSelect={handleToggleMultiSelect}
-                            onToggleSlotSelection={handleToggleSlotSelection}
-                            onBulkCopy={handleBulkCopy}
-                            onCancelSelection={handleCancelSelection}
-                        />
-                    </div>
-                 </div>
-              ) : (
-                  <div className="w-full h-full min-h-0 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                     <ContainerGrid
-                        container={activeContainer}
-                        onSlotClick={handleSlotClick}
-                        onSlotHover={handleSlotHover}
-                        onMoveItem={handleMoveItem}
-                        searchQuery={""}
-                        onNext={handleNextView}
-                        talismanDuplicates={talismanDuplicates}
-                        isFullscreen={isContainerFullscreen}
-                        onToggleFullscreen={toggleContainerFullscreen}
-                        hasClipboard={clipboardItems.length > 0}
-                        multiSelectMode={multiSelectMode}
-                        selectedSlotIds={selectedSlotIds}
-                        onToggleMultiSelect={handleToggleMultiSelect}
-                        onToggleSlotSelection={handleToggleSlotSelection}
-                        onBulkCopy={handleBulkCopy}
-                        onCancelSelection={handleCancelSelection}
-                    />
-                  </div>
-              )}
+              <div className={`w-full h-full min-h-0 animate-in fade-in duration-300 ${currentView === 'bag' ? 'zoom-in' : 'slide-in-from-bottom-4'}`}>
+                 <ContainerGrid
+                    container={activeContainer}
+                    onSlotClick={handleSlotClick}
+                    onSlotHover={handleSlotHover}
+                    onMoveItem={handleMoveItem}
+                    searchQuery={""}
+                    onNext={handleNextView}
+                    onPrev={handlePrevView}
+                    talismanDuplicates={talismanDuplicates}
+                    isFullscreen={isContainerFullscreen}
+                    onToggleFullscreen={toggleContainerFullscreen}
+                    hasClipboard={clipboardItems.length > 0}
+                    multiSelectMode={multiSelectMode}
+                    selectedSlotIds={selectedSlotIds}
+                    onToggleMultiSelect={handleToggleMultiSelect}
+                    onToggleSlotSelection={handleToggleSlotSelection}
+                    onBulkCopy={handleBulkCopy}
+                    onCancelSelection={handleCancelSelection}
+                />
+              </div>
            </div>
         </div>
 
@@ -3720,4 +3700,3 @@ export default function App() {
     </div>
   );
 }
-

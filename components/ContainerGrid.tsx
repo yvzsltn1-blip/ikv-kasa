@@ -1,7 +1,7 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Container, SlotData, ItemData } from '../types';
 import { SlotItem } from './SlotItem';
-import { ArrowRight, Maximize2, Minimize2, CheckSquare, Copy, X, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Maximize2, Minimize2, CheckSquare, Copy, X, Check } from 'lucide-react';
 import { getContainerGridDimensions, getContainerSlotPosition } from '../containerLayout';
 
 const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): '-' | 'I' | 'II' | 'III' => {
@@ -14,6 +14,62 @@ const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2
   return '-';
 };
 
+// Hook for horizontal swipe detection on a given element ref
+const useSwipeNavigation = (
+  ref: React.RefObject<HTMLElement | null>,
+  onSwipeLeft?: () => void,
+  onSwipeRight?: () => void,
+) => {
+  const swipeInfo = useRef({ startX: 0, startY: 0, startAt: 0, swiping: false });
+  const SWIPE_THRESHOLD = 60; // minimum px for a valid swipe
+  const MAX_VERTICAL = 40; // max vertical drift to still count as horizontal swipe
+  const MAX_DURATION = 450; // ignore slow drags/long-press gestures
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0];
+      swipeInfo.current = { startX: t.clientX, startY: t.clientY, startAt: Date.now(), swiping: true };
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (!swipeInfo.current.swiping) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - swipeInfo.current.startX;
+      const dy = Math.abs(t.clientY - swipeInfo.current.startY);
+      const duration = Date.now() - swipeInfo.current.startAt;
+      swipeInfo.current.swiping = false;
+
+      if (duration > MAX_DURATION) return; // likely long press / drag
+      if (dy > MAX_VERTICAL) return; // too vertical
+      if (Math.abs(dx) < SWIPE_THRESHOLD) return; // too short
+
+      if (dx < 0) {
+        // Swiped left → next
+        onSwipeLeft?.();
+      } else {
+        // Swiped right → prev
+        onSwipeRight?.();
+      }
+    };
+
+    const onTouchCancel = () => {
+      swipeInfo.current.swiping = false;
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchCancel);
+    };
+  }, [ref, onSwipeLeft, onSwipeRight]);
+};
+
 interface ContainerGridProps {
   container: Container;
   onSlotClick: (containerId: string, slotId: number) => void;
@@ -21,6 +77,7 @@ interface ContainerGridProps {
   onMoveItem: (containerId: string, fromSlotId: number, toSlotId: number) => void;
   searchQuery: string;
   onNext?: () => void;
+  onPrev?: () => void;
   talismanDuplicates?: Map<string, { count: number; color: string }>;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -33,7 +90,7 @@ interface ContainerGridProps {
   onCancelSelection?: () => void;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates, isFullscreen = false, onToggleFullscreen, hasClipboard = false, multiSelectMode = false, selectedSlotIds, onToggleMultiSelect, onToggleSlotSelection, onBulkCopy, onCancelSelection }) => {
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, onPrev, talismanDuplicates, isFullscreen = false, onToggleFullscreen, hasClipboard = false, multiSelectMode = false, selectedSlotIds, onToggleMultiSelect, onToggleSlotSelection, onBulkCopy, onCancelSelection }) => {
   const { cols: gridCols, rows: gridRows } = getContainerGridDimensions(container);
   const gridStyle = {
     gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
@@ -49,6 +106,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   const lastSelectedSlotId = useRef<number | null>(null);
 
   // Refs
+  const rootRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPress = useRef(false);
@@ -58,6 +116,13 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     startX: 0, startY: 0, slotId: -1, item: null as ItemData | null,
     longPressDetected: false, dragConfirmed: false,
   });
+
+  // Stable callback refs for swipe hook
+  const stableOnNext = useCallback(() => onNext?.(), [onNext]);
+  const stableOnPrev = useCallback(() => onPrev?.(), [onPrev]);
+
+  // Mobile swipe across the whole container area
+  useSwipeNavigation(rootRef, stableOnNext, stableOnPrev);
 
   const clearTimer = () => {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
@@ -242,9 +307,11 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   const selectedCount = selectedSlotIds?.size ?? 0;
 
   return (
-    <div className="flex flex-col h-full min-h-0 w-full">
-      {/* Container Header */}
-      <div className="bg-slate-800 border-t-2 border-l-2 border-r-2 border-slate-600 p-1 px-2 flex justify-between items-center rounded-t-md select-none shrink-0">
+    <div ref={rootRef} className="flex flex-col h-full min-h-0 w-full">
+      {/* Container Header — also a mobile swipe zone */}
+      <div
+        className="bg-slate-800 border-t-2 border-l-2 border-r-2 border-slate-600 p-1 px-2 flex justify-between items-center rounded-t-md select-none shrink-0"
+      >
         <div className="flex items-center gap-2">
           <span className="text-xs md:text-sm font-bold text-yellow-500 ml-1 md:ml-2 uppercase tracking-wide">{container.name}</span>
           <div className="text-[10px] text-slate-500 bg-black/30 px-2 py-0.5 rounded-full">
@@ -277,10 +344,20 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
               <span className="hidden sm:inline">{isFullscreen ? 'CIK' : 'TAM EKRAN'}</span>
             </button>
           )}
+          {onPrev && (
+            <button
+              onClick={onPrev}
+              className="group hidden md:flex items-center gap-1 text-slate-400 hover:text-white bg-slate-700 hover:bg-blue-600 px-3 py-1 rounded transition-all text-xs font-bold"
+              title="Önceki Depo"
+            >
+              <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+              <span>ÖNCEKİ</span>
+            </button>
+          )}
           {onNext && (
             <button
               onClick={onNext}
-              className="group flex items-center gap-1 text-slate-400 hover:text-white bg-slate-700 hover:bg-blue-600 px-3 py-1 rounded transition-all text-xs font-bold"
+              className="group hidden md:flex items-center gap-1 text-slate-400 hover:text-white bg-slate-700 hover:bg-blue-600 px-3 py-1 rounded transition-all text-xs font-bold"
               title="Sonraki Depo"
             >
               <span>SONRAKİ</span>
@@ -293,7 +370,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
       {/* Grid Area */}
       <div
         ref={gridRef}
-        className="relative bg-slate-900 border-2 border-slate-600 p-0.5 md:p-1 rounded-b-md shadow-inner metal-pattern flex-1 flex flex-col min-h-0 overflow-hidden"
+        className="relative bg-slate-900 border-x-2 md:border-b-2 border-slate-600 md:rounded-b-md p-0.5 md:p-1 shadow-inner metal-pattern flex-1 flex flex-col min-h-0 overflow-hidden"
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
@@ -382,6 +459,20 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
             </div>
           </div>
         )}
+      </div>
+
+      {/* Footer swipe zone (mobile) — also shows swipe hint */}
+      <div
+        className="md:hidden bg-slate-800 border-b-2 border-x-2 border-slate-600 rounded-b-md select-none shrink-0 flex items-center justify-center py-1.5 gap-2"
+      >
+        <ArrowLeft size={12} className="text-slate-500" />
+        <span className="text-[10px] text-slate-500 tracking-wide">kaydır</span>
+        <ArrowRight size={12} className="text-slate-500" />
+      </div>
+
+      {/* Desktop: keep rounded bottom on grid */}
+      <div className="hidden md:block h-0">
+        {/* spacer — grid area already has rounded-b via md styles */}
       </div>
     </div>
   );
