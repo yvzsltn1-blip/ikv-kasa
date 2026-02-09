@@ -2828,18 +2828,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <button
                                   onClick={() => handleStartEditEnchantment(name)}
                                   disabled={enchantmentSaving || enchantmentImporting}
+                                  title="Duzenle"
+                                  aria-label="Duzenle"
                                   className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Pencil size={10} />
-                                  <span className="ac-action-label">Duzenle</span>
                                 </button>
                                 <button
                                   onClick={() => handleDeleteEnchantment(name)}
                                   disabled={enchantmentSaving || enchantmentImporting}
+                                  title="Sil"
+                                  aria-label="Sil"
                                   className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Trash2 size={10} />
-                                  <span className="ac-action-label">Sil</span>
                                 </button>
                               </div>
                             </div>
@@ -2955,18 +2957,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <button
                                   onClick={() => handleStartEditPotion(entry)}
                                   disabled={potionSaving}
+                                  title="Duzenle"
+                                  aria-label="Duzenle"
                                   className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Pencil size={10} />
-                                  <span className="ac-action-label">Duzenle</span>
                                 </button>
                                 <button
                                   onClick={() => handleDeletePotion(entry.name)}
                                   disabled={potionSaving}
+                                  title="Sil"
+                                  aria-label="Sil"
                                   className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Trash2 size={10} />
-                                  <span className="ac-action-label">Sil</span>
                                 </button>
                               </div>
                             </div>
@@ -3082,18 +3086,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <button
                                   onClick={() => handleStartEditMine(entry)}
                                   disabled={mineSaving}
+                                  title="Duzenle"
+                                  aria-label="Duzenle"
                                   className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Pencil size={10} />
-                                  <span className="ac-action-label">Duzenle</span>
                                 </button>
                                 <button
                                   onClick={() => handleDeleteMine(entry.name)}
                                   disabled={mineSaving}
+                                  title="Sil"
+                                  aria-label="Sil"
                                   className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Trash2 size={10} />
-                                  <span className="ac-action-label">Sil</span>
                                 </button>
                               </div>
                             </div>
@@ -3209,18 +3215,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <button
                                   onClick={() => handleStartEditOther(entry)}
                                   disabled={otherSaving}
+                                  title="Duzenle"
+                                  aria-label="Duzenle"
                                   className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Pencil size={10} />
-                                  <span className="ac-action-label">Duzenle</span>
                                 </button>
                                 <button
                                   onClick={() => handleDeleteOther(entry.name)}
                                   disabled={otherSaving}
+                                  title="Sil"
+                                  aria-label="Sil"
                                   className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Trash2 size={10} />
-                                  <span className="ac-action-label">Sil</span>
                                 </button>
                               </div>
                             </div>
@@ -3336,18 +3344,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 <button
                                   onClick={() => handleStartEditGlasses(entry)}
                                   disabled={glassesSaving}
+                                  title="Duzenle"
+                                  aria-label="Duzenle"
                                   className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Pencil size={10} />
-                                  <span className="ac-action-label">Duzenle</span>
                                 </button>
                                 <button
                                   onClick={() => handleDeleteGlasses(entry.name)}
                                   disabled={glassesSaving}
+                                  title="Sil"
+                                  aria-label="Sil"
                                   className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                                 >
                                   <Trash2 size={10} />
-                                  <span className="ac-action-label">Sil</span>
                                 </button>
                               </div>
                             </div>
@@ -3473,18 +3483,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                               <button
                                 onClick={() => handleStartEditTalisman(entry)}
                                 disabled={talismanSaving}
+                                title="Duzenle"
+                                aria-label="Duzenle"
                                 className="px-2 py-1 bg-blue-900/45 hover:bg-blue-800/55 text-blue-200 text-[10px] font-bold rounded border border-blue-800/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                               >
                                 <Pencil size={10} />
-                                <span className="ac-action-label">Duzenle</span>
                               </button>
                               <button
                                 onClick={() => handleDeleteTalisman(entry)}
                                 disabled={talismanSaving}
+                                title="Sil"
+                                aria-label="Sil"
                                 className="px-2 py-1 bg-red-950/45 hover:bg-red-900/55 text-red-300 text-[10px] font-bold rounded border border-red-900/40 transition-colors disabled:opacity-50 flex items-center gap-1"
                               >
                                 <Trash2 size={10} />
-                                <span className="ac-action-label">Sil</span>
                               </button>
                               </div>
                             </div>
