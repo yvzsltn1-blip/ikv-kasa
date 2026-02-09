@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Container, SlotData, ItemData } from '../types';
 import { SlotItem } from './SlotItem';
-import { ArrowRight, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowRight, Maximize2, Minimize2, CheckSquare, Copy, X, Check } from 'lucide-react';
 import { getContainerGridDimensions, getContainerSlotPosition } from '../containerLayout';
 
 const resolveTalismanTier = (item: Pick<ItemData, 'talismanTier' | 'enchantment2'>): '-' | 'I' | 'II' | 'III' => {
@@ -25,9 +25,15 @@ interface ContainerGridProps {
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
   hasClipboard?: boolean;
+  multiSelectMode?: boolean;
+  selectedSlotIds?: Set<number>;
+  onToggleMultiSelect?: () => void;
+  onToggleSlotSelection?: (slotId: number) => void;
+  onBulkCopy?: () => void;
+  onCancelSelection?: () => void;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates, isFullscreen = false, onToggleFullscreen, hasClipboard = false }) => {
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates, isFullscreen = false, onToggleFullscreen, hasClipboard = false, multiSelectMode = false, selectedSlotIds, onToggleMultiSelect, onToggleSlotSelection, onBulkCopy, onCancelSelection }) => {
   const { cols: gridCols, rows: gridRows } = getContainerGridDimensions(container);
   const gridStyle = {
     gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
@@ -38,6 +44,9 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   const [dragVisual, setDragVisual] = useState<{
     x: number; y: number; item: ItemData; sourceSlotId: number;
   } | null>(null);
+
+  // Shift+Click range selection tracking
+  const lastSelectedSlotId = useRef<number | null>(null);
 
   // Refs
   const gridRef = useRef<HTMLDivElement>(null);
@@ -60,6 +69,9 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     if (!el) return;
 
     const handleMove = (e: TouchEvent) => {
+      // In multi-select mode, no drag behavior
+      if (multiSelectMode) return;
+
       if (!touchInfo.current.longPressDetected) {
         // Phase 1 (scroll detection): if finger moved too much, it's a scroll
         const touch = e.touches[0];
@@ -98,9 +110,11 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
 
     el.addEventListener('touchmove', handleMove, { passive: false });
     return () => el.removeEventListener('touchmove', handleMove);
-  }, []);
+  }, [multiSelectMode]);
 
   const handleTouchStart = (slot: SlotData, e: React.TouchEvent) => {
+    // In multi-select mode, don't start drag
+    if (multiSelectMode) return;
     if (!slot.item) return;
     isLongPress.current = false;
     const touch = e.touches[0];
@@ -128,6 +142,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
+    if (multiSelectMode) return;
     clearTimer();
 
     if (touchInfo.current.longPressDetected) {
@@ -155,13 +170,39 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     resetTouchState();
   };
 
-  const handleSlotClick = (containerId: string, slotId: number) => {
+  const handleSlotClick = (containerId: string, slotId: number, e: React.MouseEvent) => {
     if (isLongPress.current) {
       isLongPress.current = false;
       return;
     }
+
+    // Shift+Click range selection in multi-select mode
+    if (multiSelectMode && e.shiftKey && onToggleSlotSelection && lastSelectedSlotId.current !== null) {
+      const start = Math.min(lastSelectedSlotId.current, slotId);
+      const end = Math.max(lastSelectedSlotId.current, slotId);
+      for (let i = start; i <= end; i++) {
+        const slotItem = container.slots[i]?.item;
+        if (slotItem && !selectedSlotIds?.has(i)) {
+          onToggleSlotSelection(i);
+        }
+      }
+      return;
+    }
+
+    // Track last selected slot for shift+click
+    if (multiSelectMode && container.slots[slotId]?.item) {
+      lastSelectedSlotId.current = slotId;
+    }
+
     onSlotClick(containerId, slotId);
   };
+
+  // Reset last selected when leaving multi-select
+  useEffect(() => {
+    if (!multiSelectMode) {
+      lastSelectedSlotId.current = null;
+    }
+  }, [multiSelectMode]);
 
   const isMatchingSearch = (slot: SlotData) => {
     if (!slot.item || !searchQuery) return false;
@@ -176,16 +217,19 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
 
   // --- Desktop Drag and Drop ---
   const handleDragStart = (e: React.DragEvent, slotId: number) => {
+    if (multiSelectMode) { e.preventDefault(); return; }
     e.dataTransfer.setData("text/plain", slotId.toString());
     e.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (multiSelectMode) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   };
 
   const handleDrop = (e: React.DragEvent, targetSlotId: number) => {
+    if (multiSelectMode) return;
     e.preventDefault();
     const sourceSlotIdStr = e.dataTransfer.getData("text/plain");
     if (!sourceSlotIdStr) return;
@@ -194,6 +238,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
       onMoveItem(container.id, sourceSlotId, targetSlotId);
     }
   };
+
+  const selectedCount = selectedSlotIds?.size ?? 0;
 
   return (
     <div className="flex flex-col h-full min-h-0 w-full">
@@ -207,6 +253,20 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
         </div>
 
         <div className="flex items-center gap-1.5">
+          {onToggleMultiSelect && (
+            <button
+              onClick={onToggleMultiSelect}
+              className={`group flex items-center gap-1 px-2.5 py-1 rounded transition-all text-xs font-bold ${
+                multiSelectMode
+                  ? 'text-green-200 bg-green-700 hover:bg-green-600'
+                  : 'text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600'
+              }`}
+              title={multiSelectMode ? 'Seçim Modunu Kapat' : 'Toplu Seç'}
+            >
+              <CheckSquare size={14} />
+              <span className="hidden sm:inline">{multiSelectMode ? 'SEÇİM' : 'TOPLU SEÇ'}</span>
+            </button>
+          )}
           {onToggleFullscreen && (
             <button
               onClick={onToggleFullscreen}
@@ -237,7 +297,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
-        <div className="grid gap-0.5 md:gap-1 w-full h-full" style={gridStyle}>
+        <div className={`grid gap-0.5 md:gap-1 w-full h-full ${multiSelectMode && selectedCount > 0 ? 'pb-8' : ''}`} style={gridStyle}>
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
@@ -246,15 +306,16 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
               ? `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${resolveTalismanTier(slot.item).toLocaleLowerCase('tr')}|${slot.item.heroClass}`
               : null;
             const glowInfo = talismanKey ? talismanDuplicates?.get(talismanKey) : undefined;
+            const isSelected = multiSelectMode && selectedSlotIds?.has(slot.id);
             return (
               <div
                 key={slot.id}
                 data-slot-id={slot.id}
-                draggable={!!slot.item}
+                draggable={!multiSelectMode && !!slot.item}
                 onDragStart={(e) => slot.item && handleDragStart(e, slot.id)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, slot.id)}
-                onClick={() => handleSlotClick(container.id, slot.id)}
+                onClick={(e) => handleSlotClick(container.id, slot.id, e)}
                 onMouseEnter={(e) => onSlotHover(slot.item, e)}
                 onMouseLeave={(e) => onSlotHover(null, e)}
                 onTouchStart={(e) => handleTouchStart(slot, e)}
@@ -262,15 +323,48 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                 className={`
                   relative bg-black/40 border border-slate-700/50
                   transition-colors group
-                  ${slot.item ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800' : hasClipboard ? 'cursor-pointer ring-2 ring-blue-400/40 hover:ring-blue-400/70 hover:bg-blue-950/30' : 'hover:bg-slate-800/50'}
+                  ${multiSelectMode
+                    ? (slot.item
+                        ? (isSelected ? 'ring-2 ring-green-400 bg-green-950/30 cursor-pointer' : 'cursor-pointer hover:border-green-500/50 hover:bg-slate-800')
+                        : '')
+                    : (slot.item ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800' : hasClipboard ? 'cursor-pointer ring-2 ring-blue-400/40 hover:ring-blue-400/70 hover:bg-blue-950/30' : 'hover:bg-slate-800/50')
+                  }
                   ${isBeingDragged ? 'opacity-30 border-yellow-500 border-2' : ''}
                 `}
               >
                 {slot.item && <SlotItem item={slot.item} highlight={highlight} talismanGlowColor={glowInfo?.color} />}
+                {isSelected && (
+                  <div className="absolute top-0 right-0 bg-green-500 rounded-bl-sm p-px z-10">
+                    <Check size={10} className="text-white" />
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+
+        {/* Multi-select action bar */}
+        {multiSelectMode && selectedCount > 0 && (
+          <div className="absolute bottom-0 left-0 right-0 bg-slate-800/95 border-t border-slate-600 px-3 py-1.5 flex items-center justify-between backdrop-blur-sm z-20">
+            <span className="text-xs text-green-300 font-bold">{selectedCount} eşya seçildi</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onBulkCopy}
+                className="flex items-center gap-1 bg-green-700 hover:bg-green-600 text-white text-xs font-bold px-3 py-1 rounded transition-colors"
+              >
+                <Copy size={12} />
+                Kopyala
+              </button>
+              <button
+                onClick={onCancelSelection}
+                className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-bold px-3 py-1 rounded transition-colors"
+              >
+                <X size={12} />
+                İptal
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Floating drag indicator (mobile) */}
         {dragVisual && (

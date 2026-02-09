@@ -444,7 +444,10 @@ export default function App() {
   const [detailSlot, setDetailSlot] = useState<{ containerId: string; slotId: number } | null>(null);
 
   // Clipboard State
-  const [clipboardItem, setClipboardItem] = useState<ItemData | null>(null);
+  const [clipboardItems, setClipboardItems] = useState<ItemData[]>([]);
+  // Multi-select State
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const [selectedSlotIds, setSelectedSlotIds] = useState<Set<number>>(new Set());
 
   // Recipe Edit Modal State
   const [editingRecipe, setEditingRecipe] = useState<ItemData | null>(null);
@@ -2068,6 +2071,40 @@ export default function App() {
     }));
   };
 
+  const updateMultipleSlots = (containerId: string, updates: { slotId: number; item: ItemData }[]) => {
+    if (!canEditData) return;
+    if (!activeAccount) return;
+
+    setAccounts(prevAccounts => prevAccounts.map(acc => {
+      if (acc.id !== selectedAccountId) return acc;
+
+      const newServers = [...acc.servers];
+      const newServer = { ...newServers[selectedServerIndex] };
+      const newChars = [...newServer.characters];
+      const targetChar = { ...newChars[activeCharIndex] };
+
+      let targetContainer: Container | null = null;
+      let containerKey: 'bank1' | 'bank2' | 'bag' | null = null;
+
+      if (targetChar.bank1.id === containerId) { targetContainer = targetChar.bank1; containerKey = 'bank1'; }
+      else if (targetChar.bank2.id === containerId) { targetContainer = targetChar.bank2; containerKey = 'bank2'; }
+      else if (targetChar.bag.id === containerId) { targetContainer = targetChar.bag; containerKey = 'bag'; }
+
+      if (targetContainer && containerKey) {
+        const newSlots = [...targetContainer.slots];
+        for (const update of updates) {
+          newSlots[update.slotId] = { ...newSlots[update.slotId], item: update.item };
+        }
+        targetChar[containerKey] = { ...targetContainer, slots: newSlots };
+        newChars[activeCharIndex] = targetChar;
+      }
+
+      newServer.characters = newChars;
+      newServers[selectedServerIndex] = newServer;
+      return { ...acc, servers: newServers };
+    }));
+  };
+
   const handleReadRecipe = (item: ItemData) => {
       if (!ensureCanEditData()) return;
       if (!activeAccount || !activeSlot) return;
@@ -2167,6 +2204,20 @@ export default function App() {
     else if (activeChar.bank2.id === containerId) container = activeChar.bank2;
     else if (activeChar.bag.id === containerId) container = activeChar.bag;
 
+    // Multi-select mode: toggle selection on item slots
+    if (multiSelectMode) {
+      const item = container?.slots[slotId]?.item;
+      if (item) {
+        setSelectedSlotIds(prev => {
+          const next = new Set(prev);
+          if (next.has(slotId)) next.delete(slotId);
+          else next.add(slotId);
+          return next;
+        });
+      }
+      return;
+    }
+
     const item = container?.slots[slotId]?.item;
 
     if (item) {
@@ -2174,13 +2225,36 @@ export default function App() {
       setDetailItem(item);
       setDetailSlot({ containerId, slotId });
     } else {
-      // Empty slot: if clipboard has item, paste; otherwise open ItemModal
-      if (clipboardItem) {
+      // Empty slot: if clipboard has items, paste; otherwise open ItemModal
+      if (clipboardItems.length > 0) {
         if (!ensureCanEditData()) return;
-        const pastedItem: ItemData = { ...clipboardItem, id: crypto.randomUUID(), isGlobal: false };
-        updateSlot(containerId, slotId, pastedItem);
-        setHasUnsavedChanges(true);
-        showToast('Eşya yapıştırıldı!');
+        if (clipboardItems.length === 1) {
+          // Single item paste (repeatable)
+          const pastedItem: ItemData = { ...clipboardItems[0], id: crypto.randomUUID(), isGlobal: false };
+          updateSlot(containerId, slotId, pastedItem);
+          setHasUnsavedChanges(true);
+          showToast('Eşya yapıştırıldı!');
+        } else {
+          // Bulk paste: starting from clicked slot, fill empty slots in order
+          if (!container) return;
+          const sortedSlotIds = container.slots.map(s => s.id).filter(id => id >= slotId).sort((a, b) => a - b);
+          const updates: { slotId: number; item: ItemData }[] = [];
+          let itemIndex = 0;
+          for (const sid of sortedSlotIds) {
+            if (itemIndex >= clipboardItems.length) break;
+            const existingItem = container.slots[sid]?.item;
+            if (!existingItem) {
+              updates.push({ slotId: sid, item: { ...clipboardItems[itemIndex], id: crypto.randomUUID(), isGlobal: false } });
+              itemIndex++;
+            }
+          }
+          if (updates.length > 0) {
+            updateMultipleSlots(containerId, updates);
+            setHasUnsavedChanges(true);
+            showToast(`${updates.length} eşya yapıştırıldı!`);
+          }
+          setClipboardItems([]);
+        }
         return;
       }
       if (!ensureCanEditData()) return;
@@ -2203,14 +2277,49 @@ export default function App() {
   const handleCopyItem = () => {
     if (!detailItem) return;
     const copied: ItemData = { ...detailItem, isGlobal: false };
-    setClipboardItem(copied);
+    setClipboardItems([copied]);
     setDetailItem(null);
     setDetailSlot(null);
     showToast('Eşya panoya kopyalandı!');
   };
 
   const handleClearClipboard = () => {
-    setClipboardItem(null);
+    setClipboardItems([]);
+  };
+
+  // Multi-select handlers
+  const handleToggleMultiSelect = () => {
+    setMultiSelectMode(prev => !prev);
+    setSelectedSlotIds(new Set());
+  };
+
+  const handleToggleSlotSelection = (slotId: number) => {
+    setSelectedSlotIds(prev => {
+      const next = new Set(prev);
+      if (next.has(slotId)) next.delete(slotId);
+      else next.add(slotId);
+      return next;
+    });
+  };
+
+  const handleBulkCopy = () => {
+    if (!activeChar || selectedSlotIds.size === 0) return;
+    const currentContainer = activeChar[VIEW_ORDER[currentViewIndex]];
+    if (!currentContainer) return;
+    const items: ItemData[] = [];
+    [...selectedSlotIds].sort((a, b) => a - b).forEach(slotId => {
+      const item = currentContainer.slots[slotId]?.item;
+      if (item) items.push({ ...item, isGlobal: false });
+    });
+    setClipboardItems(items);
+    setMultiSelectMode(false);
+    setSelectedSlotIds(new Set());
+    showToast(`${items.length} eşya panoya kopyalandı!`);
+  };
+
+  const handleCancelSelection = () => {
+    setMultiSelectMode(false);
+    setSelectedSlotIds(new Set());
   };
 
   const handleSlotHover = (item: ItemData | null, e: React.MouseEvent) => {
@@ -2344,7 +2453,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isContainerFullscreen]);
 
-  // Ctrl+C to copy from detail modal, Escape to clear clipboard
+  // Ctrl+C to copy from detail modal, Escape to clear clipboard / cancel selection
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'c' && detailItem) {
@@ -2352,19 +2461,32 @@ export default function App() {
         if (selection && selection.toString().length > 0) return;
         e.preventDefault();
         const copied: ItemData = { ...detailItem, isGlobal: false };
-        setClipboardItem(copied);
+        setClipboardItems([copied]);
         setDetailItem(null);
         setDetailSlot(null);
         showToast('Eşya panoya kopyalandı!');
       }
-      if (e.key === 'Escape' && clipboardItem && !detailItem && !modalOpen) {
-        setClipboardItem(null);
-        showToast('Pano temizlendi');
+      if (e.key === 'Escape' && !detailItem && !modalOpen) {
+        if (multiSelectMode) {
+          setMultiSelectMode(false);
+          setSelectedSlotIds(new Set());
+          return;
+        }
+        if (clipboardItems.length > 0) {
+          setClipboardItems([]);
+          showToast('Pano temizlendi');
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [detailItem, clipboardItem, modalOpen]);
+  }, [detailItem, clipboardItems, modalOpen, multiSelectMode]);
+
+  // Clear multi-select when view/character/server/account changes
+  useEffect(() => {
+    setMultiSelectMode(false);
+    setSelectedSlotIds(new Set());
+  }, [currentViewIndex, activeCharIndex, selectedServerIndex, selectedAccountId]);
 
   useEffect(() => {
     if (!isMobileAccountMenuOpen) return;
@@ -3060,7 +3182,13 @@ export default function App() {
                             talismanDuplicates={talismanDuplicates}
                             isFullscreen={isContainerFullscreen}
                             onToggleFullscreen={toggleContainerFullscreen}
-                            hasClipboard={!!clipboardItem}
+                            hasClipboard={clipboardItems.length > 0}
+                            multiSelectMode={multiSelectMode}
+                            selectedSlotIds={selectedSlotIds}
+                            onToggleMultiSelect={handleToggleMultiSelect}
+                            onToggleSlotSelection={handleToggleSlotSelection}
+                            onBulkCopy={handleBulkCopy}
+                            onCancelSelection={handleCancelSelection}
                         />
                     </div>
                  </div>
@@ -3076,7 +3204,13 @@ export default function App() {
                         talismanDuplicates={talismanDuplicates}
                         isFullscreen={isContainerFullscreen}
                         onToggleFullscreen={toggleContainerFullscreen}
-                        hasClipboard={!!clipboardItem}
+                        hasClipboard={clipboardItems.length > 0}
+                        multiSelectMode={multiSelectMode}
+                        selectedSlotIds={selectedSlotIds}
+                        onToggleMultiSelect={handleToggleMultiSelect}
+                        onToggleSlotSelection={handleToggleSlotSelection}
+                        onBulkCopy={handleBulkCopy}
+                        onCancelSelection={handleCancelSelection}
                     />
                   </div>
               )}
@@ -3084,13 +3218,19 @@ export default function App() {
         </div>
 
         {/* Clipboard Indicator */}
-        {clipboardItem && (
+        {clipboardItems.length > 0 && (
           <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="bg-blue-900/95 border border-blue-500/60 text-blue-100 text-xs md:text-sm font-bold px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 whitespace-nowrap backdrop-blur-sm">
               <Clipboard size={14} className="text-blue-400 shrink-0" />
-              <span className="text-blue-300">{clipboardItem.category}</span>
-              {clipboardItem.enchantment1 && (
-                <span className="text-blue-200/70 text-[11px] max-w-[120px] truncate">{clipboardItem.enchantment1}</span>
+              {clipboardItems.length === 1 ? (
+                <>
+                  <span className="text-blue-300">{clipboardItems[0].category}</span>
+                  {clipboardItems[0].enchantment1 && (
+                    <span className="text-blue-200/70 text-[11px] max-w-[120px] truncate">{clipboardItems[0].enchantment1}</span>
+                  )}
+                </>
+              ) : (
+                <span className="text-blue-300">{clipboardItems.length} eşya panoda</span>
               )}
               <div className="w-px h-4 bg-blue-500/30 mx-0.5" />
               <button
