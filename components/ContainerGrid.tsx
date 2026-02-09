@@ -24,9 +24,10 @@ interface ContainerGridProps {
   talismanDuplicates?: Map<string, { count: number; color: string }>;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  hasClipboard?: boolean;
 }
 
-export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates, isFullscreen = false, onToggleFullscreen }) => {
+export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotClick, onSlotHover, onMoveItem, searchQuery, onNext, talismanDuplicates, isFullscreen = false, onToggleFullscreen, hasClipboard = false }) => {
   const { cols: gridCols, rows: gridRows } = getContainerGridDimensions(container);
   const gridStyle = {
     gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
@@ -261,7 +262,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                 className={`
                   relative bg-black/40 border border-slate-700/50
                   transition-colors group
-                  ${slot.item ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800' : 'hover:bg-slate-800/50'}
+                  ${slot.item ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800' : hasClipboard ? 'cursor-pointer ring-2 ring-blue-400/40 hover:ring-blue-400/70 hover:bg-blue-950/30' : 'hover:bg-slate-800/50'}
                   ${isBeingDragged ? 'opacity-30 border-yellow-500 border-2' : ''}
                 `}
               >

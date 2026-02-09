@@ -9,7 +9,7 @@ import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { InventorySummaryModal } from './components/InventorySummaryModal';
 import { LoginScreen } from './components/LoginScreen';
-import { User, Save, Plus, Trash2, ChevronDown, ChevronUp, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle, MoreVertical, Upload } from 'lucide-react';
+import { User, Save, Plus, Trash2, ChevronDown, ChevronUp, FileSpreadsheet, Edit3, Shield, Search, Book, LogOut, CheckCircle, XCircle, Globe, AtSign, Check, AlertTriangle, Link2, Crown, Lock, MessageCircle, MoreVertical, Upload, Copy, Clipboard, X } from 'lucide-react';
 import { AdminPanel } from './components/AdminPanel';
 import { MessagingModal } from './components/MessagingModal';
 
@@ -442,6 +442,9 @@ export default function App() {
   // Detail Modal State (tap on item → detail view)
   const [detailItem, setDetailItem] = useState<ItemData | null>(null);
   const [detailSlot, setDetailSlot] = useState<{ containerId: string; slotId: number } | null>(null);
+
+  // Clipboard State
+  const [clipboardItem, setClipboardItem] = useState<ItemData | null>(null);
 
   // Recipe Edit Modal State
   const [editingRecipe, setEditingRecipe] = useState<ItemData | null>(null);
@@ -2171,6 +2174,15 @@ export default function App() {
       setDetailItem(item);
       setDetailSlot({ containerId, slotId });
     } else {
+      // Empty slot: if clipboard has item, paste; otherwise open ItemModal
+      if (clipboardItem) {
+        if (!ensureCanEditData()) return;
+        const pastedItem: ItemData = { ...clipboardItem, id: crypto.randomUUID(), isGlobal: false };
+        updateSlot(containerId, slotId, pastedItem);
+        setHasUnsavedChanges(true);
+        showToast('Eşya yapıştırıldı!');
+        return;
+      }
       if (!ensureCanEditData()) return;
       // Open ItemModal for creating new item in empty slot
       setActiveSlot({ containerId, slotId });
@@ -2186,6 +2198,19 @@ export default function App() {
     }
     setDetailItem(null);
     setDetailSlot(null);
+  };
+
+  const handleCopyItem = () => {
+    if (!detailItem) return;
+    const copied: ItemData = { ...detailItem, isGlobal: false };
+    setClipboardItem(copied);
+    setDetailItem(null);
+    setDetailSlot(null);
+    showToast('Eşya panoya kopyalandı!');
+  };
+
+  const handleClearClipboard = () => {
+    setClipboardItem(null);
   };
 
   const handleSlotHover = (item: ItemData | null, e: React.MouseEvent) => {
@@ -2318,6 +2343,28 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isContainerFullscreen]);
+
+  // Ctrl+C to copy from detail modal, Escape to clear clipboard
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && detailItem) {
+        const selection = window.getSelection();
+        if (selection && selection.toString().length > 0) return;
+        e.preventDefault();
+        const copied: ItemData = { ...detailItem, isGlobal: false };
+        setClipboardItem(copied);
+        setDetailItem(null);
+        setDetailSlot(null);
+        showToast('Eşya panoya kopyalandı!');
+      }
+      if (e.key === 'Escape' && clipboardItem && !detailItem && !modalOpen) {
+        setClipboardItem(null);
+        showToast('Pano temizlendi');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [detailItem, clipboardItem, modalOpen]);
 
   useEffect(() => {
     if (!isMobileAccountMenuOpen) return;
@@ -3013,6 +3060,7 @@ export default function App() {
                             talismanDuplicates={talismanDuplicates}
                             isFullscreen={isContainerFullscreen}
                             onToggleFullscreen={toggleContainerFullscreen}
+                            hasClipboard={!!clipboardItem}
                         />
                     </div>
                  </div>
@@ -3028,11 +3076,34 @@ export default function App() {
                         talismanDuplicates={talismanDuplicates}
                         isFullscreen={isContainerFullscreen}
                         onToggleFullscreen={toggleContainerFullscreen}
+                        hasClipboard={!!clipboardItem}
                     />
                   </div>
               )}
            </div>
         </div>
+
+        {/* Clipboard Indicator */}
+        {clipboardItem && (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="bg-blue-900/95 border border-blue-500/60 text-blue-100 text-xs md:text-sm font-bold px-3 py-2 rounded-lg shadow-lg flex items-center gap-2 whitespace-nowrap backdrop-blur-sm">
+              <Clipboard size={14} className="text-blue-400 shrink-0" />
+              <span className="text-blue-300">{clipboardItem.category}</span>
+              {clipboardItem.enchantment1 && (
+                <span className="text-blue-200/70 text-[11px] max-w-[120px] truncate">{clipboardItem.enchantment1}</span>
+              )}
+              <div className="w-px h-4 bg-blue-500/30 mx-0.5" />
+              <button
+                onClick={handleClearClipboard}
+                className="flex items-center gap-1 text-red-300 hover:text-red-100 hover:bg-red-800/50 transition-colors px-2 py-0.5 rounded text-[11px] font-bold"
+                title="Panoyu Temizle (Esc)"
+              >
+                <X size={12} />
+                <span>İptal</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Save Reminder Toast */}
         {toast && (
@@ -3362,6 +3433,7 @@ export default function App() {
         item={detailItem}
         onClose={() => { setDetailItem(null); setDetailSlot(null); }}
         onEdit={handleEditFromDetail}
+        onCopy={handleCopyItem}
         talismanLocations={talismanLocations}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}

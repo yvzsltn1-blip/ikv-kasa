@@ -1,7 +1,7 @@
 import React from 'react';
 import { ItemData, GlobalSetInfo, SetItemLocation, shouldShowBoundMarker, createSetEnchantmentKey } from '../types';
 import { CATEGORY_COLORS, CLASS_COLORS, SET_CATEGORIES } from '../constants';
-import { X, Pencil, Scroll, Shield, Sword, Gem, Component, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe, Globe, AlertTriangle } from 'lucide-react';
+import { X, Pencil, Scroll, Shield, Sword, Gem, Component, Hand, Footprints, Shirt, Glasses, Beaker, CircleDot, Lasso, Sparkles, Columns, Pickaxe, Globe, AlertTriangle, Copy } from 'lucide-react';
 import { SetDetailModal } from './SetDetailModal';
 
 interface TalismanLocation {
@@ -14,6 +14,7 @@ interface ItemDetailModalProps {
   item: ItemData | null;
   onClose: () => void;
   onEdit: () => void;
+  onCopy?: () => void;
   talismanLocations?: TalismanLocation[] | null;
   globalSetLookup?: Map<string, GlobalSetInfo>;
   globalSetMap?: Map<string, SetItemLocation[]>;
@@ -57,7 +58,7 @@ const resolveTalismanColor = (item: Pick<ItemData, 'enchantment2'>): 'Mavi' | 'K
   return 'Mavi';
 };
 
-export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit, talismanLocations, globalSetLookup, globalSetMap }) => {
+export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose, onEdit, onCopy, talismanLocations, globalSetLookup, globalSetMap }) => {
   const [showSetDetail, setShowSetDetail] = React.useState(false);
   const [setDetailKey, setSetDetailKey] = React.useState<string | null>(null);
 
@@ -236,8 +237,18 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ item, onClose,
           )}
         </div>
 
-        {/* Edit button */}
-        <div className="p-4 pt-0">
+        {/* Action buttons */}
+        <div className="p-4 pt-0 space-y-2">
+          {onCopy && (
+            <button
+              onClick={onCopy}
+              className="w-full py-2 bg-blue-700 hover:bg-blue-600 text-white font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors border border-blue-500"
+            >
+              <Copy size={15} />
+              Kopyala
+              <span className="text-blue-300/70 text-[10px] font-normal hidden md:inline">(Ctrl+C)</span>
+            </button>
+          )}
           <button
             onClick={onEdit}
             className="w-full py-2.5 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-lg text-sm flex items-center justify-center gap-2 transition-colors shadow-[0_0_10px_rgba(234,179,8,0.3)] border border-yellow-400"
