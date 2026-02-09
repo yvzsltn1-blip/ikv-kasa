@@ -2517,11 +2517,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && (
-            <div className="space-y-3 md:space-y-4 max-w-2xl mx-auto w-full">
+            <div className="admin-settings-root space-y-3 md:space-y-4 max-w-2xl mx-auto w-full">
 
               {/* Admin Management */}
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                <h3 className="text-red-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+              <div className="admin-settings-card bg-slate-800/55 border border-slate-700/55 rounded-xl p-3.5 md:p-4">
+                <h3 className="text-red-400 text-[11px] md:text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Crown size={14} />
                   ADMiN YÖNETiMi
                 </h3>
@@ -2530,14 +2530,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <div className="mb-3 space-y-1.5">
                   <div className="flex items-center gap-2 bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-700/30">
                     <Shield size={14} className="text-yellow-500 shrink-0" />
-                    <span className="text-sm text-slate-200 flex-1">yvzsltn61@gmail.com</span>
+                    <span className="text-xs text-slate-200 flex-1">yvzsltn61@gmail.com</span>
                     <span className="text-[9px] text-yellow-500 bg-yellow-900/30 px-2 py-0.5 rounded-full border border-yellow-700/30">Kalıcı Yönetici</span>
                   </div>
 
                   {adminEmails.filter(e => e !== 'yvzsltn61@gmail.com').map(email => (
                     <div key={email} className="flex items-center gap-2 bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-700/30">
                       <Crown size={14} className="text-red-400 shrink-0" />
-                      <span className="text-sm text-slate-200 flex-1">{email}</span>
+                      <span className="text-xs text-slate-200 flex-1">{email}</span>
                       <button
                         onClick={() => handleRemoveAdmin(email)}
                         disabled={adminLoading || email.toLowerCase() === (auth.currentUser?.email || '').toLowerCase()}
@@ -2557,12 +2557,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     value={newAdminEmail}
                     onChange={e => setNewAdminEmail(e.target.value)}
                     placeholder="yeni-admin@email.com"
-                    className="flex-1 bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-red-500/50 placeholder-slate-600"
+                    className="flex-1 bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none focus:border-red-500/50 placeholder-slate-600"
                   />
                   <button
                     onClick={handleAddAdmin}
                     disabled={adminLoading || !newAdminEmail.trim()}
-                    className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    className="px-4 py-2 bg-red-800 hover:bg-red-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
                   >
                     <Plus size={14} />
                     Ekle
@@ -2571,31 +2571,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               </div>
 
               {/* Messaging System */}
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                <h3 className="text-cyan-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+              <div className="admin-settings-card bg-slate-800/55 border border-slate-700/55 rounded-xl p-3.5 md:p-4">
+                <h3 className="text-cyan-400 text-[11px] md:text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <MessageCircle size={14} />
                   MESAJLASMA SiSTEMi
                 </h3>
 
                 <div className="flex items-center justify-between gap-3 bg-slate-900/50 rounded-lg border border-slate-700/40 px-3 py-2.5">
-                  <div className="text-[11px]">
+                  <div className="text-[10px]">
                     <p className="text-slate-200 font-semibold">Kullanici Mesajlasmasi</p>
-                    <p className="text-[10px] text-slate-500">Kapaliyken sadece yoneticiler mesaj gonderebilir.</p>
+                    <p className="text-[9px] text-slate-500">Kapaliyken sadece yoneticiler mesaj gonderebilir.</p>
                   </div>
                   <button
                     onClick={handleToggleMessagingSystem}
                     disabled={messageSystemSaving}
-                    className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold border transition-colors flex items-center gap-1 ${directMessagingEnabled ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40' : 'bg-red-950/40 text-red-300 border-red-900/50 hover:bg-red-900/40'} disabled:opacity-50`}
+                    className={`px-2.5 py-1.5 rounded-md text-[9px] font-bold border transition-colors flex items-center gap-1 ${directMessagingEnabled ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 hover:bg-emerald-900/40' : 'bg-red-950/40 text-red-300 border-red-900/50 hover:bg-red-900/40'} disabled:opacity-50`}
                   >
-                    {directMessagingEnabled ? <Unlock size={11} /> : <Lock size={11} />}
+                    {directMessagingEnabled ? <Unlock size={10} /> : <Lock size={10} />}
                     {messageSystemSaving ? 'Kaydediliyor...' : (directMessagingEnabled ? 'Acik' : 'Kapali')}
                   </button>
                 </div>
               </div>
 
               {/* Limit Settings */}
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-                <h3 className="text-emerald-400 text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
+              <div className="admin-settings-card bg-slate-800/55 border border-slate-700/55 rounded-xl p-3.5 md:p-4">
+                <h3 className="text-emerald-400 text-[11px] md:text-xs font-bold mb-3 tracking-wider flex items-center gap-2">
                   <Search size={14} />
                   LiMiT AYARLARI
                 </h3>
@@ -2604,14 +2604,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   {USER_CLASS_KEYS.map(classKey => {
                     const classInfo = searchLimits.classLimits[classKey];
                     return (
-                      <div key={classKey} className="rounded-lg border border-slate-700/40 bg-slate-900/50 px-3 py-2.5">
+                      <div key={classKey} className="rounded-lg border border-slate-700/40 bg-slate-900/50 px-2.5 py-2">
                         <div className="flex items-center justify-between gap-2 mb-2">
-                          <p className="text-[11px] font-semibold text-slate-200">{classInfo.label}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Gunluk limitler</p>
+                          <p className="text-[10px] font-semibold text-slate-200">{classInfo.label}</p>
+                          <p className="text-[9px] text-slate-500 uppercase tracking-wide">Gunluk limitler</p>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[10px] text-slate-500 font-bold block mb-1">GLOBAL ARAMA</label>
+                            <label className="text-[9px] text-slate-500 font-bold block mb-1">GLOBAL ARAMA</label>
                             <input
                               type="number"
                               min="1"
@@ -2623,11 +2623,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                   dailyGlobalSearchLimit: e.target.value,
                                 },
                               }))}
-                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-emerald-500/50"
+                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-emerald-500/50"
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-slate-500 font-bold block mb-1">MESAJ</label>
+                            <label className="text-[9px] text-slate-500 font-bold block mb-1">MESAJ</label>
                             <input
                               type="number"
                               min="1"
@@ -2639,7 +2639,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                   dailyMessageLimit: e.target.value,
                                 },
                               }))}
-                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500/50"
+                              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none focus:border-cyan-500/50"
                             />
                           </div>
                         </div>
@@ -2649,13 +2649,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-3">
-                  <div className="text-[10px] text-slate-500">
+                  <div className="text-[9px] text-slate-500">
                     Kullanici bazli global arama override ayarlari <span className="text-slate-200 font-semibold">Kullanicilar</span> sekmesinde kalmaya devam eder.
                   </div>
                   <button
                     onClick={handleSaveClassLimits}
                     disabled={limitSaving}
-                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50"
+                    className="px-4 py-2 bg-emerald-800 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50"
                   >
                     {limitSaving ? 'Kaydediliyor...' : 'Limitleri Kaydet'}
                   </button>
@@ -2697,11 +2697,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <p className="text-[10px] text-slate-500 mb-2.5">
                   Tum oto tamamlama listelerini tek dosyada disa aktarabilir ve ayni formatla toplu ice aktarabilirsiniz.
                 </p>
-                <div className="ac-action-row flex flex-wrap gap-2">
+                <div className="ac-action-row ac-bulk-action-row flex flex-wrap gap-2">
                   <button
                     onClick={handleExportAllAutocomplete}
                     disabled={isAnyAutocompleteBusy}
-                    className="px-3 py-1.5 bg-indigo-800 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    className="ac-bulk-action-btn ac-bulk-action-btn--export px-3 py-1.5 bg-indigo-800 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
                   >
                     <Download size={12} />
                     Tumunu Disa Aktar
@@ -2709,7 +2709,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   <button
                     onClick={handleOpenAutocompleteBulkImportPicker}
                     disabled={isAnyAutocompleteBusy}
-                    className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                    className="ac-bulk-action-btn ac-bulk-action-btn--import px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 text-[11px] font-bold rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5"
                   >
                     <Upload size={12} />
                     {autocompleteBulkImporting ? 'Import...' : 'Toplu Ice Aktar'}

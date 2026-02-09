@@ -42,6 +42,56 @@
   animation: talisman-pulse 1.8s ease-in-out infinite;
 }
 
+.admin-settings-card {
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.22);
+  transition: border-color 0.18s ease, box-shadow 0.2s ease;
+}
+
+.admin-settings-card:hover {
+  border-color: rgba(100, 116, 139, 0.68);
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.28);
+}
+
+.admin-ac-root .ac-bulk-action-row {
+  gap: 0.55rem;
+}
+
+.admin-ac-root .ac-bulk-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-height: 2.1rem;
+  border-radius: 0.72rem;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08), 0 8px 18px rgba(2, 6, 23, 0.28);
+  transition: transform 0.15s ease, border-color 0.18s ease, box-shadow 0.2s ease;
+}
+
+.admin-ac-root .ac-bulk-action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(148, 163, 184, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12), 0 12px 22px rgba(2, 6, 23, 0.34);
+}
+
+.admin-ac-root .ac-bulk-action-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.admin-ac-root .ac-bulk-action-btn svg {
+  flex-shrink: 0;
+}
+
+.admin-ac-root .ac-bulk-action-btn--export {
+  background: linear-gradient(135deg, rgba(67, 56, 202, 0.94), rgba(59, 130, 246, 0.9));
+  border-color: rgba(129, 140, 248, 0.45);
+}
+
+.admin-ac-root .ac-bulk-action-btn--import {
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(71, 85, 105, 0.88));
+  border-color: rgba(148, 163, 184, 0.38);
+}
+
 @media (max-width: 767px) {
   .admin-mobile-tab-btn {
     font-size: 10px !important;
@@ -113,7 +163,9 @@
     height: 1.95rem;
     padding: 0 !important;
     border-radius: 0.55rem !important;
+    align-items: center;
     justify-content: center;
+    gap: 0 !important;
     font-size: 0 !important;
     box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.14), 0 4px 10px rgba(2, 6, 23, 0.32);
   }
@@ -122,6 +174,28 @@
     width: 11px !important;
     height: 11px !important;
     margin: 0 !important;
+  }
+
+  .admin-ac-compact .ac-bulk-action-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem !important;
+    overflow: visible;
+  }
+
+  .admin-ac-compact .ac-bulk-action-row button {
+    width: 100%;
+    height: auto;
+    min-height: 1.9rem;
+    padding: 0.34rem 0.5rem !important;
+    border-radius: 0.58rem !important;
+    font-size: 9px !important;
+    gap: 0.3rem !important;
+  }
+
+  .admin-ac-compact .ac-bulk-action-row button svg {
+    width: 10px !important;
+    height: 10px !important;
   }
 
   .admin-ac-root .ac-item-view {
