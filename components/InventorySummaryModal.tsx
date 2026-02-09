@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Account, ItemData } from '../types';
-import { X, Search, Layers, User, Package, Book, MapPin, Filter, Globe } from 'lucide-react';
+import { X, Search, Layers, User, Package, Book, MapPin, Filter, Globe, Check, ChevronDown } from 'lucide-react';
 import { getContainerSlotPosition } from '../containerLayout';
 
 type SummaryScope = 'all' | 'account' | 'character';
@@ -145,8 +145,10 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
   const [scope, setScope] = useState<SummaryScope>('all');
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<SummaryTypeFilter>('all');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
+  const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
+  const categoryMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -233,6 +235,25 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
     return [...set].sort((a, b) => a.localeCompare(b, 'tr'));
   }, [scopedEntries]);
 
+  useEffect(() => {
+    setCategoryFilters((prev) => prev.filter((category) => categoryOptions.includes(category)));
+  }, [categoryOptions]);
+
+  useEffect(() => {
+    if (!isCategoryMenuOpen) return;
+    const closeMenuOnOutside = (event: MouseEvent | TouchEvent) => {
+      if (!categoryMenuRef.current) return;
+      if (categoryMenuRef.current.contains(event.target as Node)) return;
+      setIsCategoryMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeMenuOnOutside);
+    document.addEventListener('touchstart', closeMenuOnOutside);
+    return () => {
+      document.removeEventListener('mousedown', closeMenuOnOutside);
+      document.removeEventListener('touchstart', closeMenuOnOutside);
+    };
+  }, [isCategoryMenuOpen]);
+
   const groupedRows = useMemo(() => {
     const grouped = new Map<string, {
       key: string;
@@ -277,7 +298,7 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
       .filter(row => {
         if (typeFilter === 'item' && row.item.type !== 'Item') return false;
         if (typeFilter === 'recipe' && row.item.type !== 'Recipe') return false;
-        if (categoryFilter && row.item.category !== categoryFilter) return false;
+        if (categoryFilters.length > 0 && !categoryFilters.includes(row.item.category)) return false;
         if (!query) return true;
 
         const searchText = normalizeToken([
@@ -296,7 +317,7 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
         if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
         return getItemPrimaryLabel(a.item).localeCompare(getItemPrimaryLabel(b.item), 'tr');
       });
-  }, [scopedEntries, search, typeFilter, categoryFilter]);
+  }, [scopedEntries, search, typeFilter, categoryFilters]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -357,7 +378,7 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
           </div>
         </div>
 
-        <div className="px-3 md:px-5 py-2.5 md:py-3 border-b border-slate-800/80 bg-slate-900/70 space-y-2.5">
+        <div className="px-2.5 md:px-5 py-2 md:py-3 border-b border-slate-800/80 bg-slate-900/70 space-y-2">
           <div className="flex flex-wrap gap-1.5 md:gap-2">
             <button
               onClick={() => setScope('all')}
@@ -379,7 +400,7 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr,180px,200px] gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr,180px,280px] gap-1.5 md:gap-2">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
@@ -401,20 +422,62 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
                 <option value="recipe">Sadece Recete</option>
               </select>
             </div>
-            <select
-              value={categoryFilter}
-              onChange={(event) => setCategoryFilter(event.target.value)}
-              className="w-full appearance-none rounded-lg border border-slate-700/70 bg-slate-950/80 py-1.5 md:py-2 px-3 text-[11px] md:text-xs text-slate-200 outline-none focus:border-cyan-500/50"
-            >
-              <option value="">Tum Kategoriler</option>
-              {categoryOptions.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
+            <div ref={categoryMenuRef} className="relative">
+              <button
+                onClick={() => setIsCategoryMenuOpen((prev) => !prev)}
+                className="w-full inline-flex items-center justify-between rounded-lg border border-slate-700/70 bg-slate-950/80 py-1.5 md:py-2 px-3 text-[11px] md:text-xs text-slate-200 outline-none hover:border-slate-500/70"
+              >
+                <span className="truncate text-left">
+                  {categoryFilters.length === 0
+                    ? 'Tum Kategoriler'
+                    : `${categoryFilters.length} kategori secili`}
+                </span>
+                <ChevronDown
+                  size={13}
+                  className={`shrink-0 text-slate-400 transition-transform ${isCategoryMenuOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              {isCategoryMenuOpen && (
+                <div className="absolute z-30 mt-1 w-full rounded-lg border border-slate-700/80 bg-slate-950 shadow-xl max-h-56 overflow-auto">
+                  <button
+                    onClick={() => setCategoryFilters([])}
+                    className={`w-full flex items-center justify-between px-3 py-2 text-[11px] border-b border-slate-800/70 transition-colors ${
+                      categoryFilters.length === 0
+                        ? 'bg-cyan-900/35 text-cyan-100'
+                        : 'text-slate-300 hover:bg-slate-900/80'
+                    }`}
+                  >
+                    <span>Tum Kategoriler</span>
+                    {categoryFilters.length === 0 && <Check size={12} className="text-cyan-300" />}
+                  </button>
+                  {categoryOptions.map((category) => {
+                    const selected = categoryFilters.includes(category);
+                    return (
+                      <button
+                        key={category}
+                        onClick={() => setCategoryFilters((prev) => (
+                          prev.includes(category)
+                            ? prev.filter((value) => value !== category)
+                            : [...prev, category]
+                        ))}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-[11px] transition-colors ${
+                          selected
+                            ? 'bg-emerald-900/30 text-emerald-100'
+                            : 'text-slate-300 hover:bg-slate-900/80'
+                        }`}
+                      >
+                        <span>{category}</span>
+                        {selected && <Check size={12} className="text-emerald-300" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[1.3fr,1fr]">
+        <div className="flex-1 min-h-0 grid grid-cols-1 grid-rows-[minmax(0,1.65fr)_minmax(0,1fr)] xl:grid-cols-[1.3fr,1fr] xl:grid-rows-1">
           <div className="min-h-0 border-b xl:border-b-0 xl:border-r border-slate-800/80 bg-slate-950/35">
             <div className="h-full overflow-y-auto overflow-x-hidden">
               <table className="w-full text-left table-fixed">
@@ -437,6 +500,11 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
                   {groupedRows.map(row => {
                     const isSelected = row.key === selectedGroupKey;
                     const isRecipe = row.item.type === 'Recipe';
+                    const isTalisman = normalizeToken(row.item.category) === 'tilsim';
+                    const talismanTier = isTalisman ? resolveTalismanTier(row.item) : '-';
+                    const combinedPrimaryText = isTalisman
+                      ? `${getItemPrimaryLabel(row.item)}${talismanTier !== '-' ? ` ( ${talismanTier} )` : ''}`
+                      : (row.item.enchantment2 ? `${getItemPrimaryLabel(row.item)} ${row.item.enchantment2}` : getItemPrimaryLabel(row.item));
                     return (
                       <tr
                         key={row.key}
@@ -449,15 +517,12 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
                               {isRecipe ? 'RECETE' : 'ITEM'}
                             </span>
                             <div className="min-w-0">
-                              <div className="text-[11px] md:text-sm text-slate-100 font-semibold truncate">{getItemPrimaryLabel(row.item)}</div>
+                              <div className="text-[10px] md:text-[13px] leading-tight text-slate-100 font-semibold whitespace-normal break-words">{combinedPrimaryText}</div>
                               <div className="text-[10px] md:text-[11px] text-slate-400 truncate">
                                 {row.item.category}
                                 {row.item.weaponType ? ` • ${row.item.weaponType}` : ''}
-                                {normalizeToken(row.item.category) === 'tilsim' ? ` • ${resolveTalismanColor(row.item)} ${resolveTalismanTier(row.item)}` : ''}
+                                {normalizeToken(row.item.category) === 'tilsim' ? ` • ${resolveTalismanColor(row.item)}` : ''}
                               </div>
-                              {row.item.enchantment2 && normalizeToken(row.item.category) !== 'tilsim' && (
-                                <div className="text-[10px] md:text-[11px] text-slate-500 truncate">{row.item.enchantment2}</div>
-                              )}
                             </div>
                           </div>
                         </td>
@@ -486,32 +551,38 @@ export const InventorySummaryModal: React.FC<InventorySummaryModalProps> = ({
               </div>
             ) : (
               <>
-                <div className="px-4 py-3 border-b border-slate-800/70 bg-slate-900/60">
+                <div className="px-2.5 md:px-4 py-1.5 md:py-3 border-b border-slate-800/70 bg-slate-900/60">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-bold text-slate-100 truncate">{getItemPrimaryLabel(selectedGroup.item)}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
+                      <div className="text-[11px] md:text-sm font-bold text-slate-100 truncate">
+                        {`${getItemPrimaryLabel(selectedGroup.item)}${
+                          normalizeToken(selectedGroup.item.category) === 'tilsim' && resolveTalismanTier(selectedGroup.item) !== '-'
+                            ? ` ( ${resolveTalismanTier(selectedGroup.item)} )`
+                            : ''
+                        }`}
+                      </div>
+                      <div className="text-[10px] md:text-[11px] text-slate-400 mt-0.5 truncate">
                         {selectedGroup.item.category} • {selectedGroup.item.type === 'Recipe' ? 'Recete' : 'Item'} • Lv.{selectedGroup.item.level}
                       </div>
                     </div>
-                    <span className="inline-flex items-center rounded-md border border-emerald-700/60 bg-emerald-950/35 px-2 py-1 text-xs font-bold text-emerald-200">
+                    <span className="inline-flex items-center rounded-md border border-emerald-700/60 bg-emerald-950/35 px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs font-bold text-emerald-200">
                       x{selectedGroup.totalCount}
                     </span>
                   </div>
                 </div>
 
-                <div className="px-4 py-2 border-b border-slate-800/70 bg-slate-900/40 text-[11px] text-slate-400">
+                <div className="hidden md:block px-2.5 md:px-4 py-1 md:py-1.5 border-b border-slate-800/70 bg-slate-900/40 text-[10px] md:text-[11px] text-slate-400">
                   {selectedGroup.uniqueLocationCount} lokasyon
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-auto p-3 space-y-2">
+                <div className="flex-1 min-h-0 overflow-auto p-2 md:p-3 space-y-1.5 md:space-y-2">
                   {selectedGroup.entries.map((entry, index) => (
-                    <div key={`${selectedGroup.key}_${index}`} className="rounded-lg border border-slate-800/75 bg-slate-900/40 px-3 py-2">
+                    <div key={`${selectedGroup.key}_${index}`} className="rounded-lg border border-slate-800/75 bg-slate-900/40 px-2 md:px-3 py-1.5 md:py-2">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-xs text-slate-100 font-semibold truncate">{entry.accountName}</div>
-                          <div className="text-[11px] text-slate-400 truncate">{entry.serverName} • {entry.charName}</div>
-                          <div className="text-[11px] text-slate-500 truncate">{entry.containerName}</div>
+                          <div className="text-[11px] md:text-xs text-slate-100 font-semibold truncate">{entry.accountName}</div>
+                          <div className="text-[10px] md:text-[11px] text-slate-400 truncate">{entry.serverName} • {entry.charName}</div>
+                          <div className="hidden md:block text-[11px] text-slate-500 truncate">{entry.containerName}</div>
                         </div>
                         <div className="text-right">
                           <div className="text-[10px] text-cyan-300 font-semibold whitespace-nowrap">{getTinyLocationLabel(entry)}</div>
