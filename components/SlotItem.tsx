@@ -389,6 +389,26 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
   };
 
   const getEnchantAbbr = () => {
+    if (item.category === 'TÄ±lsÄ±m') {
+      const normalizeTalismanTier = (value: unknown): 'I' | 'II' | 'III' | '-' => {
+        const raw = String(value ?? '').trim().toUpperCase();
+        if (raw === 'I' || raw === 'II' || raw === 'III' || raw === '-') return raw as 'I' | 'II' | 'III' | '-';
+        if (raw === '1') return 'I';
+        if (raw === '2') return 'II';
+        if (raw === '3') return 'III';
+        return '-';
+      };
+      const explicitTier = normalizeTalismanTier(item.talismanTier);
+      const tier = explicitTier !== '-'
+        ? explicitTier
+        : normalizeTalismanTier(item.enchantment2);
+
+      const parts: string[] = [];
+      if (item.enchantment1) parts.push(item.enchantment1.substring(0, 3));
+      if (tier !== '-') parts.push(tier);
+      return parts.join(' ');
+    }
+
     const parts: string[] = [];
     if (item.enchantment1) parts.push(item.enchantment1.substring(0, 3));
     if (item.enchantment2) parts.push(item.enchantment2.substring(0, 3));
