@@ -70,14 +70,30 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM 8) Push (upstream yoksa otomatik kur)
+REM 8) Uzak degisiklikleri al ve kendi commitini uzerine tası (lineer gecmis)
+echo.
+echo Uzak degisiklikler cekiliyor (pull --rebase)...
+git pull --rebase origin %BRANCH%
+if errorlevel 1 (
+  color 0C
+  echo HATA: pull --rebase basarisiz.
+  echo Muhtemelen cakismaniz var. Dosyalari duzeltip su komutlari calistirin:
+  echo   git add ^<dosya^>
+  echo   git rebase --continue
+  echo Iptal etmek icin:
+  echo   git rebase --abort
+  pause
+  exit /b 1
+)
+
+REM 9) Push (upstream yoksa otomatik kur)
 echo.
 echo Push yapiliyor... branch: %BRANCH%
 git push -u origin %BRANCH%
 if errorlevel 1 (
   color 0C
   echo HATA: Push basarisiz.
-  echo Not: Github girisi/izin ayarlarinizi kontrol edin.
+  echo Not: Uzak branch sizden ileride olabilir. Tekrar deneyin.
   pause
   exit /b 1
 )
