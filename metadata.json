@@ -1,0 +1,5 @@
+{
+  "name": "RPG Inventory Manager",
+  "description": "A complex inventory management system with banks, bags, and detailed item creation for RPG characters.",
+  "requestFramePermissions": []
+}

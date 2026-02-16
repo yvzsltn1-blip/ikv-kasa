@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "ikv-kasa-yonetimi"
+  },
+  "targets": {
+    "ikv-kasa-yonetimi": {
+      "hosting": {
+        "kasa-app": [
+          "ikvkasa"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
