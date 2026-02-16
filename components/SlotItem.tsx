@@ -343,9 +343,9 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
   const renderContent = () => {
     if (item.type === 'Recipe') {
       return (
-        <div className="relative flex items-center justify-center w-9 h-9 md:w-12 md:h-12">
-          <Scroll className="text-yellow-200 w-7 h-7 md:w-10 md:h-10" />
-          <div className="absolute -bottom-1.5 -right-1.5 md:-bottom-2 md:-right-2 bg-slate-800/90 rounded-full p-[2px] border border-slate-500 shadow-sm z-10 w-3 h-3 md:w-4 md:h-4">
+        <div className="relative flex items-center justify-center w-[70%] h-[70%] md:w-12 md:h-12">
+          <Scroll className="text-yellow-200 w-[80%] h-[80%] md:w-10 md:h-10" />
+          <div className="absolute bottom-0.5 right-0.5 md:-bottom-2 md:-right-2 bg-slate-800/90 rounded-full p-[2px] border border-slate-500 shadow-sm z-10 w-3 h-3 md:w-4 md:h-4">
             <div className="w-full h-full">
               {renderCategoryIcon('w-full h-full')}
             </div>
@@ -353,7 +353,7 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
         </div>
       );
     }
-    return renderCategoryIcon('w-9 h-9 md:w-12 md:h-12');
+    return renderCategoryIcon('w-[70%] h-[70%] md:w-12 md:h-12');
   };
 
   const getGenderCode = () => {
@@ -405,7 +405,7 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
   return (
     <div
       className={`
-        w-full h-full rounded-lg md:rounded-xl flex flex-col items-center justify-center relative overflow-visible
+        w-full h-full rounded-lg md:rounded-xl flex flex-col items-center justify-center relative overflow-hidden md:overflow-visible
         premium-slot-border slot-corner-bolts
         ${highlight ? 'ring-2 ring-yellow-400/80 brightness-110' : ''}
         ${talismanGlowColor ? 'talisman-glow' : ''}
