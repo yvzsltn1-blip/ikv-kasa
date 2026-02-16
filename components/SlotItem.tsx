@@ -343,8 +343,8 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
   const renderContent = () => {
     if (item.type === 'Recipe') {
       return (
-        <div className="relative flex items-center justify-center w-[70%] h-[70%] md:w-12 md:h-12">
-          <Scroll className="text-yellow-200 w-[80%] h-[80%] md:w-10 md:h-10" />
+        <div className="relative flex items-center justify-center w-[84%] h-[84%] md:w-12 md:h-12">
+          <Scroll className="text-yellow-200 w-[88%] h-[88%] md:w-10 md:h-10" />
           <div className="absolute bottom-0.5 right-0.5 md:-bottom-2 md:-right-2 bg-slate-800/90 rounded-full p-[2px] border border-slate-500 shadow-sm z-10 w-3 h-3 md:w-4 md:h-4">
             <div className="w-full h-full">
               {renderCategoryIcon('w-full h-full')}
@@ -353,7 +353,7 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
         </div>
       );
     }
-    return renderCategoryIcon('w-[70%] h-[70%] md:w-12 md:h-12');
+    return renderCategoryIcon('w-[84%] h-[84%] md:w-12 md:h-12');
   };
 
   const getGenderCode = () => {
@@ -462,13 +462,13 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
 
       {/* Stack Count Badge */}
       {item.count && item.count > 1 && (
-        <div className="absolute bottom-2.5 md:bottom-4 right-0.5 md:right-1 bg-black/80 text-[7px] md:text-[10px] px-0.5 md:px-1.5 rounded-sm border border-white/10 text-white font-mono font-bold z-20 shadow-lg">
+        <div className="absolute bottom-2.5 md:bottom-4 right-0.5 md:right-1 bg-black/80 text-[6px] md:text-[10px] px-0.5 md:px-1.5 rounded-sm border border-white/10 text-white font-mono font-bold z-20 shadow-lg">
           {item.count >= 1_000_000 ? `${Math.floor(item.count / 1_000_000)}M` : item.count >= 1_000 ? `${Math.floor(item.count / 1_000)}K` : item.count}
         </div>
       )}
 
       {/* Icon/Content */}
-      <div className="text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] filter brightness-110 z-10">
+      <div className="text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] filter brightness-110 z-10 translate-x-[2px] md:translate-x-0">
         {renderContent()}
       </div>
 

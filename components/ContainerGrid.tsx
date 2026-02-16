@@ -377,11 +377,11 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
       {/* Grid Area */}
       <div
         ref={gridRef}
-        className="relative rpg-container-bg border-x-2 md:border-b-2 border-amber-900/40 md:rounded-b-md p-1 md:p-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] flex-1 flex flex-col min-h-0 overflow-hidden"
+        className="relative rpg-container-bg border-x-2 md:border-b-2 border-amber-900/40 md:rounded-b-md p-0.5 md:p-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] flex-1 flex flex-col min-h-0 overflow-hidden"
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
       >
-        <div className={`grid gap-1 md:gap-1.5 w-full h-full ${multiSelectMode && selectedCount > 0 ? 'pb-8' : ''}`} style={gridStyle}>
+        <div className={`grid gap-0.5 md:gap-1.5 w-full h-full ${multiSelectMode && selectedCount > 0 ? 'pb-8' : ''}`} style={gridStyle}>
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
             const isCategoryDimmed = !!slot.item && categoryFilter !== 'All' && slot.item.category !== categoryFilter;

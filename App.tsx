@@ -424,6 +424,7 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [isContainerFullscreen, setIsContainerFullscreen] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<'All' | string>('All');
+  const [isMobileCategoryFilterOpen, setIsMobileCategoryFilterOpen] = useState(false);
   const [isMobileAccountMenuOpen, setIsMobileAccountMenuOpen] = useState(false);
   const [isMobileAccountActionsOpen, setIsMobileAccountActionsOpen] = useState(false);
   const [isMobileQuickMenuOpen, setIsMobileQuickMenuOpen] = useState(false);
@@ -3317,6 +3318,20 @@ export default function App() {
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setIsMobileCategoryFilterOpen((prev) => !prev)}
+                className={`relative p-2 rounded-xl border transition-colors shadow-sm ${
+                  isMobileCategoryFilterOpen
+                    ? 'bg-indigo-900/35 border-indigo-500/35 text-indigo-200'
+                    : 'bg-slate-900/30 border-slate-700/35 text-slate-300 active:bg-slate-800/60'
+                }`}
+                title={isMobileCategoryFilterOpen ? 'Kategori filtresini kapat' : 'Kategori filtresini ac'}
+              >
+                {isMobileCategoryFilterOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                {categoryFilter !== 'All' && (
+                  <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 border border-slate-900" />
+                )}
+              </button>
               <div className="h-6 w-px bg-gradient-to-b from-transparent via-slate-600/60 to-transparent"></div>
               <div className="flex items-center gap-1.5 flex-1 min-w-0 bg-slate-900/30 rounded-xl px-3 py-1.5 border border-slate-700/25">
                 <Edit3 size={12} className="text-slate-500 shrink-0" />
@@ -3406,40 +3421,42 @@ export default function App() {
               </div>
             </aside>
 
-            <div className="flex-1 min-h-0 w-full h-full">
-              <div className="md:hidden mb-1.5 rounded-md border border-slate-700/50 bg-slate-900/80 p-2">
-                <div className="mb-1.5 flex items-center gap-2">
-                  <Package size={12} className="text-indigo-300" />
-                  <span className="text-[10px] font-bold tracking-[0.2em] text-slate-300">KATEGORI FILTRESI</span>
-                </div>
-                <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
-                  <button
-                    onClick={() => setCategoryFilter('All')}
-                    className={`shrink-0 px-2 py-1 rounded-md border text-[10px] font-semibold ${
-                      categoryFilter === 'All'
-                        ? 'bg-red-900/60 border-red-500/50 text-red-100'
-                        : 'bg-slate-800/70 border-slate-700/70 text-slate-300'
-                    }`}
-                  >
-                    Tumu
-                  </button>
-                  {CATEGORY_OPTIONS.map((category) => (
+            <div className="flex-1 min-h-0 w-full h-full flex flex-col">
+              {isMobileCategoryFilterOpen && (
+                <div className="md:hidden mb-1.5 rounded-md border border-slate-700/50 bg-slate-900/80 p-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="mb-1.5 flex items-center gap-2">
+                    <Package size={12} className="text-indigo-300" />
+                    <span className="text-[10px] font-bold tracking-[0.2em] text-slate-300">KATEGORI FILTRESI</span>
+                  </div>
+                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
                     <button
-                      key={`mobile-${category}`}
-                      onClick={() => setCategoryFilter((prev) => (prev === category ? 'All' : category))}
+                      onClick={() => setCategoryFilter('All')}
                       className={`shrink-0 px-2 py-1 rounded-md border text-[10px] font-semibold ${
-                        categoryFilter === category
-                          ? 'bg-slate-100 border-slate-300 text-slate-900'
+                        categoryFilter === 'All'
+                          ? 'bg-red-900/60 border-red-500/50 text-red-100'
                           : 'bg-slate-800/70 border-slate-700/70 text-slate-300'
                       }`}
                     >
-                      {category}
+                      Tumu
                     </button>
-                  ))}
+                    {CATEGORY_OPTIONS.map((category) => (
+                      <button
+                        key={`mobile-${category}`}
+                        onClick={() => setCategoryFilter((prev) => (prev === category ? 'All' : category))}
+                        className={`shrink-0 px-2 py-1 rounded-md border text-[10px] font-semibold ${
+                          categoryFilter === category
+                            ? 'bg-slate-100 border-slate-300 text-slate-900'
+                            : 'bg-slate-800/70 border-slate-700/70 text-slate-300'
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className={`w-full h-full min-h-0 animate-in fade-in duration-300 ${currentView === 'bag' ? 'zoom-in' : 'slide-in-from-bottom-4'}`}>
+              <div className={`w-full flex-1 min-h-0 animate-in fade-in duration-300 ${currentView === 'bag' ? 'zoom-in' : 'slide-in-from-bottom-4'}`}>
                 <ContainerGrid
                   container={activeContainer}
                   onSlotClick={handleSlotClick}
