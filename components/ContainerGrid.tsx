@@ -384,6 +384,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
         <div className={`grid gap-0.5 md:gap-1.5 w-full h-full ${multiSelectMode && selectedCount > 0 ? 'pb-8' : ''}`} style={gridStyle}>
           {container.slots.map((slot) => {
             const highlight = isMatchingSearch(slot);
+            const isEmptySlot = !slot.item;
             const isCategoryDimmed = !!slot.item && categoryFilter !== 'All' && slot.item.category !== categoryFilter;
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
             const slotPosition = getContainerSlotPosition(container, slot.id);
@@ -407,18 +408,31 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                 style={slotPosition ? { gridColumnStart: slotPosition.col, gridRowStart: slotPosition.row } : undefined}
                 className={`
                   relative bg-black/20 border border-slate-900/40 rounded-md
-                  transition-colors group
+                  transition-all duration-150 group
+                  ${isEmptySlot
+                    ? 'bg-gradient-to-b from-slate-900/60 via-slate-900/35 to-slate-950/60 border-slate-700/55 shadow-[inset_0_1px_0_rgba(148,163,184,0.08),inset_0_-1px_0_rgba(15,23,42,0.7)]'
+                    : ''
+                  }
                   ${multiSelectMode
                     ? (slot.item
                         ? (isSelected ? 'ring-2 ring-green-400 bg-green-950/30 cursor-pointer' : 'cursor-pointer hover:border-green-500/50 hover:bg-slate-800/20')
                         : '')
-                    : (slot.item ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800/20' : hasClipboard ? 'cursor-pointer ring-2 ring-blue-400/40 hover:ring-blue-400/70 hover:bg-blue-950/30' : 'hover:bg-slate-800/20')
+                    : (slot.item
+                        ? 'cursor-grab active:cursor-grabbing hover:border-yellow-500/50 hover:bg-slate-800/20'
+                        : hasClipboard
+                          ? 'cursor-pointer ring-2 ring-blue-400/40 hover:ring-blue-400/70 hover:border-blue-400/55 hover:bg-blue-950/30'
+                          : 'cursor-pointer hover:border-cyan-500/40 hover:from-slate-800/70 hover:via-slate-800/45 hover:to-slate-900/70')
                   }
                   ${isCategoryDimmed ? 'opacity-25 grayscale-[0.8] saturate-50' : ''}
                   ${isBeingDragged ? 'opacity-30 border-yellow-500 border-2' : ''}
                 `}
               >
                 {slot.item && <SlotItem item={slot.item} highlight={highlight} talismanGlowColor={glowInfo?.color} />}
+                {!slot.item && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className={`h-1 w-1 rounded-full transition-colors ${hasClipboard ? 'bg-blue-300/70' : 'bg-slate-500/60 group-hover:bg-cyan-300/80'}`} />
+                  </div>
+                )}
                 {isSelected && (
                   <div className="absolute top-0 right-0 bg-green-500 rounded-bl-sm p-px z-10">
                     <Check size={10} className="text-white" />

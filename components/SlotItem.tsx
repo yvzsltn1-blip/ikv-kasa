@@ -255,7 +255,11 @@ const CATEGORY_ICON_FILES: Record<string, string> = {
   'Diğer': 'diger.png',
 };
 
-const getCategoryIconSources = (item: Pick<ItemData, 'category' | 'enchantment2'>): string[] => {
+const getCategoryIconSources = (item: Pick<ItemData, 'type' | 'category' | 'enchantment2'>): string[] => {
+  if (item.type === 'Recipe') {
+    return ['/icons/recete.png'];
+  }
+
   if (item.category === 'Tılsım') {
     const text = String(item.enchantment2 || '').trim().toLocaleLowerCase('tr');
     if (text.includes('kırmızı') || text.includes('kirmizi')) {
@@ -288,16 +292,20 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
   const colorClass = getTalismanColorClass() || CATEGORY_COLORS[item.category] || 'bg-gray-700 border-gray-500';
   const classStripColor = CLASS_STRIP_COLORS[item.heroClass] || 'bg-gray-400';
   const isBound = shouldShowBoundMarker(item);
-  const iconSources = useMemo(() => getCategoryIconSources(item), [item.category, item.enchantment2]);
+  const iconSources = useMemo(() => getCategoryIconSources(item), [item.type, item.category, item.enchantment2]);
   const [iconSourceIndex, setIconSourceIndex] = useState(0);
   const [useFallbackIcon, setUseFallbackIcon] = useState(false);
 
   useEffect(() => {
     setIconSourceIndex(0);
     setUseFallbackIcon(false);
-  }, [item.category, item.enchantment2]);
+  }, [item.type, item.category, item.enchantment2]);
 
   const getCategoryIconFallback = () => {
+    if (item.type === 'Recipe') {
+      return <Scroll className="w-full h-full text-yellow-200" />;
+    }
+
     const isRedTalisman = item.category === 'Tılsım' && getTalismanColorClass()?.includes('red');
 
     switch (item.category) {
@@ -342,18 +350,9 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
 
   const renderContent = () => {
     if (item.type === 'Recipe') {
-      return (
-        <div className="relative flex items-center justify-center w-[84%] h-[84%] md:w-12 md:h-12">
-          <Scroll className="text-yellow-200 w-[88%] h-[88%] md:w-10 md:h-10" />
-          <div className="absolute bottom-0.5 right-0.5 md:-bottom-2 md:-right-2 bg-slate-800/90 rounded-full p-[2px] border border-slate-500 shadow-sm z-10 w-3 h-3 md:w-4 md:h-4">
-            <div className="w-full h-full">
-              {renderCategoryIcon('w-full h-full')}
-            </div>
-          </div>
-        </div>
-      );
+      return renderCategoryIcon('w-[88%] h-[88%] md:w-12 md:h-12');
     }
-    return renderCategoryIcon('w-[84%] h-[84%] md:w-12 md:h-12');
+    return renderCategoryIcon('w-[88%] h-[88%] md:w-12 md:h-12');
   };
 
   const getGenderCode = () => {
@@ -468,7 +467,7 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
       )}
 
       {/* Icon/Content */}
-      <div className="text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] filter brightness-110 z-10 translate-x-[2px] md:translate-x-0">
+      <div className="text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] filter brightness-110 z-10 translate-x-[3px] md:translate-x-0">
         {renderContent()}
       </div>
 
