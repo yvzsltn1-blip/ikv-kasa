@@ -443,31 +443,31 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
 
       {/* === New Format: Gender Code (top-left) & Level Format (top-right) === */}
       {/* Top-left: Gender code (E / K / T) */}
-      <div className="absolute top-0 left-[6px] md:left-[14px] w-3 h-3 md:w-4 md:h-4 bg-black/75 backdrop-blur-sm rounded-br-md z-30 border-r border-b border-white/10 flex items-center justify-center">
-        <span className="text-[6px] md:text-[9px] text-amber-400 font-bold leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+      <div className="absolute top-0 left-[6px] md:left-[14px] w-2.5 h-2.5 md:w-4 md:h-4 bg-black/75 backdrop-blur-sm rounded-br-[3px] md:rounded-br-md z-30 border-r border-b border-white/10 flex items-center justify-center">
+        <span className="text-[4px] md:text-[9px] text-amber-400 font-bold leading-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
           {getGenderCode()}
         </span>
       </div>
 
       {/* Top-right: Level format (BY 59, TS 55, etc.) */}
-      <div className="absolute top-0 right-0 bg-black/70 backdrop-blur-sm px-0.5 md:px-1.5 py-[1px] md:py-0.5 rounded-bl-md z-30 border-l border-b border-white/10 flex items-center gap-0.5">
+      <div className="absolute top-0 right-[1px] md:right-0 bg-black/70 backdrop-blur-sm px-[3px] md:px-1.5 py-0 md:py-0.5 rounded-bl-[3px] md:rounded-bl-md z-30 border-l border-b border-white/10 flex items-center gap-[2px] md:gap-0.5">
         <span className={`text-[5px] md:text-[9px] font-bold ${getClassTextColor()} drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]`}>
           {getClassCode()}
         </span>
-        <span className="text-[6px] md:text-[10px] text-white font-mono font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+        <span className="text-[5px] md:text-[10px] text-white font-mono font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
           {item.level}
         </span>
       </div>
 
       {/* Stack Count Badge */}
       {item.count && item.count > 1 && (
-        <div className="absolute bottom-2.5 md:bottom-4 right-0.5 md:right-1 bg-black/80 text-[6px] md:text-[10px] px-0.5 md:px-1.5 rounded-sm border border-white/10 text-white font-mono font-bold z-20 shadow-lg">
+        <div className="absolute bottom-2.5 md:bottom-4 right-1 md:right-1 bg-black/80 text-[5px] md:text-[10px] px-[3px] md:px-1.5 py-0 md:py-[1px] rounded-[2px] md:rounded-sm border border-white/10 text-white font-mono font-bold z-20 shadow-lg">
           {item.count >= 1_000_000 ? `${Math.floor(item.count / 1_000_000)}M` : item.count >= 1_000 ? `${Math.floor(item.count / 1_000)}K` : item.count}
         </div>
       )}
 
       {/* Icon/Content */}
-      <div className="text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] filter brightness-110 z-10 translate-x-[3px] md:translate-x-0">
+      <div className="text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] filter brightness-110 z-10 translate-x-[5px] md:translate-x-0">
         {renderContent()}
       </div>
 
