@@ -1560,6 +1560,7 @@ export default function App() {
 
   // --- Auth Handlers ---
   const handleLogin = (role: UserRole) => {
+    setLoading(true);
     setUserRole(role);
   };
 

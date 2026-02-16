@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Shield, Lock, AlertCircle, Mail, UserPlus, LogIn, Chrome } from 'lucide-react';
 import { UserRole } from '../types';
-import { auth, db } from '../firebase';
+import { auth } from '../firebase';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -11,7 +11,6 @@ import {
   sendPasswordResetEmail,
   signOut
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 
 interface LoginScreenProps {
   onLogin: (role: UserRole) => void;
@@ -31,12 +30,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      let user;
-
       if (isRegistering) {
         // --- KAYIT OLMA ---
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        user = userCredential.user;
+        const user = userCredential.user;
         
         // E-posta Doğrulama Linki Gönder
         await sendEmailVerification(user);
@@ -53,7 +50,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       } else {
         // --- GİRİŞ YAPMA ---
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        user = userCredential.user;
+        const user = userCredential.user;
 
         // --- GÜVENLİK KONTROLÜ ---
         await user.reload();
@@ -64,11 +61,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             setLoading(false);
             return; // İçeri alma
         }
-        user = refreshedUser;
       }
 
-      // Her şey yolundaysa rolü kontrol et
-      await checkUserRole(user);
+      // Rol App.tsx tarafında auth listener ile kesin olarak belirleniyor.
+      onLogin('user');
 
     } catch (err: any) {
       let msg = "Bir hata oluştu. Lütfen tekrar deneyin.";
@@ -112,35 +108,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     const provider = new GoogleAuthProvider();
 
     try {
-      const result = await signInWithPopup(auth, provider);
-      // Google hesapları doğrulandı sayılır, ekstra kontrole gerek yok
-      await checkUserRole(result.user);
+      await signInWithPopup(auth, provider);
+      onLogin('user');
     } catch (err: any) {
       const msg = err.code === 'auth/popup-closed-by-user' ? "Giriş penceresi kapatıldı." : `Google ile giriş sırasında bir hata oluştu. (${err.code})`;
       setError(msg);
       setLoading(false);
-    }
-  };
-
-  // Rol Kontrolü (Ortak Fonksiyon)
-  const checkUserRole = async (user: any) => {
-    if (user) {
-      const adminEmail = "yvzsltn61@gmail.com";
-      let isAdmin = user.email === adminEmail;
-
-      if (!isAdmin) {
-        try {
-          const adminsDoc = await getDoc(doc(db, "metadata", "admins"));
-          if (adminsDoc.exists()) {
-            const emails: string[] = adminsDoc.data().emails || [];
-            if (user.email && emails.includes(user.email.toLowerCase())) {
-              isAdmin = true;
-            }
-          }
-        } catch { /* admins doc may not exist */ }
-      }
-
-      onLogin(isAdmin ? 'admin' : 'user');
     }
   };
 

@@ -388,25 +388,29 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
     return 'text-gray-300';
   };
 
-  const getEnchantAbbr = () => {
-    if (item.category === 'TÄ±lsÄ±m') {
-      const normalizeTalismanTier = (value: unknown): 'I' | 'II' | 'III' | '-' => {
-        const raw = String(value ?? '').trim().toUpperCase();
-        if (raw === 'I' || raw === 'II' || raw === 'III' || raw === '-') return raw as 'I' | 'II' | 'III' | '-';
-        if (raw === '1') return 'I';
-        if (raw === '2') return 'II';
-        if (raw === '3') return 'III';
-        return '-';
-      };
+  const normalizeTalismanTier = (value: unknown): 'I' | 'II' | 'III' | '-' => {
+    const raw = String(value ?? '').trim().toUpperCase();
+    if (raw === 'I' || raw === 'II' || raw === 'III' || raw === '-') return raw as 'I' | 'II' | 'III' | '-';
+    if (raw === '1') return 'I';
+    if (raw === '2') return 'II';
+    if (raw === '3') return 'III';
+    return '-';
+  };
+
+  const getLeftStripLabel = () => {
+    if (item.category === 'Tılsım') {
       const explicitTier = normalizeTalismanTier(item.talismanTier);
       const tier = explicitTier !== '-'
         ? explicitTier
         : normalizeTalismanTier(item.enchantment2);
+      const talismanName = String(item.enchantment1 || '').trim();
+      const talismanWords = talismanName.split(/\s+/).filter(Boolean);
+      const talismanShortName = talismanWords.length <= 1
+        ? (talismanWords[0]?.substring(0, 3) || '')
+        : talismanWords.map(word => word[0]).join('');
 
-      const parts: string[] = [];
-      if (item.enchantment1) parts.push(item.enchantment1.substring(0, 3));
-      if (tier !== '-') parts.push(tier);
-      return parts.join(' ');
+      if (!talismanShortName && tier === '-') return '';
+      return tier !== '-' ? `${talismanShortName} ${tier}`.trim() : talismanShortName;
     }
 
     const parts: string[] = [];
@@ -414,6 +418,7 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
     if (item.enchantment2) parts.push(item.enchantment2.substring(0, 3));
     return parts.join(' ');
   };
+  const leftStripLabel = getLeftStripLabel();
 
   // Level formatı (sağ üst) - BY 59, TS 55 formatında
   const getLevelFormat = () => {
@@ -451,12 +456,12 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
       {/* Subtle shine */}
       <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/[0.08] to-transparent pointer-events-none z-0" />
 
-      {/* Left class strip with gradient + enchantment abbreviations */}
+      {/* Left class strip with vertical item details */}
       <div className={`absolute left-0 top-0 bottom-0 w-[6px] md:w-[14px] z-20 flex items-center justify-center overflow-hidden rounded-l-lg md:rounded-l-xl ${classStripColor}`}>
         <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-transparent to-black/30" />
-        {(item.enchantment1 || item.enchantment2) && (
+        {leftStripLabel && (
           <span className="relative text-[4px] md:text-[9px] text-white font-bold leading-none whitespace-nowrap [writing-mode:vertical-rl] rotate-180 drop-shadow-[0_1px_1px_rgba(0,0,0,0.9)]">
-            {getEnchantAbbr()}
+            {leftStripLabel}
           </span>
         )}
       </div>
