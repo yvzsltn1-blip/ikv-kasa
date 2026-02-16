@@ -410,7 +410,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                   relative bg-black/20 border border-slate-900/40 rounded-md
                   transition-all duration-150 group
                   ${isEmptySlot
-                    ? 'bg-gradient-to-b from-slate-900/60 via-slate-900/35 to-slate-950/60 border-slate-700/55 shadow-[inset_0_1px_0_rgba(148,163,184,0.08),inset_0_-1px_0_rgba(15,23,42,0.7)]'
+                    ? 'bg-gradient-to-br from-slate-900/75 via-slate-900/45 to-slate-950/75 border-slate-700/60 shadow-[inset_0_1px_0_rgba(148,163,184,0.1),inset_0_-1px_0_rgba(15,23,42,0.78),0_0_0_1px_rgba(15,23,42,0.35)]'
                     : ''
                   }
                   ${multiSelectMode
