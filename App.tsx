@@ -546,6 +546,17 @@ export default function App() {
       }
     };
 
+    const loadUserDocSnapshot = async (userDocRef: any): Promise<any> => {
+      // Chrome tarafinda ilk Firestore baglantisi gec gelebildigi icin kademeli deneme yap.
+      const firstAttempt = await withTimeout<any>(getDoc(userDocRef), 18000, null);
+      if (firstAttempt) return firstAttempt;
+
+      const secondAttempt = await withTimeout<any>(getDoc(userDocRef), 30000, null);
+      if (secondAttempt) return secondAttempt;
+
+      return await getDoc(userDocRef);
+    };
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const usesPasswordAuth = user.providerData.some(provider => provider?.providerId === 'password');
@@ -570,11 +581,9 @@ export default function App() {
         const emailLower = (user.email || '').trim().toLowerCase();
         let profileUsername = '';
         const isAdminPromise = withTimeout(resolveIsAdmin(user.email), 2500, false);
-        const userDocPromise = withTimeout(getDoc(userDocRef), 15000, null);
 
         try {
-          const [isAdmin, initialDocSnap] = await Promise.all([isAdminPromise, userDocPromise]);
-          if (!initialDocSnap) throw new Error('Veri yükleme zaman aşımına uğradı');
+          const [isAdmin, initialDocSnap] = await Promise.all([isAdminPromise, loadUserDocSnapshot(userDocRef)]);
           let docSnap = initialDocSnap;
           let resolvedBlockInfo = DEFAULT_USER_BLOCK_INFO;
           let resolvedAccessStatus: UserAccessStatus = 'approved';
@@ -767,6 +776,7 @@ export default function App() {
           void loadAppLimits();
 
         } catch (error) {
+          setUserRole((prevRole) => prevRole ?? 'user');
           showSystemAlert({
             tone: 'error',
             title: 'Veriler Yuklenemedi',
@@ -1082,7 +1092,7 @@ export default function App() {
         setSaveNotification({ type: 'error', message: 'Kayıt sırasında bir hata oluştu. Lütfen tekrar deneyin.' });
         setTimeout(() => setSaveNotification(null), 4000);
     } finally {
-        setTimeout(() => setIsSaving(false), 2000);
+        setIsSaving(false);
     }
   };
 
@@ -1097,6 +1107,14 @@ export default function App() {
   const activeAccount = accounts.find(a => a.id === selectedAccountId);
   const activeServer = activeAccount?.servers[selectedServerIndex];
   const activeChar = activeServer?.characters[activeCharIndex];
+
+  useEffect(() => {
+    if (accounts.length === 0) return;
+    if (accounts.some(acc => acc.id === selectedAccountId)) return;
+    setSelectedAccountId(accounts[0].id);
+    setSelectedServerIndex(0);
+    setActiveCharIndex(0);
+  }, [accounts, selectedAccountId]);
 
   // Tılsım duplikasyon tespiti: aynı karakter içinde 3+ aynı tılsım varsa glow efekti
   const TALISMAN_GLOW_COLORS = [
@@ -1563,9 +1581,9 @@ export default function App() {
   };
 
   // --- Auth Handlers ---
-  const handleLogin = (role: UserRole) => {
+  const handleLogin = () => {
+    setUserRole('user');
     setLoading(true);
-    setUserRole(role);
   };
 
   const handleLogout = async () => {
@@ -3068,8 +3086,8 @@ export default function App() {
               <div className="h-9 flex items-center bg-slate-900/55 rounded-xl px-1 border border-slate-700/35 gap-1 shrink-0">
                 <button onClick={handleOpenSearch} className="h-7 w-7 flex items-center justify-center text-yellow-400 active:bg-yellow-600/20 rounded-lg transition-colors"><Search size={14} /></button>
                 <div className="relative">
-                  <button onClick={saveData} disabled={!canEditData} className={`h-7 w-7 flex items-center justify-center rounded-lg transition-colors ${!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 ring-1 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20')}`}><Save size={14} /></button>
-                  {hasUnsavedChanges && (
+                  <button onClick={saveData} disabled={!canEditData || isSaving} className={`h-7 w-7 flex items-center justify-center rounded-lg transition-colors ${isSaving ? 'text-cyan-300 bg-cyan-500/20 ring-1 ring-cyan-400/60 cursor-wait' : (!canEditData ? 'text-slate-600 cursor-not-allowed opacity-60' : (hasUnsavedChanges ? 'text-yellow-400 bg-yellow-500/20 ring-1 ring-yellow-400' : 'text-blue-400 active:bg-blue-600/20'))}`} title={isSaving ? 'Kaydediliyor...' : 'Kaydet'}><Save size={14} className={isSaving ? 'animate-spin' : ''} /></button>
+                  {hasUnsavedChanges && !isSaving && (
                     <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 bg-yellow-500 text-black text-[8px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap shadow-lg animate-bounce">
                       Kaydet!
                     </div>
@@ -3298,7 +3316,7 @@ export default function App() {
                 <Upload size={13} className={isImportingExcel ? 'animate-pulse' : ''} />
                 <span className="hidden xl:inline">{isImportingExcel ? 'Import...' : 'Ice Aktar'}</span>
               </button>
-              <button onClick={saveData} disabled={!canEditData} className={`flex items-center gap-1.5 px-2 xl:px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500')}`} title="Kaydet"><Save size={13} /><span className="hidden xl:inline">Kaydet</span></button>
+              <button onClick={saveData} disabled={!canEditData || isSaving} className={`flex items-center gap-1.5 px-2 xl:px-3 py-1.5 text-[11px] font-bold rounded-md border transition-all ${isSaving ? 'bg-cyan-500/20 text-cyan-100 border-cyan-400/50 cursor-wait' : (!canEditData ? 'bg-slate-800/40 text-slate-600 border-slate-700/40 cursor-not-allowed opacity-70' : (hasUnsavedChanges ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/60 animate-pulse ring-2 ring-yellow-400/50 shadow-lg shadow-yellow-500/20' : 'bg-slate-700/50 hover:bg-blue-700 text-blue-300 hover:text-white border-slate-600/40 hover:border-blue-500'))}`} title={isSaving ? 'Kaydediliyor...' : 'Kaydet'}><Save size={13} className={isSaving ? 'animate-spin' : ''} /><span className="hidden xl:inline">{isSaving ? 'Kaydediliyor...' : 'Kaydet'}</span></button>
               {userRole === 'admin' && (
                 <button onClick={handleOpenAdminPanel} className="relative flex items-center gap-1.5 px-2 xl:px-3 py-1.5 bg-red-950/50 hover:bg-red-800 text-red-400 hover:text-white text-[11px] font-bold rounded-md border border-red-900/40 hover:border-red-600 transition-all" title="Admin"><Crown size={13} /><span className="hidden xl:inline">Admin</span>{unreadAdminNotificationCount > 0 && <span className="absolute -top-1.5 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-amber-500 text-black text-[9px] leading-4 font-bold text-center border border-amber-200/80">{unreadAdminNotificationCount > 99 ? '99+' : unreadAdminNotificationCount}</span>}</button>
               )}

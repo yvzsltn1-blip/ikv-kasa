@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Shield, Lock, AlertCircle, Mail, UserPlus, LogIn, Chrome } from 'lucide-react';
-import { UserRole } from '../types';
 import { auth } from '../firebase';
 import {
   signInWithEmailAndPassword,
@@ -13,7 +12,7 @@ import {
 } from 'firebase/auth';
 
 interface LoginScreenProps {
-  onLogin: (role: UserRole) => void;
+  onLogin: () => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
@@ -64,7 +63,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       }
 
       // Rol App.tsx tarafında auth listener ile kesin olarak belirleniyor.
-      onLogin('user');
+      onLogin();
 
     } catch (err: any) {
       let msg = "Bir hata oluştu. Lütfen tekrar deneyin.";
@@ -109,7 +108,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
     try {
       await signInWithPopup(auth, provider);
-      onLogin('user');
+      onLogin();
     } catch (err: any) {
       const msg = err.code === 'auth/popup-closed-by-user' ? "Giriş penceresi kapatıldı." : `Google ile giriş sırasında bir hata oluştu. (${err.code})`;
       setError(msg);
