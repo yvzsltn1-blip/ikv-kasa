@@ -1,107 +1,96 @@
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
+chcp 65001 >nul
 title Github Otomatik Guncelleyici
 color 0A
 
+REM Her zaman bu .bat dosyasinin bulundugu klasorde calis.
+cd /d "%~dp0"
+
+set "REMOTE_URL=https://github.com/yvzsltn1-blip/ikv-kasa.git"
+set "BRANCH=main"
+
 echo -----------------------------------------
 echo GITHUB GUNCELLEME BASLATIYOR...
+echo Hedef Repo: %REMOTE_URL%
 echo -----------------------------------------
 
-REM 1) Git repo kontrolu
+where git >nul 2>&1
+if errorlevel 1 (
+  color 0C
+  echo HATA: Git bulunamadi. Git kurup tekrar deneyin.
+  pause
+  exit /b 1
+)
+
 git rev-parse --is-inside-work-tree >nul 2>&1
 if errorlevel 1 (
-  color 0C
-  echo HATA: Bu klasor bir git deposu degil.
-  echo Lutfen .git olan proje klasorunde bu dosyayi calistirin.
-  pause
-  exit /b 1
+  color 0E
+  echo Bilgi: Bu klasorde git deposu yok. Yeni depo olusturuluyor...
+  git init >nul 2>&1
+  if errorlevel 1 (
+    color 0C
+    echo HATA: Git deposu olusturulamadi.
+    pause
+    exit /b 1
+  )
 )
 
-REM 2) Aktif branch al
-set "BRANCH="
-for /f "delims=" %%b in ('git branch --show-current 2^>nul') do set "BRANCH=%%b"
-if "%BRANCH%"=="" (
-  color 0C
-  echo HATA: Aktif branch tespit edilemedi.
-  pause
-  exit /b 1
-)
+git checkout -B %BRANCH% >nul 2>&1
 
-REM 3) Uzak repo kontrolu
 git remote get-url origin >nul 2>&1
 if errorlevel 1 (
-  color 0C
-  echo HATA: origin remote tanimli degil.
-  echo once su komutu calistirin:
-  echo git remote add origin ^<github-repo-url^>
-  pause
-  exit /b 1
+  git remote add origin %REMOTE_URL%
+) else (
+  git remote set-url origin %REMOTE_URL%
 )
 
-REM 4) Tum degisiklikleri ekle
-git add .
-if errorlevel 1 (
-  color 0C
-  echo HATA: git add basarisiz.
-  pause
-  exit /b 1
-)
+git add -A
 
-REM 5) Degisiklik var mi?
 git diff --cached --quiet
 if not errorlevel 1 (
-  color 0E
-  echo Bilgi: Commitlenecek degisiklik yok.
-  timeout /t 2 >nul
-  exit /b 0
+  git rev-parse --verify HEAD >nul 2>&1
+  if not errorlevel 1 (
+    color 0E
+    echo Bilgi: Gonderilecek yeni degisiklik yok.
+    pause
+    exit /b 0
+  )
 )
 
-REM 6) Commit mesaji
-set "mesaj="
-set /p "mesaj=Commit mesaji yazin (bos gecerseniz tarih/saat eklenir): "
-if "%mesaj%"=="" set "mesaj=Otomatik guncelleme: %date% %time%"
-
-REM 7) Commit
-git commit -m "%mesaj%"
-if errorlevel 1 (
-  color 0C
-  echo HATA: Commit basarisiz.
-  pause
-  exit /b 1
-)
-
-REM 8) Uzak degisiklikleri al ve kendi commitini uzerine tası (lineer gecmis)
+set "MESAJ="
 echo.
-echo Uzak degisiklikler cekiliyor (pull --rebase)...
-git pull --rebase origin %BRANCH%
+set /p "MESAJ=Commit mesaji (Enter = otomatik): "
+if "%MESAJ%"=="" set "MESAJ=Otomatik guncelleme: %date% %time%"
+
+git commit -m "%MESAJ%" >nul 2>&1
 if errorlevel 1 (
-  color 0C
-  echo HATA: pull --rebase basarisiz.
-  echo Muhtemelen cakismaniz var. Dosyalari duzeltip su komutlari calistirin:
-  echo   git add ^<dosya^>
-  echo   git rebase --continue
-  echo Iptal etmek icin:
-  echo   git rebase --abort
-  pause
-  exit /b 1
+  echo Bilgi: Commit atlandi (degisiklik olmayabilir).
 )
 
-REM 9) Push (upstream yoksa otomatik kur)
 echo.
-echo Push yapiliyor... branch: %BRANCH%
+echo Github ile senkronize ediliyor...
+git pull --rebase origin %BRANCH% >nul 2>&1
+
+echo Yukleniyor (push)...
 git push -u origin %BRANCH%
 if errorlevel 1 (
   color 0C
-  echo HATA: Push basarisiz.
-  echo Not: Uzak branch sizden ileride olabilir. Tekrar deneyin.
+  echo.
+  echo HATA: Push islemi basarisiz oldu.
+  echo Kontroller:
+  echo 1. Repo adresi dogru mu?
+  echo 2. Github erisim izni var mi?
+  echo 3. Uzak repoda korumali branch kurali var mi?
   pause
   exit /b 1
 )
 
+color 0A
 echo.
 echo -----------------------------------------
 echo ISLEM BASARIYLA TAMAMLANDI.
-echo Branch: %BRANCH%
+echo Dosyalar Github'a yuklendi.
 echo -----------------------------------------
-timeout /t 2 >nul
+pause
 exit /b 0
