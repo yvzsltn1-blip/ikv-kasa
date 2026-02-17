@@ -1,4 +1,4 @@
-Hesap,Sunucu,Karakter,Kasa/Canta,Satir,Sutun,Efsun 1,Efsun 2,Kategori,Tur,Silah Cinsi,Bagli,Seviye,Cinsiyet,Sinif,Okunmus,Adet
-5353134920,Eminonu,Karakter 1,Kasa 1,1,1,Saldiri,Direnc,Ceket,Item,-,Evet,59,Erkek,Savasci,Hayir,1
-5353134920,Eminonu,Karakter 1,Canta,2,3,-,-,Maden,Item,-,Hayir,1,Tum Cinsiyetler,Tum Siniflar,Hayir,150
-5353134920,Eminonu,Karakter 1,Recete Kitabi,-,-,Canavar,III,Silah,Recipe,Kilic,Hayir,1,Tum Cinsiyetler,Savasci,Evet,1
+Hesap,Sunucu,Karakter,Kasa/Canta,Satir,Sutun,Efsun 1,Efsun 2,Kademe,Kategori,Tur,Silah Cinsi,Bagli,Seviye,Cinsiyet,Sinif,Okunmus,Adet
+5353134920,Eminonu,Karakter 1,Kasa 1,1,1,Saldiri,Direnc,-,Ceket,Item,-,Evet,59,Erkek,Savasci,Hayir,1
+5353134920,Eminonu,Karakter 1,Canta,2,3,-,-,-,Maden,Item,-,Hayir,1,Tum Cinsiyetler,Tum Siniflar,Hayir,150
+5353134920,Eminonu,Karakter 1,Recete Kitabi,-,-,Canavar,Mavi,II,Tilsim,Recipe,-,Hayir,1,Tum Cinsiyetler,Savasci,Evet,1

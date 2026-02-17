@@ -13,6 +13,9 @@ import { User, Save, Plus, Trash2, ChevronDown, ChevronUp, FileSpreadsheet, Edit
 import { AdminPanel } from './components/AdminPanel';
 import { MessagingModal } from './components/MessagingModal';
 
+// --- XLSX ---
+import * as XLSX from 'xlsx';
+
 // --- FIREBASE IMPORTLARI ---
 import { auth, db } from './firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -1749,6 +1752,14 @@ export default function App() {
     excelImportInputRef.current?.click();
   };
 
+  const parseXlsxToRows = (buffer: ArrayBuffer): string[][] => {
+    const wb = XLSX.read(buffer, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    if (!ws) return [];
+    const raw: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    return raw.map(row => row.map(cell => String(cell ?? '').trim()));
+  };
+
   const handleExcelImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1761,28 +1772,36 @@ export default function App() {
 
     try {
       const fileNameLower = file.name.toLocaleLowerCase();
-      if (!fileNameLower.endsWith('.csv') && !fileNameLower.endsWith('.txt')) {
+      const isExcelFile = fileNameLower.endsWith('.xlsx') || fileNameLower.endsWith('.xls');
+      const isCsvFile = fileNameLower.endsWith('.csv') || fileNameLower.endsWith('.txt');
+
+      if (!isExcelFile && !isCsvFile) {
         showSystemAlert({
           tone: 'warning',
           title: 'Desteklenmeyen Dosya',
-          message: 'Suan sadece CSV import destekleniyor. Excel dosyanizi CSV olarak kaydedip tekrar yukleyin.',
-          hint: 'Ornek dosya: ornek-import.csv',
+          message: 'Desteklenen formatlar: .xlsx, .xls, .csv, .txt',
         });
         return;
       }
 
-      const rawText = await file.text();
-      if (!rawText.trim()) {
-        showSystemAlert({
-          tone: 'error',
-          title: 'Import Hatasi',
-          message: 'Dosya bos gorunuyor. Lutfen gecerli satirlari olan bir CSV secin.',
-        });
-        return;
-      }
+      let rows: string[][];
 
-      const sanitizedText = rawText.replace(/^\uFEFF/, '');
-      const rows = parseDelimitedRows(sanitizedText, detectDelimiter(sanitizedText));
+      if (isExcelFile) {
+        const buffer = await file.arrayBuffer();
+        rows = parseXlsxToRows(buffer);
+      } else {
+        const rawText = await file.text();
+        if (!rawText.trim()) {
+          showSystemAlert({
+            tone: 'error',
+            title: 'Import Hatasi',
+            message: 'Dosya bos gorunuyor. Lutfen gecerli satirlari olan bir dosya secin.',
+          });
+          return;
+        }
+        const sanitizedText = rawText.replace(/^\uFEFF/, '');
+        rows = parseDelimitedRows(sanitizedText, detectDelimiter(sanitizedText));
+      }
       if (rows.length < 2) {
         showSystemAlert({
           tone: 'error',
@@ -1992,7 +2011,7 @@ export default function App() {
           tone: 'error',
           title: 'Import Basarisiz',
           message: 'Uygulanabilir satir bulunamadi. Dosya formatini kontrol edin.',
-          hint: issues[0] || 'Ornek dosyayi baz alin: ornek-import.csv',
+          hint: issues[0] || 'Ornek dosyayi baz alin: ornek-import.csv / .xlsx',
         });
         return;
       }
@@ -2047,12 +2066,12 @@ export default function App() {
   };
 
 
-  // --- Export Excel (CSV) ---
+  // --- Export Excel (XLSX) ---
   const handleExportExcel = () => {
     if (!activeAccount) return;
 
-    const rows = [
-      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kademe", "Kategori", "Tur", "Silah Cinsi", "Bağlı", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
+    const rows: (string | number)[][] = [
+      ["Hesap", "Sunucu", "Karakter", "Kasa/Çanta", "Satır", "Sütun", "Efsun 1", "Efsun 2", "Kademe", "Kategori", "Tür", "Silah Cinsi", "Bağlı", "Seviye", "Cinsiyet", "Sınıf", "Okunmuş", "Adet"]
     ];
 
     activeAccount.servers.forEach(server => {
@@ -2062,18 +2081,16 @@ export default function App() {
             if (slot.item) {
               const position = getContainerSlotPosition(container, slot.id);
               if (!position) return;
-              const row = position.row;
-              const col = position.col;
               rows.push([
-                activeAccount.name, server.name, char.name, container.name, row.toString(), col.toString(),
+                activeAccount.name, server.name, char.name, container.name, position.row, position.col,
                 slot.item.enchantment1 || "-", slot.item.enchantment2 || "-",
                 slot.item.category === 'Tılsım' ? resolveItemTalismanTier(slot.item) : "-",
                 slot.item.category,
                 slot.item.type || "Item",
                 slot.item.weaponType || "-",
                 shouldShowBoundMarker(slot.item) ? "Evet" : "Hayır",
-                slot.item.level.toString(), slot.item.gender || "-", slot.item.heroClass, "Hayır",
-                slot.item.count ? slot.item.count.toString() : "1"
+                slot.item.level, slot.item.gender || "-", slot.item.heroClass, "Hayır",
+                slot.item.count || 1
               ]);
             }
           });
@@ -2088,28 +2105,17 @@ export default function App() {
               "Recipe",
               item.weaponType || "-",
               "Hayır",
-              item.level.toString(), item.gender || "-", item.heroClass, "Evet",
-              item.count ? item.count.toString() : "1"
+              item.level, item.gender || "-", item.heroClass, "Evet",
+              item.count || 1
           ]);
         });
       });
     });
 
-    const sanitizeCell = (val: string) => {
-      let s = val.replace(/"/g, '""');
-      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
-      return `"${s}"`;
-    };
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF"
-      + rows.map(e => e.map(c => sanitizeCell(c)).join(",")).join("\n");
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${activeAccount.name}_rpg_export.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Envanter");
+    XLSX.writeFile(wb, `${activeAccount.name}_rpg_export.xlsx`);
   };
 
   // --- Search Navigation ---

@@ -1,8 +1,8 @@
 // firebase.ts dosyası (App.tsx ile yan yana olsun)
 
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { initializeFirestore, memoryLocalCache, persistentLocalCache, persistentSingleTabManager } from "firebase/firestore";
+import { initializeAuth, browserLocalPersistence } from "firebase/auth";
+import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
 
 // BURAYA FIREBASE KONSOLUNDAN ALDIĞIN "const firebaseConfig" KODUNU YAPIŞTIR
 // Örnek (Sen kendi kodunu yapıştıracaksın):
@@ -19,21 +19,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Dışarıya (diğer dosyalara) servisleri açıyoruz
-export const auth = getAuth(app);
-let firestoreInstance: ReturnType<typeof initializeFirestore>;
-try {
-  firestoreInstance = initializeFirestore(app, {
-    ignoreUndefinedProperties: true,
-    // Keep a persistent local cache to speed up repeated app openings.
-    localCache: persistentLocalCache({
-      tabManager: persistentSingleTabManager({ forceOwnership: true }),
-    }),
-  });
-} catch {
-  firestoreInstance = initializeFirestore(app, {
-    ignoreUndefinedProperties: true,
-    localCache: memoryLocalCache(),
-  });
-}
+export const auth = initializeAuth(app, {
+  persistence: browserLocalPersistence,
+});
+const firestoreInstance = initializeFirestore(app, {
+  ignoreUndefinedProperties: true,
+  localCache: memoryLocalCache(),
+});
 
 export const db = firestoreInstance;
