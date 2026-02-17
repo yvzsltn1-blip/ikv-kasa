@@ -104,10 +104,17 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`,
   };
 
-  // Touch drag visual state (for floating item indicator)
+  // Touch drag visual state — item & sourceSlotId only (no x/y to avoid re-renders)
   const [dragVisual, setDragVisual] = useState<{
-    x: number; y: number; item: ItemData; sourceSlotId: number;
+    item: ItemData; sourceSlotId: number;
   } | null>(null);
+
+  // Direct DOM ref for the floating indicator — position updated without re-render
+  const dragFloatRef = useRef<HTMLDivElement>(null);
+
+  // Slot currently under the finger during drag (for drop target highlight)
+  const [dragOverSlotId, setDragOverSlotId] = useState<number | null>(null);
+  const lastDragOverRef = useRef<number | null>(null);
 
   // Shift+Click range selection tracking
   const lastSelectedSlotId = useRef<number | null>(null);
@@ -160,8 +167,20 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
       const touch = e.touches[0];
 
       if (touchInfo.current.dragConfirmed) {
-        // Already in drag mode — update floating item position
-        setDragVisual(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+        // Already in drag mode — update floating position via DOM (no re-render)
+        if (dragFloatRef.current) {
+          dragFloatRef.current.style.transform = `translate(${touch.clientX - 30}px, ${touch.clientY - 50}px)`;
+        }
+
+        // Detect which slot is under the finger for drop target highlight
+        const elUnder = document.elementFromPoint(touch.clientX, touch.clientY);
+        const slotEl = elUnder?.closest('[data-slot-id]') as HTMLElement | null;
+        const hoveredId = slotEl ? parseInt(slotEl.dataset.slotId || '', 10) : null;
+        const validId = hoveredId !== null && !isNaN(hoveredId) && hoveredId !== touchInfo.current.slotId ? hoveredId : null;
+        if (validId !== lastDragOverRef.current) {
+          lastDragOverRef.current = validId;
+          setDragOverSlotId(validId);
+        }
       } else {
         const dx = Math.abs(touch.clientX - touchInfo.current.startX);
         const dy = Math.abs(touch.clientY - touchInfo.current.startY);
@@ -173,8 +192,12 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
           setDragVisual({
             sourceSlotId: touchInfo.current.slotId,
             item: touchInfo.current.item!,
-            x: touch.clientX,
-            y: touch.clientY,
+          });
+          // Set initial position via DOM
+          requestAnimationFrame(() => {
+            if (dragFloatRef.current) {
+              dragFloatRef.current.style.transform = `translate(${touch.clientX - 30}px, ${touch.clientY - 50}px)`;
+            }
           });
         }
       }
@@ -207,6 +230,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
   const resetTouchState = () => {
     clearTimer();
     setDragVisual(null);
+    setDragOverSlotId(null);
+    lastDragOverRef.current = null;
     touchInfo.current = {
       startX: 0, startY: 0, slotId: -1, item: null,
       longPressDetected: false, dragConfirmed: false,
@@ -294,15 +319,26 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
     e.dataTransfer.effectAllowed = "move";
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, slotId: number) => {
     if (multiSelectMode) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
+    if (slotId !== lastDragOverRef.current) {
+      lastDragOverRef.current = slotId;
+      setDragOverSlotId(slotId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    lastDragOverRef.current = null;
+    setDragOverSlotId(null);
   };
 
   const handleDrop = (e: React.DragEvent, targetSlotId: number) => {
     if (multiSelectMode) return;
     e.preventDefault();
+    setDragOverSlotId(null);
+    lastDragOverRef.current = null;
     const sourceSlotIdStr = e.dataTransfer.getData("text/plain");
     if (!sourceSlotIdStr) return;
     const sourceSlotId = parseInt(sourceSlotIdStr, 10);
@@ -389,6 +425,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
             const isEmptySlot = !slot.item;
             const isCategoryDimmed = !!slot.item && categoryFilter !== 'All' && slot.item.category !== categoryFilter;
             const isBeingDragged = dragVisual?.sourceSlotId === slot.id;
+            const isDragTarget = dragOverSlotId === slot.id;
             const slotPosition = getContainerSlotPosition(container, slot.id);
             const talismanKey = slot.item?.category === 'Tılsım' && slot.item.enchantment1?.trim()
               ? `${slot.item.enchantment1.toLocaleLowerCase('tr')}|${resolveTalismanColor(slot.item).toLocaleLowerCase('tr')}|${resolveTalismanTier(slot.item).toLocaleLowerCase('tr')}|${slot.item.heroClass}`
@@ -401,7 +438,8 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                 data-slot-id={slot.id}
                 draggable={!multiSelectMode && !!slot.item}
                 onDragStart={(e) => slot.item && handleDragStart(e, slot.id)}
-                onDragOver={handleDragOver}
+                onDragOver={(e) => handleDragOver(e, slot.id)}
+                onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, slot.id)}
                 onClick={(e) => handleSlotClick(container.id, slot.id, e)}
                 onMouseEnter={(e) => onSlotHover(slot.item, e)}
@@ -427,6 +465,7 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
                   }
                   ${isCategoryDimmed ? 'opacity-25 grayscale-[0.8] saturate-50' : ''}
                   ${isBeingDragged ? 'opacity-30 border-yellow-500 border-2' : ''}
+                  ${isDragTarget ? 'border-yellow-400 border-2 bg-yellow-500/20 shadow-[inset_0_0_12px_rgba(234,179,8,0.3),0_0_8px_rgba(234,179,8,0.25)]' : ''}
                 `}
               >
                 {slot.item && <SlotItem item={slot.item} highlight={highlight} talismanGlowColor={glowInfo?.color} />}
@@ -468,16 +507,12 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
           </div>
         )}
 
-        {/* Floating drag indicator (mobile) */}
+        {/* Floating drag indicator (mobile) — positioned via ref transform, not state */}
         {dragVisual && (
           <div
-            className="fixed z-[100] pointer-events-none"
-            style={{
-              left: dragVisual.x - 30,
-              top: dragVisual.y - 50,
-              width: 60,
-              height: 50,
-            }}
+            ref={dragFloatRef}
+            className="fixed top-0 left-0 z-[100] pointer-events-none will-change-transform"
+            style={{ width: 60, height: 50 }}
           >
             <div className="w-full h-full border-2 border-yellow-400 rounded-lg shadow-[0_0_20px_rgba(234,179,8,0.5)] bg-slate-900/90">
               <SlotItem item={dragVisual.item} />

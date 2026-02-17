@@ -641,10 +641,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     setLoading(true);
     setLoadError(null);
     try {
-      // Fetch all users
-      const usersSnap = await getDocs(collection(db, "users"));
-      const users: AdminUserInfo[] = [];
+      // Fire ALL Firestore queries in parallel
+      const [
+        usersSnap,
+        globalSnap,
+        adminsDocResult,
+        enchantmentsDocResult,
+        potionsDocResult,
+        minesDocResult,
+        othersDocResult,
+        glassesDocResult,
+        talismansDocResult,
+        limitsDocResult,
+        messageSettingsDocResult,
+      ] = await Promise.all([
+        getDocs(collection(db, "users")),
+        getDocs(collection(db, "globalItems")),
+        getDoc(doc(db, "metadata", "admins")).catch(() => null),
+        getDoc(doc(db, "metadata", "enchantments")).catch(() => null),
+        getDoc(doc(db, "metadata", "potions")).catch(() => null),
+        getDoc(doc(db, "metadata", "mines")).catch(() => null),
+        getDoc(doc(db, "metadata", "others")).catch(() => null),
+        getDoc(doc(db, "metadata", "glasses")).catch(() => null),
+        getDoc(doc(db, "metadata", "talismans")).catch(() => null),
+        getDoc(doc(db, "metadata", "searchLimits")).catch(() => null),
+        getDoc(doc(db, "metadata", "messageSettings")).catch(() => null),
+      ]);
 
+      // Process users
+      const users: AdminUserInfo[] = [];
       usersSnap.forEach(docSnap => {
         try {
           const data = docSnap.data();
@@ -726,8 +751,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         return acc;
       }, {}));
 
-      // Fetch global items stats
-      const globalSnap = await getDocs(collection(db, "globalItems"));
+      // Process global items stats
       setGlobalItemCount(globalSnap.size);
 
       const catCount: Record<string, number> = {};
@@ -750,160 +774,115 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       setGlobalItemClasses(classCount);
       setGlobalItemGenders(genderCount);
 
-      // Fetch admin list
-      try {
-        const adminsDoc = await getDoc(doc(db, "metadata", "admins"));
-        if (adminsDoc.exists()) {
-          setAdminEmails(adminsDoc.data().emails || []);
-        }
-      } catch { /* no admins doc yet */ }
+      // Process admin list
+      if (adminsDocResult?.exists()) {
+        setAdminEmails(adminsDocResult.data().emails || []);
+      }
 
-      // Fetch managed enchantment suggestions
-      try {
-        const enchantmentsDoc = await getDoc(doc(db, "metadata", "enchantments"));
-        if (enchantmentsDoc.exists()) {
-          const rawNames = enchantmentsDoc.data().names;
-          const names = Array.isArray(rawNames)
-            ? rawNames.filter((value): value is string => typeof value === 'string')
-            : [];
-          setManagedEnchantments(toUniqueSortedEnchantments(names));
-        } else {
-          setManagedEnchantments([]);
-        }
-      } catch {
+      // Process managed enchantment suggestions
+      if (enchantmentsDocResult?.exists()) {
+        const rawNames = enchantmentsDocResult.data().names;
+        const names = Array.isArray(rawNames)
+          ? rawNames.filter((value): value is string => typeof value === 'string')
+          : [];
+        setManagedEnchantments(toUniqueSortedEnchantments(names));
+      } else {
         setManagedEnchantments([]);
       }
 
-      // Fetch managed potion suggestions
-      try {
-        const potionsDoc = await getDoc(doc(db, "metadata", "potions"));
-        if (potionsDoc.exists()) {
-          const rawData = potionsDoc.data();
-          const entryList = toNamedLevelsFromUnknown(rawData.entries);
-          if (entryList.length > 0) {
-            setManagedPotions(entryList);
-          } else {
-            const rawNames = Array.isArray(rawData.names)
-              ? rawData.names.filter((value): value is string => typeof value === 'string')
-              : [];
-            setManagedPotions(toNamedLevelsFromUnknown(rawNames.map(name => ({ name, level: 1 }))));
-          }
+      // Process managed potion suggestions
+      if (potionsDocResult?.exists()) {
+        const rawData = potionsDocResult.data();
+        const entryList = toNamedLevelsFromUnknown(rawData.entries);
+        if (entryList.length > 0) {
+          setManagedPotions(entryList);
         } else {
-          setManagedPotions([]);
+          const rawNames = Array.isArray(rawData.names)
+            ? rawData.names.filter((value): value is string => typeof value === 'string')
+            : [];
+          setManagedPotions(toNamedLevelsFromUnknown(rawNames.map(name => ({ name, level: 1 }))));
         }
-      } catch {
+      } else {
         setManagedPotions([]);
       }
 
-      // Fetch managed mine suggestions
-      try {
-        const minesDoc = await getDoc(doc(db, "metadata", "mines"));
-        if (minesDoc.exists()) {
-          setManagedMines(toNamedLevelsFromUnknown(minesDoc.data().entries));
-        } else {
-          setManagedMines([]);
-        }
-      } catch {
+      // Process managed mine suggestions
+      if (minesDocResult?.exists()) {
+        setManagedMines(toNamedLevelsFromUnknown(minesDocResult.data().entries));
+      } else {
         setManagedMines([]);
       }
 
-      // Fetch managed other suggestions
-      try {
-        const othersDoc = await getDoc(doc(db, "metadata", "others"));
-        if (othersDoc.exists()) {
-          setManagedOthers(toNamedLevelsFromUnknown(othersDoc.data().entries));
-        } else {
-          setManagedOthers([]);
-        }
-      } catch {
+      // Process managed other suggestions
+      if (othersDocResult?.exists()) {
+        setManagedOthers(toNamedLevelsFromUnknown(othersDocResult.data().entries));
+      } else {
         setManagedOthers([]);
       }
 
-      // Fetch managed glasses suggestions
-      try {
-        const glassesDoc = await getDoc(doc(db, "metadata", "glasses"));
-        if (glassesDoc.exists()) {
-          setManagedGlasses(toNamedLevelsFromUnknown(glassesDoc.data().entries));
-        } else {
-          setManagedGlasses([]);
-        }
-      } catch {
+      // Process managed glasses suggestions
+      if (glassesDocResult?.exists()) {
+        setManagedGlasses(toNamedLevelsFromUnknown(glassesDocResult.data().entries));
+      } else {
         setManagedGlasses([]);
       }
 
-      // Fetch managed talisman suggestions
-      try {
-        const talismansDoc = await getDoc(doc(db, "metadata", "talismans"));
-        if (talismansDoc.exists()) {
-          const rawData = talismansDoc.data();
-          const entries = toTalismansFromUnknown(rawData.entries);
-          if (entries.length > 0) {
-            setManagedTalismans(entries);
-          } else {
-            const rawNames = Array.isArray(rawData.names)
-              ? rawData.names.filter((value): value is string => typeof value === 'string')
-              : [];
-            setManagedTalismans(toUniqueSortedTalismans(rawNames.map(name => ({
-              name,
-              color: 'Mavi',
-              heroClass: 'Savaşçı',
-            }))));
-          }
+      // Process managed talisman suggestions
+      if (talismansDocResult?.exists()) {
+        const rawData = talismansDocResult.data();
+        const entries = toTalismansFromUnknown(rawData.entries);
+        if (entries.length > 0) {
+          setManagedTalismans(entries);
         } else {
-          setManagedTalismans([]);
+          const rawNames = Array.isArray(rawData.names)
+            ? rawData.names.filter((value): value is string => typeof value === 'string')
+            : [];
+          setManagedTalismans(toUniqueSortedTalismans(rawNames.map(name => ({
+            name,
+            color: 'Mavi',
+            heroClass: 'Savaşçı',
+          }))));
         }
-      } catch {
+      } else {
         setManagedTalismans([]);
       }
 
-      // Fetch search limits
-      try {
-        const limitsDoc = await getDoc(doc(db, "metadata", "searchLimits"));
-        if (limitsDoc.exists()) {
-          const data = limitsDoc.data();
-          const resolvedDefaultLimit = (typeof data.defaultLimit === 'number' && Number.isFinite(data.defaultLimit) && data.defaultLimit > 0)
-            ? Math.floor(data.defaultLimit)
-            : 50;
-          const resolvedOverrides = (data.userOverrides && typeof data.userOverrides === 'object')
-            ? data.userOverrides as Record<string, number>
-            : {};
-          const resolvedClassLimits = resolveUserClassQuotas(data.classLimits);
-          setSearchLimits({
-            defaultLimit: resolvedDefaultLimit,
-            userOverrides: resolvedOverrides,
-            classLimits: resolvedClassLimits,
-          });
-          setClassLimitInputs(toClassLimitInputs(resolvedClassLimits));
-          const resolvedMaxAccounts = (typeof data.maxAccounts === 'number' && Number.isFinite(data.maxAccounts) && data.maxAccounts >= 1)
-            ? Math.floor(data.maxAccounts)
-            : 10;
-          const resolvedAutoApproveSlots = (typeof data.autoApproveSlots === 'number' && Number.isFinite(data.autoApproveSlots) && data.autoApproveSlots >= 0)
-            ? Math.floor(data.autoApproveSlots)
-            : 0;
-          setMaxAccounts(resolvedMaxAccounts);
-          setMaxAccountsInput(String(resolvedMaxAccounts));
-          setAutoApproveSlots(resolvedAutoApproveSlots);
-          setAutoApproveSlotsInput(String(resolvedAutoApproveSlots));
-          setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
-            const overrideValue = resolvedOverrides[userInfo.uid];
-            acc[userInfo.uid] = overrideValue !== undefined ? String(overrideValue) : '';
-            return acc;
-          }, {}));
-        } else {
-          setSearchLimits({ defaultLimit: 50, userOverrides: {}, classLimits: defaultClassLimits });
-          setClassLimitInputs(toClassLimitInputs(defaultClassLimits));
-          setMaxAccounts(10);
-          setMaxAccountsInput('10');
-          setAutoApproveSlots(0);
-          setAutoApproveSlotsInput('0');
-          setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
-            acc[userInfo.uid] = '';
-            return acc;
-          }, {}));
-        }
-      } catch {
+      // Process search limits
+      if (limitsDocResult?.exists()) {
+        const data = limitsDocResult.data();
+        const resolvedDefaultLimit = (typeof data.defaultLimit === 'number' && Number.isFinite(data.defaultLimit) && data.defaultLimit > 0)
+          ? Math.floor(data.defaultLimit)
+          : 50;
+        const resolvedOverrides = (data.userOverrides && typeof data.userOverrides === 'object')
+          ? data.userOverrides as Record<string, number>
+          : {};
+        const resolvedClassLimits = resolveUserClassQuotas(data.classLimits);
+        setSearchLimits({
+          defaultLimit: resolvedDefaultLimit,
+          userOverrides: resolvedOverrides,
+          classLimits: resolvedClassLimits,
+        });
+        setClassLimitInputs(toClassLimitInputs(resolvedClassLimits));
+        const resolvedMaxAccounts = (typeof data.maxAccounts === 'number' && Number.isFinite(data.maxAccounts) && data.maxAccounts >= 1)
+          ? Math.floor(data.maxAccounts)
+          : 10;
+        const resolvedAutoApproveSlots = (typeof data.autoApproveSlots === 'number' && Number.isFinite(data.autoApproveSlots) && data.autoApproveSlots >= 0)
+          ? Math.floor(data.autoApproveSlots)
+          : 0;
+        setMaxAccounts(resolvedMaxAccounts);
+        setMaxAccountsInput(String(resolvedMaxAccounts));
+        setAutoApproveSlots(resolvedAutoApproveSlots);
+        setAutoApproveSlotsInput(String(resolvedAutoApproveSlots));
+        setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
+          const overrideValue = resolvedOverrides[userInfo.uid];
+          acc[userInfo.uid] = overrideValue !== undefined ? String(overrideValue) : '';
+          return acc;
+        }, {}));
+      } else {
         setSearchLimits({ defaultLimit: 50, userOverrides: {}, classLimits: defaultClassLimits });
         setClassLimitInputs(toClassLimitInputs(defaultClassLimits));
+        setMaxAccounts(10);
+        setMaxAccountsInput('10');
         setAutoApproveSlots(0);
         setAutoApproveSlotsInput('0');
         setUserSearchOverrideInputs(users.reduce<Record<string, string>>((acc, userInfo) => {
@@ -912,16 +891,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         }, {}));
       }
 
-      // Fetch global messaging setting
-      try {
-        const messageSettingsDoc = await getDoc(doc(db, "metadata", "messageSettings"));
-        if (messageSettingsDoc.exists()) {
-          const data = messageSettingsDoc.data() as { directMessagesEnabled?: unknown };
-          setDirectMessagingEnabled(data.directMessagesEnabled !== false);
-        } else {
-          setDirectMessagingEnabled(true);
-        }
-      } catch {
+      // Process global messaging setting
+      if (messageSettingsDocResult?.exists()) {
+        const data = messageSettingsDocResult.data() as { directMessagesEnabled?: unknown };
+        setDirectMessagingEnabled(data.directMessagesEnabled !== false);
+      } else {
         setDirectMessagingEnabled(true);
       }
 
