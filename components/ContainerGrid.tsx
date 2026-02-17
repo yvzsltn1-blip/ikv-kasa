@@ -377,9 +377,11 @@ export const ContainerGrid: React.FC<ContainerGridProps> = ({ container, onSlotC
       {/* Grid Area */}
       <div
         ref={gridRef}
-        className="relative rpg-container-bg border-x-2 md:border-b-2 border-amber-900/40 md:rounded-b-md p-0.5 md:p-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] flex-1 flex flex-col min-h-0 overflow-hidden"
+        className="relative rpg-container-bg border-x-2 md:border-b-2 border-amber-900/40 md:rounded-b-md p-0.5 md:p-2 shadow-[inset_0_2px_8px_rgba(0,0,0,0.6)] flex-1 flex flex-col min-h-0 overflow-hidden select-none"
+        style={{ touchAction: 'none', WebkitTouchCallout: 'none' } as React.CSSProperties}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <div className={`grid gap-0.5 md:gap-1.5 w-full h-full ${multiSelectMode && selectedCount > 0 ? 'pb-8' : ''}`} style={gridStyle}>
           {container.slots.map((slot) => {

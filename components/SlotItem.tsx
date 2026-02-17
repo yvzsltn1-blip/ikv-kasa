@@ -335,7 +335,7 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
       <img
         src={src}
         alt={item.category}
-        className={`${sizeClass} object-contain`}
+        className={`${sizeClass} object-contain pointer-events-none`}
         draggable={false}
         onError={() => {
           if (iconSourceIndex < iconSources.length - 1) {
@@ -430,13 +430,13 @@ export const SlotItem: React.FC<SlotItemProps> = ({ item, highlight, talismanGlo
     <div
       className={`
         w-full h-full rounded-lg md:rounded-xl flex flex-col items-center justify-center relative overflow-hidden md:overflow-visible
-        premium-slot-border slot-corner-bolts
+        premium-slot-border slot-corner-bolts select-none
         ${highlight ? 'ring-2 ring-yellow-400/80 brightness-110' : ''}
         ${talismanGlowColor ? 'talisman-glow' : ''}
         transition-all duration-200
         shadow-[0_4px_12px_rgba(0,0,0,0.5)]
       `}
-      style={talismanGlowColor ? { '--glow-color': talismanGlowColor } as React.CSSProperties : undefined}
+      style={{ WebkitTouchCallout: 'none', ...(talismanGlowColor ? { '--glow-color': talismanGlowColor } : {}) } as React.CSSProperties}
     >
       {/* Corner bolts */}
       <span className="bolt-br" />

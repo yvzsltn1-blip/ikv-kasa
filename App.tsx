@@ -567,10 +567,11 @@ export default function App() {
         const emailLower = (user.email || '').trim().toLowerCase();
         let profileUsername = '';
         const isAdminPromise = withTimeout(resolveIsAdmin(user.email), 2500, false);
-        const userDocPromise = getDoc(userDocRef);
+        const userDocPromise = withTimeout(getDoc(userDocRef), 15000, null);
 
         try {
           const [isAdmin, initialDocSnap] = await Promise.all([isAdminPromise, userDocPromise]);
+          if (!initialDocSnap) throw new Error('Veri yükleme zaman aşımına uğradı');
           let docSnap = initialDocSnap;
           let resolvedBlockInfo = DEFAULT_USER_BLOCK_INFO;
           let resolvedAccessStatus: UserAccessStatus = 'approved';
