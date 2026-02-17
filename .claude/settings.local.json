@@ -18,7 +18,10 @@
       "Bash(wc:*)",
       "Bash(claude config set:*)",
       "Bash(claude:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(git push:*)",
+      "Bash(git config:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

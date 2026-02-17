@@ -49,28 +49,31 @@ git add -A
 
 git diff --cached --quiet
 if not errorlevel 1 (
-  git rev-parse --verify HEAD >nul 2>&1
-  if not errorlevel 1 (
-    color 0E
-    echo Bilgi: Gonderilecek yeni degisiklik yok.
+  echo Bilgi: Commit edilecek yeni degisiklik yok, push kontrol ediliyor...
+) else (
+  set "MESAJ="
+  echo.
+  set /p "MESAJ=Commit mesaji (Enter = otomatik): "
+  if "%MESAJ%"=="" set "MESAJ=Otomatik guncelleme: %date% %time%"
+
+  git commit -m "%MESAJ%"
+  if errorlevel 1 (
+    color 0C
+    echo HATA: Commit basarisiz oldu.
     pause
-    exit /b 0
+    exit /b 1
   )
-)
-
-set "MESAJ="
-echo.
-set /p "MESAJ=Commit mesaji (Enter = otomatik): "
-if "%MESAJ%"=="" set "MESAJ=Otomatik guncelleme: %date% %time%"
-
-git commit -m "%MESAJ%" >nul 2>&1
-if errorlevel 1 (
-  echo Bilgi: Commit atlandi (degisiklik olmayabilir).
 )
 
 echo.
 echo Github ile senkronize ediliyor...
-git pull --rebase origin %BRANCH% >nul 2>&1
+git pull --rebase origin %BRANCH%
+if errorlevel 1 (
+  color 0C
+  echo HATA: Pull/rebase basarisiz oldu. Cakisma olabilir.
+  pause
+  exit /b 1
+)
 
 echo Yukleniyor (push)...
 git push -u origin %BRANCH%
