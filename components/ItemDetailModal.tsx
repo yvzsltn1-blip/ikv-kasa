@@ -25,6 +25,7 @@ import {
 import { SetDetailModal } from './SetDetailModal';
 
 interface TalismanLocation {
+  containerId?: string;
   containerName: string;
   row: number;
   col: number;
@@ -35,6 +36,7 @@ interface ItemDetailModalProps {
   onClose: () => void;
   onEdit: () => void;
   onCopy?: () => void;
+  onCraftTalismanDuplicates?: () => void;
   talismanLocations?: TalismanLocation[] | null;
   globalSetLookup?: Map<string, GlobalSetInfo>;
   globalSetMap?: Map<string, SetItemLocation[]>;
@@ -100,6 +102,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   onClose,
   onEdit,
   onCopy,
+  onCraftTalismanDuplicates,
   talismanLocations,
   globalSetLookup,
   globalSetMap,
@@ -255,9 +258,20 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
 
           {talismanLocations && talismanLocations.length > 0 && (
             <div className="rounded-lg border border-amber-700/45 bg-amber-950/35 px-2.5 py-2 space-y-1">
-              <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">
-                <AlertTriangle size={10} />
-                {talismanLocations.length}x Duplikasyon
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                  <AlertTriangle size={10} />
+                  {talismanLocations.length}x Duplikasyon
+                </div>
+                {onCraftTalismanDuplicates && talismanLocations.length >= 3 && (
+                  <button
+                    type="button"
+                    onClick={onCraftTalismanDuplicates}
+                    className="rounded border border-emerald-500/50 bg-emerald-900/35 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-200 transition-colors hover:bg-emerald-800/45"
+                  >
+                    Üret
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap gap-x-2 gap-y-0.5">
                 {talismanLocations.map((loc, i) => {

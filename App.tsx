@@ -1138,7 +1138,7 @@ export default function App() {
     const detailColor = resolveItemTalismanColor(detailItem);
     const key = `${detailItem.enchantment1.toLocaleLowerCase('tr')}|${detailColor.toLocaleLowerCase('tr')}|${detailTier.toLocaleLowerCase('tr')}|${detailItem.heroClass}`;
     if (!talismanDuplicates.has(key)) return null;
-    const locations: { containerName: string; row: number; col: number }[] = [];
+    const locations: { containerId: string; containerName: string; row: number; col: number }[] = [];
     [
       { data: activeChar.bank1, name: 'Kasa 1' },
       { data: activeChar.bank2, name: 'Kasa 2' },
@@ -1152,7 +1152,7 @@ export default function App() {
           if (slotKey === key) {
             const position = getContainerSlotPosition(data, slot.id);
             if (position) {
-              locations.push({ containerName: name, row: position.row, col: position.col });
+              locations.push({ containerId: data.id, containerName: name, row: position.row, col: position.col });
             }
           }
         }
@@ -2407,6 +2407,70 @@ export default function App() {
     setDetailItem(null);
     setDetailSlot(null);
     showToast('Eşya panoya kopyalandı!');
+  };
+
+  const handleCraftTalismanDuplicates = () => {
+    if (!ensureCanEditData()) return;
+    if (!activeAccount || !activeChar || !talismanLocations || talismanLocations.length < 3) return;
+
+    const firstThreeTargets = talismanLocations
+      .slice(0, 3)
+      .map(loc => {
+        const container =
+          loc.containerId === activeChar.bank1.id ? activeChar.bank1 :
+          loc.containerId === activeChar.bank2.id ? activeChar.bank2 :
+          loc.containerId === activeChar.bag.id ? activeChar.bag :
+          null;
+        if (!container) return null;
+        const slotId = getContainerSlotIdFromPosition(container, loc.row, loc.col);
+        if (slotId === null) return null;
+        return { containerId: container.id, slotId };
+      })
+      .filter((target): target is { containerId: string; slotId: number } => target !== null);
+
+    if (firstThreeTargets.length < 3) return;
+
+    const targetKeys = new Set(firstThreeTargets.map(target => `${target.containerId}:${target.slotId}`));
+
+    setAccounts(prevAccounts => prevAccounts.map(acc => {
+      if (acc.id !== selectedAccountId) return acc;
+
+      const newServers = [...acc.servers];
+      const newServer = { ...newServers[selectedServerIndex] };
+      const newChars = [...newServer.characters];
+      const targetChar = { ...newChars[activeCharIndex] };
+
+      const clearContainerTargets = (container: Container): Container => {
+        const slotIds = firstThreeTargets
+          .filter(target => target.containerId === container.id)
+          .map(target => target.slotId);
+
+        if (slotIds.length === 0) return container;
+
+        const slotIdSet = new Set(slotIds);
+        const newSlots = container.slots.map((slot, index) => (
+          slotIdSet.has(index) ? { ...slot, item: null } : slot
+        ));
+        return { ...container, slots: newSlots };
+      };
+
+      targetChar.bank1 = clearContainerTargets(targetChar.bank1);
+      targetChar.bank2 = clearContainerTargets(targetChar.bank2);
+      targetChar.bag = clearContainerTargets(targetChar.bag);
+
+      newChars[activeCharIndex] = targetChar;
+      newServer.characters = newChars;
+      newServers[selectedServerIndex] = newServer;
+      return { ...acc, servers: newServers };
+    }));
+
+    if (detailSlot && targetKeys.has(`${detailSlot.containerId}:${detailSlot.slotId}`)) {
+      setDetailItem(null);
+      setDetailSlot(null);
+    }
+
+    setHasUnsavedChanges(true);
+    showToast('İlk 3 duplikasyon konumu üretim için silindi.');
   };
 
   const handleClearClipboard = () => {
@@ -3840,6 +3904,7 @@ export default function App() {
         onClose={() => { setDetailItem(null); setDetailSlot(null); }}
         onEdit={handleEditFromDetail}
         onCopy={handleCopyItem}
+        onCraftTalismanDuplicates={handleCraftTalismanDuplicates}
         talismanLocations={talismanLocations}
         globalSetLookup={globalSetLookup}
         globalSetMap={globalSetMap}
