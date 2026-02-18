@@ -12,6 +12,19 @@ dist
 dist-ssr
 *.local
 
+# Android/Capacitor local toolchain and build outputs
+.android-sdk/
+.tools/
+android/
+capacitor.config.ts
+capacitor.config.json
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+*.aab
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -745,6 +745,11 @@
 }
 
 @media (max-width: 767px) {
+  .app-safe-shell {
+    padding-top: max(env(safe-area-inset-top, 0px), 26px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  }
+
   .rpg-detail-shell {
     border-radius: 20px;
     padding: 8px;

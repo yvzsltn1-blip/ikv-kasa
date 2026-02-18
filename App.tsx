@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Account, Container, ItemData, UserRole, SetItemLocation, GlobalSetInfo, UserPermissions, CATEGORY_OPTIONS, UserBlockInfo, BlockContactTemplateId, HeroClass, DEFAULT_USER_CLASS, normalizeUserClass, isBindableCategory, shouldShowBoundMarker, createSetEnchantmentKey, UserAccessStatus, normalizeUserAccessStatus } from './types';
 import { createAccount, createCharacter, CLASS_COLORS, SERVER_NAMES, SET_CATEGORIES, HERO_CLASSES, GENDER_OPTIONS } from './constants';
 import { BAG_SLOT_COUNT, getContainerSlotIdFromPosition, getContainerSlotPosition, normalizeBagContainerLayout } from './containerLayout';
@@ -2911,9 +2912,12 @@ export default function App() {
     ? activeSlotCount
     : activeContainer.slots.filter(slot => slot.item?.category === categoryFilter).length;
   const capacityPercent = Math.min(100, Math.round((activeSlotCount / Math.max(1, activeContainer.slots.length)) * 100));
+  const isNativePlatform = Capacitor.isNativePlatform();
 
   return (
-    <div className={`h-[100dvh] w-screen bg-slate-950 flex overflow-hidden ${isContainerFullscreen ? '' : 'md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 md:items-center md:justify-center'}`}>
+    <div
+      className={`h-[100svh] md:h-[100dvh] w-screen bg-slate-950 flex overflow-hidden ${isNativePlatform ? 'app-safe-shell' : ''} ${isContainerFullscreen ? '' : 'md:bg-gradient-to-br md:from-slate-950 md:via-slate-900 md:to-slate-950 md:items-center md:justify-center'}`}
+    >
       <input
         ref={excelImportInputRef}
         type="file"
